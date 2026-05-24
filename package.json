@@ -1,0 +1,25 @@
+{
+  "name": "club-content-platform",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm --workspace @club/app-api run dev",
+    "dev:admin": "npm --workspace @club/admin-web run dev",
+    "dev:worker": "npm --workspace @club/worker run dev",
+    "dev:mobile": "npm --workspace @club/mobile run dev",
+    "lint": "echo \"Lint targets not wired yet\"",
+    "test": "echo \"Test targets not wired yet\""
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.901.0",
+    "@aws-sdk/s3-request-presigner": "^3.901.0",
+    "pg": "^8.16.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
