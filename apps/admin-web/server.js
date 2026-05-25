@@ -21,231 +21,6 @@ async function fetchJson(path, init) {
   return response.json();
 }
 
-function layout(content, title = "Club Content Admin") {
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${escapeHtml(title)}</title>
-    <style>
-      :root {
-        color-scheme: light;
-        --bg: #f0ece2;
-        --ink: #1c2b25;
-        --panel: rgba(255, 252, 245, 0.92);
-        --accent: #0f6a4b;
-        --accent-2: #b95c2e;
-        --border: #d7cfbc;
-        --muted: #6d746e;
-      }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        font-family: Georgia, serif;
-        color: var(--ink);
-        background:
-          radial-gradient(circle at top left, rgba(15, 106, 75, 0.14), transparent 28%),
-          radial-gradient(circle at top right, rgba(185, 92, 46, 0.14), transparent 24%),
-          linear-gradient(180deg, #f8f3e8 0%, #eee5cf 100%);
-      }
-      main {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 32px 20px 48px;
-      }
-      header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 16px;
-        margin-bottom: 24px;
-      }
-      h1, h2, h3 { margin: 0; }
-      h1 { font-size: 2.4rem; }
-      .subtle { color: var(--muted); }
-      .grid {
-        display: grid;
-        grid-template-columns: 360px 1fr;
-        gap: 20px;
-        align-items: start;
-      }
-      .panel {
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: 18px;
-        padding: 18px;
-        box-shadow: 0 12px 30px rgba(28, 43, 37, 0.08);
-        backdrop-filter: blur(8px);
-      }
-      .queue-list {
-        display: grid;
-        gap: 12px;
-      }
-      .queue-card, .feed-card {
-        display: block;
-        text-decoration: none;
-        color: inherit;
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        padding: 14px;
-        background: rgba(255, 255, 255, 0.58);
-      }
-      .queue-card.active {
-        border-color: var(--accent);
-        box-shadow: inset 0 0 0 1px var(--accent);
-      }
-      .queue-card:hover {
-        border-color: rgba(15, 106, 75, 0.45);
-      }
-      .pill {
-        display: inline-block;
-        padding: 6px 10px;
-        border-radius: 999px;
-        font-size: 0.86rem;
-        background: rgba(15, 106, 75, 0.12);
-        color: var(--accent);
-      }
-      .pill.status-review { background: rgba(154, 95, 19, 0.14); color: #9a5f13; }
-      .pill.status-approved { background: rgba(15, 106, 75, 0.12); color: var(--accent); }
-      .pill.status-rejected { background: rgba(143, 53, 45, 0.14); color: #8f352d; }
-      .pill.status-revision { background: rgba(185, 92, 46, 0.14); color: var(--accent-2); }
-      .pill.status-neutral { background: rgba(109, 116, 110, 0.14); color: var(--muted); }
-      .risk-high { color: #9f2f28; background: rgba(159, 47, 40, 0.12); }
-      .risk-mid { color: #9a5f13; background: rgba(154, 95, 19, 0.12); }
-      .summary-row,
-      .meta-row,
-      .key-facts,
-      .shortcut-row {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-        align-items: center;
-      }
-      .summary-row { margin-top: 14px; }
-      .meta-row { margin-top: 8px; }
-      .shortcut-row { margin-top: 10px; }
-      .summary-card {
-        min-width: 110px;
-        padding: 12px 14px;
-        border-radius: 14px;
-        border: 1px solid var(--border);
-        background: rgba(255, 255, 255, 0.58);
-      }
-      .summary-card strong,
-      .mini-label {
-        display: block;
-      }
-      .mini-label {
-        margin-bottom: 4px;
-        font-size: 0.8rem;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: var(--muted);
-      }
-      .queue-preview {
-        margin-top: 10px;
-        line-height: 1.4;
-      }
-      .detail-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 14px;
-        margin-top: 18px;
-      }
-      .detail-block {
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        padding: 14px;
-        background: rgba(255, 255, 255, 0.54);
-      }
-      .detail-block.wide {
-        grid-column: 1 / -1;
-      }
-      .detail-block.priority {
-        border-color: rgba(185, 92, 46, 0.35);
-        background: rgba(255, 248, 240, 0.84);
-      }
-      pre {
-        white-space: pre-wrap;
-        word-break: break-word;
-        margin: 0;
-        font-family: "SFMono-Regular", Menlo, monospace;
-        font-size: 0.9rem;
-      }
-      form.actions {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin-top: 16px;
-      }
-      input[type="text"] {
-        width: 100%;
-        padding: 12px 14px;
-        border-radius: 12px;
-        border: 1px solid var(--border);
-        font: inherit;
-        background: rgba(255, 255, 255, 0.8);
-      }
-      button {
-        appearance: none;
-        border: 0;
-        border-radius: 999px;
-        padding: 11px 16px;
-        font: inherit;
-        cursor: pointer;
-      }
-      button:disabled {
-        opacity: 0.6;
-        cursor: wait;
-      }
-      button.approve { background: var(--accent); color: white; }
-      button.reject { background: #8f352d; color: white; }
-      button.revise { background: var(--accent-2); color: white; }
-      button.note-chip {
-        padding: 8px 12px;
-        border-radius: 999px;
-        border: 1px solid var(--border);
-        background: rgba(255, 255, 255, 0.7);
-      }
-      .sticky-actions {
-        position: sticky;
-        bottom: 14px;
-        background: rgba(255, 252, 245, 0.96);
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 14px;
-        box-shadow: 0 12px 24px rgba(28, 43, 37, 0.1);
-      }
-      .decision-hint {
-        margin-top: 12px;
-        padding: 12px 14px;
-        border-radius: 14px;
-        border: 1px solid rgba(185, 92, 46, 0.25);
-        background: rgba(185, 92, 46, 0.08);
-      }
-      .decision-hint ul {
-        margin: 8px 0 0 18px;
-        padding: 0;
-      }
-      .feed-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-        gap: 12px;
-      }
-      .section-spacer { margin-top: 26px; }
-      @media (max-width: 900px) {
-        .grid { grid-template-columns: 1fr; }
-        .detail-grid { grid-template-columns: 1fr; }
-      }
-    </style>
-  </head>
-  <body>
-    <main>${content}</main>
-  </body>
-</html>`;
-}
-
 function formatLabel(value) {
   return String(value ?? "n/a")
     .replaceAll("_", " ")
@@ -254,7 +29,7 @@ function formatLabel(value) {
 
 function formatRelativeTime(value) {
   if (!value) {
-    return "Unknown age";
+    return "Unknown";
   }
 
   const then = new Date(value);
@@ -272,430 +47,798 @@ function formatRelativeTime(value) {
   return `${diffDays}d ago`;
 }
 
-function statusPill(value, type = "status") {
-  const normalized = String(value ?? "").toLowerCase();
-  let className = "pill status-neutral";
-
-  if (
-    ["needs_human_review", "screening", "pending", "flagged", "blocked", "error"].includes(
-      normalized
-    )
-  ) {
-    className = "pill status-review";
-  } else if (["approved", "approved_internal", "approved_external", "passed"].includes(normalized)) {
-    className = "pill status-approved";
-  } else if (["rejected", "reject"].includes(normalized)) {
-    className = "pill status-rejected";
-  } else if (["request_changes", "changes_requested", "needs_metadata"].includes(normalized)) {
-    className = "pill status-revision";
-  }
-
-  const prefix = type === "action" ? "Decision" : "Status";
-  return `<span class="${className}">${escapeHtml(`${prefix}: ${formatLabel(value)}`)}</span>`;
-}
-
-function riskPill(riskScore) {
+function riskBand(riskScore) {
   const score = Number(riskScore || 0);
-  let className = "pill";
-  let label = `Risk ${score.toFixed(2)}`;
   if (score >= 0.75) {
-    className += " risk-high";
-    label = `High ${score.toFixed(2)}`;
-  } else if (score >= 0.35) {
-    className += " risk-mid";
-    label = `Medium ${score.toFixed(2)}`;
+    return { label: "High concern", className: "tone-high" };
   }
-  return `<span class="${className}">${escapeHtml(label)}</span>`;
+  if (score >= 0.35) {
+    return { label: "Medium concern", className: "tone-mid" };
+  }
+  return { label: "Low concern", className: "tone-low" };
 }
 
-function summarizeQueue(queue) {
-  const highRisk = queue.filter((item) => Number(item.risk_score || 0) >= 0.75).length;
-  const mediumRisk = queue.filter((item) => {
-    const score = Number(item.risk_score || 0);
-    return score >= 0.35 && score < 0.75;
-  }).length;
-  const oldestCreatedAt = queue[0]?.created_at;
+function recommendationFor(detail) {
+  const score = Number(detail.risk_score || 0);
+  const latestReview = detail.review_runs[0];
+  const summary = latestReview?.summary || detail.routing_decision?.rationale || "No reviewer summary recorded.";
+  const normalizedStatus = String(detail.submission_status || "").toLowerCase();
+  const blockedRuns = detail.review_runs.filter((run) =>
+    ["blocked", "flagged", "error"].includes(String(run.resultStatus || "").toLowerCase())
+  );
 
-  return `<div class="summary-row">
-    <div class="summary-card">
-      <span class="mini-label">Pending</span>
-      <strong>${escapeHtml(String(queue.length))}</strong>
-    </div>
-    <div class="summary-card">
-      <span class="mini-label">High Risk</span>
-      <strong>${escapeHtml(String(highRisk))}</strong>
-    </div>
-    <div class="summary-card">
-      <span class="mini-label">Medium Risk</span>
-      <strong>${escapeHtml(String(mediumRisk))}</strong>
-    </div>
-    <div class="summary-card">
-      <span class="mini-label">Oldest Waiting</span>
-      <strong>${escapeHtml(oldestCreatedAt ? formatRelativeTime(oldestCreatedAt) : "None")}</strong>
-    </div>
-  </div>`;
+  if (normalizedStatus === "needs_metadata") {
+    return {
+      decision: "Request changes",
+      className: "recommendation-revise",
+      shortReason: "Missing detail will slow approval.",
+      explainer: "Send this back with a short note so the submitter can add the missing context and re-enter review cleanly.",
+      notesRequired: true,
+      defaultAction: "request_changes",
+      reasonChips: [
+        "Missing context or metadata.",
+        "Please add who, what, and when.",
+        "Need score, opponent, or event details."
+      ]
+    };
+  }
+
+  if (score >= 0.75 || blockedRuns.length) {
+    return {
+      decision: "Review carefully",
+      className: "recommendation-reject",
+      shortReason: "Higher-risk or flagged content needs a deliberate call.",
+      explainer: summary,
+      notesRequired: true,
+      defaultAction: "request_changes",
+      reasonChips: [
+        "Risk or policy concern needs revision.",
+        "Needs a manual review before publishing.",
+        "Rejecting due to policy or club fit."
+      ]
+    };
+  }
+
+  return {
+    decision: "Approve",
+    className: "recommendation-approve",
+    shortReason: "This looks routine and low-risk.",
+    explainer: summary,
+    notesRequired: false,
+    defaultAction: "approve",
+    reasonChips: [
+      "Looks good as-is.",
+      "Approved for the internal feed.",
+      "Approved after routine review."
+    ]
+  };
+}
+
+function renderStatusBadge(label, tone = "neutral") {
+  return `<span class="badge badge-${tone}">${escapeHtml(label)}</span>`;
+}
+
+function layout(content, title = "Club Content Ops") {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(title)}</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4efe5;
+        --paper: rgba(255, 251, 244, 0.96);
+        --paper-2: rgba(255, 255, 255, 0.72);
+        --ink: #14261d;
+        --muted: #66756d;
+        --line: #ddd3c0;
+        --line-strong: #cbbca1;
+        --green: #176744;
+        --green-soft: #dceddf;
+        --amber: #9b611b;
+        --amber-soft: #f7ead7;
+        --red: #8a352d;
+        --red-soft: #f6dfdc;
+        --blue-soft: #ddeaf2;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Georgia, serif;
+        background:
+          radial-gradient(circle at top left, rgba(23, 103, 68, 0.12), transparent 24%),
+          radial-gradient(circle at top right, rgba(155, 97, 27, 0.12), transparent 22%),
+          linear-gradient(180deg, #fbf7ef 0%, var(--bg) 100%);
+        color: var(--ink);
+      }
+      main {
+        max-width: 1320px;
+        margin: 0 auto;
+        padding: 28px 18px 40px;
+      }
+      h1, h2, h3, p { margin: 0; }
+      .hero {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        margin-bottom: 20px;
+      }
+      .hero h1 {
+        font-size: clamp(2rem, 4vw, 3rem);
+        line-height: 1.02;
+      }
+      .eyebrow {
+        color: var(--green);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 0.8rem;
+        margin-bottom: 6px;
+        font-weight: 700;
+      }
+      .subtle { color: var(--muted); }
+      .topline {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+      .metric, .panel, .queue-card, .feed-card {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        box-shadow: 0 16px 34px rgba(20, 38, 29, 0.08);
+      }
+      .metric {
+        padding: 14px 16px;
+      }
+      .metric-label {
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-size: 0.75rem;
+        margin-bottom: 6px;
+      }
+      .metric strong {
+        display: block;
+        font-size: 1.4rem;
+      }
+      .workspace {
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        gap: 18px;
+        align-items: start;
+      }
+      .panel {
+        padding: 16px;
+      }
+      .queue-panel {
+        position: sticky;
+        top: 18px;
+      }
+      .queue-list {
+        display: grid;
+        gap: 10px;
+        margin-top: 14px;
+      }
+      .queue-card {
+        display: block;
+        text-decoration: none;
+        color: inherit;
+        padding: 14px;
+        background: var(--paper-2);
+        border-radius: 16px;
+      }
+      .queue-card.active {
+        border-color: var(--green);
+        box-shadow: inset 0 0 0 2px rgba(23, 103, 68, 0.16);
+      }
+      .queue-card:hover {
+        border-color: var(--line-strong);
+      }
+      .queue-row,
+      .header-row,
+      .badge-row,
+      .decision-actions,
+      .chip-row,
+      .content-meta {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        font-weight: 700;
+      }
+      .badge-neutral { background: rgba(102, 117, 109, 0.12); color: var(--muted); }
+      .badge-review { background: var(--amber-soft); color: var(--amber); }
+      .badge-good { background: var(--green-soft); color: var(--green); }
+      .badge-alert { background: var(--red-soft); color: var(--red); }
+      .review-flow {
+        display: grid;
+        gap: 16px;
+      }
+      .focus-panel {
+        padding: 18px;
+      }
+      .recommendation {
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        padding: 16px;
+      }
+      .recommendation-approve { background: linear-gradient(180deg, #eef8f1 0%, #fbfdfb 100%); border-color: #cfe4d5; }
+      .recommendation-revise { background: linear-gradient(180deg, #fff4e7 0%, #fffdfa 100%); border-color: #ecd2ad; }
+      .recommendation-reject { background: linear-gradient(180deg, #fdebea 0%, #fffaf9 100%); border-color: #e6c2bd; }
+      .recommendation-label {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 8px;
+        color: var(--muted);
+        font-weight: 700;
+      }
+      .recommendation h2 {
+        font-size: clamp(1.8rem, 3vw, 2.5rem);
+        margin-bottom: 8px;
+      }
+      .recommendation p + p { margin-top: 10px; }
+      .focus-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+        gap: 16px;
+      }
+      .focus-block {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 14px;
+        background: var(--paper-2);
+      }
+      .focus-block h3 {
+        margin-bottom: 10px;
+      }
+      .content-copy {
+        font-size: 1.15rem;
+        line-height: 1.5;
+        margin-bottom: 14px;
+      }
+      .summary-list {
+        display: grid;
+        gap: 10px;
+      }
+      .summary-item {
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,0.76);
+      }
+      .summary-item strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+      .history-list {
+        display: grid;
+        gap: 10px;
+      }
+      .history-item {
+        border-left: 3px solid var(--line-strong);
+        padding-left: 12px;
+      }
+      .decision-panel {
+        position: sticky;
+        bottom: 14px;
+        padding: 16px;
+        border: 1px solid var(--line-strong);
+        background: rgba(255, 251, 244, 0.98);
+      }
+      .decision-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 12px;
+      }
+      .decision-option {
+        border-radius: 16px;
+        border: 1px solid var(--line);
+        padding: 14px;
+        background: #fff;
+        cursor: pointer;
+        text-align: left;
+      }
+      .decision-option.active {
+        border-color: var(--green);
+        box-shadow: inset 0 0 0 2px rgba(23, 103, 68, 0.14);
+      }
+      .decision-option.reject.active {
+        border-color: var(--red);
+        box-shadow: inset 0 0 0 2px rgba(138, 53, 45, 0.14);
+      }
+      .decision-option.revise.active {
+        border-color: var(--amber);
+        box-shadow: inset 0 0 0 2px rgba(155, 97, 27, 0.14);
+      }
+      .decision-option strong {
+        display: block;
+        margin-bottom: 6px;
+      }
+      input[type="text"], textarea {
+        width: 100%;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: #fff;
+        font: inherit;
+        padding: 12px 14px;
+      }
+      textarea {
+        min-height: 96px;
+        resize: vertical;
+      }
+      button {
+        appearance: none;
+        border: 0;
+        border-radius: 999px;
+        padding: 11px 16px;
+        font: inherit;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.55;
+        cursor: wait;
+      }
+      .button-primary { background: var(--green); color: white; }
+      .button-secondary { background: var(--paper-2); color: var(--ink); border: 1px solid var(--line); }
+      .button-danger { background: var(--red); color: white; }
+      .button-warn { background: var(--amber); color: white; }
+      .chip {
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,0.74);
+        border-radius: 999px;
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+      .hidden { display: none; }
+      .footer-panels {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      .feed-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 10px;
+      }
+      .feed-card {
+        padding: 14px;
+        background: var(--paper-2);
+      }
+      @media (max-width: 980px) {
+        .topline,
+        .focus-grid,
+        .decision-grid,
+        .footer-panels,
+        .workspace {
+          grid-template-columns: 1fr;
+        }
+        .queue-panel,
+        .decision-panel {
+          position: static;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>${content}</main>
+  </body>
+</html>`;
 }
 
 function renderQueue(queue, activeId) {
   if (!queue.length) {
-    return `<div class="panel"><p class="subtle">No pending approvals.</p></div>`;
+    return `<div class="panel queue-panel"><h2>Queue</h2><p class="subtle">No pending reviews right now.</p></div>`;
   }
 
   const cards = queue
-    .map((item) => {
-      const isActive = item.id === activeId ? " active" : "";
-      const preview = item.latest_review_summary || item.raw_text || "No review summary yet.";
-      return `<a class="queue-card${isActive}" href="/?approvalRequestId=${encodeURIComponent(item.id)}">
-        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
-          <strong>${escapeHtml(item.approver_name)}</strong>
-          ${riskPill(item.risk_score)}
+    .map((item, index) => {
+      const active = item.id === activeId ? " active" : "";
+      const band = riskBand(item.risk_score);
+      const preview = item.latest_review_summary || item.raw_text || "No reviewer summary yet.";
+      return `<a class="queue-card${active}" href="/?approvalRequestId=${encodeURIComponent(item.id)}">
+        <div class="header-row">
+          <strong>${index === 0 ? "Up next" : `Queue ${index + 1}`}</strong>
+          ${renderStatusBadge(band.label, band.className === "tone-high" ? "alert" : band.className === "tone-mid" ? "review" : "good")}
         </div>
-        <div class="meta-row">
-          ${statusPill(item.submission_status)}
+        <div class="badge-row" style="margin-top:8px;">
+          ${renderStatusBadge(formatLabel(item.submission_status), "review")}
           <span class="subtle">${escapeHtml(formatRelativeTime(item.created_at))}</span>
         </div>
-        <div class="subtle" style="margin-top:8px;">Submission ${escapeHtml(item.submission_id)}</div>
-        <div class="queue-preview">${escapeHtml(preview)}</div>
+        <p style="margin-top:10px; line-height:1.45;">${escapeHtml(preview)}</p>
       </a>`;
     })
     .join("");
 
-  return `<div class="panel">
-    <h2>Approval Queue</h2>
-    <p class="subtle">Pending items awaiting moderation decisions. Oldest requests are shown first.</p>
-    ${summarizeQueue(queue)}
+  return `<div class="panel queue-panel">
+    <h2>Review Queue</h2>
+    <p class="subtle" style="margin-top:8px;">Move top to bottom. The goal is fast, confident decisions, not full record inspection.</p>
     <div class="queue-list">${cards}</div>
   </div>`;
 }
 
-function renderDetail(detail) {
-  if (!detail) {
-    return `<div class="panel">
-      <h2>Review Detail</h2>
-      <p class="subtle">Select a queue item to inspect AI findings and act on it.</p>
-    </div>`;
-  }
-
-  const blockedRuns = detail.review_runs.filter((run) =>
-    ["blocked", "flagged", "error"].includes(String(run.resultStatus || "").toLowerCase())
-  );
-  const latestReviewSummary = detail.review_runs[0]?.summary || "";
-  const latestAction = detail.approval_actions[0] || null;
-  const routingDecision = detail.routing_decision || {};
-  const routingSummary = Object.entries(routingDecision)
-    .filter(([, value]) => value !== null && value !== "")
-    .slice(0, 4)
-    .map(([key, value]) => `<li><strong>${escapeHtml(formatLabel(key))}:</strong> ${escapeHtml(typeof value === "object" ? JSON.stringify(value) : String(value))}</li>`)
-    .join("");
-  const decisionHints = [];
-
-  if (Number(detail.risk_score || 0) >= 0.75) {
-    decisionHints.push("High-risk submission: confirm policy fit before approving.");
-  }
-  if (blockedRuns.length) {
-    decisionHints.push(`${blockedRuns.length} review run(s) returned flagged, blocked, or error states.`);
-  }
-  if (detail.submission_status === "needs_metadata") {
-    decisionHints.push("Submission already needs metadata, so request changes may be the fastest resolution.");
-  }
-
-  const reviewRuns = detail.review_runs.length
-    ? detail.review_runs
-        .map(
-          (run) => `<div class="detail-block">
-            <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
-              <strong>${escapeHtml(run.agentName)}</strong>
-              ${statusPill(run.resultStatus)}
-            </div>
-            <div class="subtle" style="margin-top:6px;">${escapeHtml(run.model)} • confidence ${escapeHtml(run.confidence)} • ${escapeHtml(formatRelativeTime(run.createdAt))}</div>
-            <p>${escapeHtml(run.summary || "")}</p>
-          </div>`
-        )
-        .join("")
-    : `<div class="detail-block"><p class="subtle">No review runs recorded.</p></div>`;
-
-  const media = detail.media.length
-    ? `<ul>${detail.media
-        .map(
-          (item) =>
-            `<li><code>${escapeHtml(item.objectKey)}</code> (${escapeHtml(item.mediaType)})</li>`
-        )
-        .join("")}</ul>`
-    : `<p class="subtle">No media metadata attached.</p>`;
-
-  const actions = detail.approval_actions.length
-    ? detail.approval_actions
-        .map(
-          (item) =>
-            `<li>${escapeHtml(item.actedByName)}: ${escapeHtml(formatLabel(item.action))} • ${escapeHtml(formatRelativeTime(item.createdAt))}${item.notes ? ` — ${escapeHtml(item.notes)}` : ""}</li>`
-        )
-        .join("")
-    : `<li class="subtle">No actions recorded yet.</li>`;
-
-  return `<div class="panel">
-    <div style="display:flex;justify-content:space-between;gap:12px;align-items:start;">
-      <div>
-        <h2>Review Detail</h2>
-        <p class="subtle">Submission ${escapeHtml(detail.submission_id)} from ${escapeHtml(detail.submitter_name)}</p>
-      </div>
-      ${riskPill(detail.risk_score)}
-    </div>
-    <div class="summary-row">
-      <div class="summary-card">
-        <span class="mini-label">Submission</span>
-        <strong>${escapeHtml(formatLabel(detail.submission_status))}</strong>
-      </div>
-      <div class="summary-card">
-        <span class="mini-label">Approval</span>
-        <strong>${escapeHtml(formatLabel(detail.state))}</strong>
-      </div>
-      <div class="summary-card">
-        <span class="mini-label">Queue Age</span>
-        <strong>${escapeHtml(formatRelativeTime(detail.created_at))}</strong>
-      </div>
-      <div class="summary-card">
-        <span class="mini-label">Review Flags</span>
-        <strong>${escapeHtml(String(blockedRuns.length))}</strong>
-      </div>
-    </div>
-    <div class="detail-grid">
-      <div class="detail-block">
-        <h3>Submission</h3>
-        <div class="key-facts">
-          ${statusPill(detail.submission_status)}
-          ${statusPill(detail.state)}
-        </div>
-        <p><strong>Type:</strong> ${escapeHtml(formatLabel(detail.content_type))}</p>
-        <p><strong>Visibility:</strong> ${escapeHtml(formatLabel(detail.visibility_target))}</p>
-        <p><strong>Submitter:</strong> ${escapeHtml(detail.submitter_name)} (${escapeHtml(detail.submitter_email)})</p>
-      </div>
-      <div class="detail-block">
-        <h3>Routing</h3>
-        <p><strong>Approver:</strong> ${escapeHtml(detail.approver_name)} (${escapeHtml(detail.approver_role)})</p>
-        ${
-          routingSummary
-            ? `<ul>${routingSummary}</ul>`
-            : `<p class="subtle">No routing summary available.</p>`
-        }
-        <pre>${escapeHtml(JSON.stringify(detail.routing_decision || {}, null, 2))}</pre>
-      </div>
-      <div class="detail-block priority wide">
-        <h3>Decision Context</h3>
-        <p>${escapeHtml(latestReviewSummary || "No reviewer summary recorded.")}</p>
-        ${
-          latestAction
-            ? `<p class="subtle">Latest action: ${escapeHtml(formatLabel(latestAction.action))} by ${escapeHtml(latestAction.actedByName)} ${escapeHtml(formatRelativeTime(latestAction.createdAt))}.</p>`
-            : `<p class="subtle">No prior reviewer actions on this request.</p>`
-        }
-        ${
-          decisionHints.length
-            ? `<div class="decision-hint"><strong>Reviewer focus</strong><ul>${decisionHints
-                .map((hint) => `<li>${escapeHtml(hint)}</li>`)
-                .join("")}</ul></div>`
-            : ""
-        }
-      </div>
-      <div class="detail-block wide">
-        <h3>Caption / Notes</h3>
-        <pre>${escapeHtml(detail.raw_text || "No text provided.")}</pre>
-      </div>
-      <div class="detail-block wide">
-        <h3>AI Caption Draft</h3>
-        <pre>${escapeHtml(detail.caption_draft || "No caption draft generated yet.")}</pre>
-      </div>
-      <div class="detail-block">
-        <h3>Media</h3>
-        ${media}
-      </div>
-      <div class="detail-block">
-        <h3>Action Log</h3>
-        <ul>${actions}</ul>
-      </div>
-      <div class="detail-block wide">
-        <h3>Review Runs</h3>
-        <div class="detail-grid">${reviewRuns}</div>
-      </div>
-    </div>
-    <div class="section-spacer sticky-actions">
-      <h3>Decision</h3>
-      <p class="subtle">Use <strong>A</strong> to approve, <strong>R</strong> to reject, and <strong>C</strong> to request changes.</p>
-      <input id="actedByEmail" type="text" value="${escapeHtml(detail.approver_email)}" />
-      <div style="height:10px;"></div>
-      <input id="notes" type="text" placeholder="Notes required for reject or request changes" />
-      <div class="shortcut-row">
-        <button class="note-chip" type="button" onclick="applyNote('Missing context or metadata.')">Missing metadata</button>
-        <button class="note-chip" type="button" onclick="applyNote('Needs caption cleanup before approval.')">Caption cleanup</button>
-        <button class="note-chip" type="button" onclick="applyNote('Risk or policy concern needs revision.')">Policy concern</button>
-      </div>
-      <form class="actions" onsubmit="return false;">
-        <button class="approve" onclick="takeAction('${escapeHtml(detail.id)}', 'approve')">Approve</button>
-        <button class="reject" onclick="takeAction('${escapeHtml(detail.id)}', 'reject')">Reject</button>
-        <button class="revise" onclick="takeAction('${escapeHtml(detail.id)}', 'request_changes')">Request Changes</button>
-      </form>
-      <p id="action-status" class="subtle"></p>
-    </div>
-  </div>`;
-}
-
-function renderFeed(feed) {
-  const cards = feed.length
+function renderFooterPanels(feed, failedEvents) {
+  const feedCards = feed.length
     ? feed
+        .slice(0, 4)
         .map(
           (item) => `<div class="feed-card">
-            <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
+            <div class="header-row">
               <strong>${escapeHtml(item.destination_name)}</strong>
-              <span class="pill">${escapeHtml(item.content_type)}</span>
+              ${renderStatusBadge(formatLabel(item.content_type), "neutral")}
             </div>
-            <p>${escapeHtml(item.caption_draft || item.raw_text || "No caption.")}</p>
-            <div class="subtle">Submission ${escapeHtml(item.submission_id)}</div>
+            <p style="margin-top:10px;">${escapeHtml(item.caption_draft || item.raw_text || "No caption.")}</p>
+            <p class="subtle" style="margin-top:8px;">${escapeHtml(item.submission_id)}</p>
           </div>`
         )
         .join("")
     : `<p class="subtle">Nothing has been published yet.</p>`;
 
-  return `<div class="panel section-spacer">
-    <h2>Internal Feed</h2>
-    <p class="subtle">Recently published items from the current workflow.</p>
-    <div class="feed-grid">${cards}</div>
-  </div>`;
-}
-
-function renderWorkflowEvents(events) {
-  const rows = events.length
-    ? events
+  const eventCards = failedEvents.length
+    ? failedEvents
         .map(
           (item) => `<div class="feed-card">
-            <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
+            <div class="header-row">
               <strong>${escapeHtml(item.event_name)}</strong>
-              <span class="pill">${escapeHtml(item.submission_status || "n/a")}</span>
+              ${renderStatusBadge(formatLabel(item.submission_status || "n/a"), "neutral")}
             </div>
-            <p><code>${escapeHtml(item.id)}</code></p>
-            <p class="subtle">Submission ${escapeHtml(item.submission_id || "none")}</p>
-            <p>${escapeHtml(item.processing_error || "No error recorded.")}</p>
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-              <button class="approve" onclick="retryEvent('${escapeHtml(item.id)}')">Retry Event</button>
+            <p style="margin-top:8px;">${escapeHtml(item.processing_error || "No error recorded.")}</p>
+            <p class="subtle" style="margin-top:8px;">${escapeHtml(item.submission_id || "No submission id")}</p>
+            <div style="margin-top:10px;">
+              <button class="button-secondary" onclick="retryEvent('${escapeHtml(item.id)}')">Retry event</button>
             </div>
           </div>`
         )
         .join("")
     : `<p class="subtle">No failed workflow events.</p>`;
 
-  return `<div class="panel section-spacer">
-    <h2>Workflow Recovery</h2>
-    <p class="subtle">Failed events can be reset and retried through the normal worker loop.</p>
-    <div class="feed-grid">${rows}</div>
-    <p id="event-status" class="subtle"></p>
+  return `<div class="footer-panels">
+    <div class="panel">
+      <h3>Recent Internal Posts</h3>
+      <div class="feed-grid" style="margin-top:12px;">${feedCards}</div>
+    </div>
+    <div class="panel">
+      <h3>Workflow Recovery</h3>
+      <div class="feed-grid" style="margin-top:12px;">${eventCards}</div>
+      <p id="event-status" class="subtle" style="margin-top:12px;"></p>
+    </div>
+  </div>`;
+}
+
+function renderFocus(detail, queueIds) {
+  if (!detail) {
+    return `<div class="panel"><h2>No item selected</h2><p class="subtle" style="margin-top:8px;">Pick a queued item to review it.</p></div>`;
+  }
+
+  const recommendation = recommendationFor(detail);
+  const risk = riskBand(detail.risk_score);
+  const queuePosition = Math.max(queueIds.indexOf(detail.id), 0) + 1;
+  const mediaSummary = detail.media.length
+    ? detail.media.map((item) => `${item.mediaType}: ${item.objectKey}`).join("\n")
+    : "No media metadata attached.";
+  const reviewSignals = detail.review_runs.length
+    ? detail.review_runs
+        .map(
+          (run) => `<div class="summary-item">
+            <strong>${escapeHtml(run.agentName)}</strong>
+            <div class="badge-row">
+              ${renderStatusBadge(formatLabel(run.resultStatus), run.resultStatus === "passed" ? "good" : "review")}
+              <span class="subtle">${escapeHtml(run.model)} • ${escapeHtml(formatRelativeTime(run.createdAt))}</span>
+            </div>
+            <p style="margin-top:8px; line-height:1.45;">${escapeHtml(run.summary || "No summary")}</p>
+          </div>`
+        )
+        .join("")
+    : `<p class="subtle">No review runs recorded.</p>`;
+  const history = detail.approval_actions.length
+    ? detail.approval_actions
+        .map(
+          (item) => `<div class="history-item">
+            <strong>${escapeHtml(formatLabel(item.action))}</strong>
+            <p class="subtle">${escapeHtml(item.actedByName)} • ${escapeHtml(formatRelativeTime(item.createdAt))}</p>
+            ${item.notes ? `<p style="margin-top:6px;">${escapeHtml(item.notes)}</p>` : ""}
+          </div>`
+        )
+        .join("")
+    : `<p class="subtle">No prior reviewer actions on this request.</p>`;
+
+  return `<div class="review-flow">
+    <div class="panel focus-panel">
+      <div class="recommendation ${recommendation.className}">
+        <div class="recommendation-label">Recommended action</div>
+        <h2>${escapeHtml(recommendation.decision)}</h2>
+        <p><strong>${escapeHtml(recommendation.shortReason)}</strong></p>
+        <p>${escapeHtml(recommendation.explainer)}</p>
+        <div class="badge-row" style="margin-top:14px;">
+          ${renderStatusBadge(`Queue ${queuePosition}`, "neutral")}
+          ${renderStatusBadge(risk.label, risk.className === "tone-high" ? "alert" : risk.className === "tone-mid" ? "review" : "good")}
+          ${renderStatusBadge(formatLabel(detail.visibility_target), "neutral")}
+          ${renderStatusBadge(formatLabel(detail.content_type), "neutral")}
+        </div>
+      </div>
+
+      <div class="focus-grid" style="margin-top:16px;">
+        <div class="focus-block">
+          <h3>What is being submitted?</h3>
+          <p class="content-copy">${escapeHtml(detail.raw_text || "No caption or summary provided.")}</p>
+          <div class="content-meta">
+            <span class="subtle">Submitter: ${escapeHtml(detail.submitter_name)}</span>
+            <span class="subtle">${escapeHtml(detail.submitter_email)}</span>
+            <span class="subtle">Submitted ${escapeHtml(formatRelativeTime(detail.created_at))}</span>
+          </div>
+          <div class="summary-list" style="margin-top:14px;">
+            <div class="summary-item">
+              <strong>Caption draft</strong>
+              <p>${escapeHtml(detail.caption_draft || "No caption draft generated.")}</p>
+            </div>
+            <div class="summary-item">
+              <strong>Media attached</strong>
+              <pre>${escapeHtml(mediaSummary)}</pre>
+            </div>
+          </div>
+        </div>
+        <div class="focus-block">
+          <h3>Why this recommendation?</h3>
+          <div class="summary-list">
+            <div class="summary-item">
+              <strong>Routing</strong>
+              <p>${escapeHtml(detail.routing_decision?.rationale || "No routing rationale recorded.")}</p>
+            </div>
+            <div class="summary-item">
+              <strong>Approver</strong>
+              <p>${escapeHtml(detail.approver_name)} (${escapeHtml(detail.approver_role)})</p>
+            </div>
+            <div class="summary-item">
+              <strong>Current state</strong>
+              <div class="badge-row" style="margin-top:8px;">
+                ${renderStatusBadge(formatLabel(detail.submission_status), "review")}
+                ${renderStatusBadge(formatLabel(detail.state), "neutral")}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Review signals</h3>
+      <div class="summary-list" style="margin-top:12px;">${reviewSignals}</div>
+    </div>
+
+    <div class="panel">
+      <h3>Action history</h3>
+      <div class="history-list" style="margin-top:12px;">${history}</div>
+    </div>
+
+    <div class="panel decision-panel">
+      <div class="header-row">
+        <div>
+          <h3>Make the call</h3>
+          <p class="subtle" style="margin-top:6px;">Approve if this can move now. Use changes when the submitter can fix it. Reject when it should stop here.</p>
+        </div>
+        <div class="badge-row">
+          ${renderStatusBadge("A approve", "good")}
+          ${renderStatusBadge("C changes", "review")}
+          ${renderStatusBadge("R reject", "alert")}
+        </div>
+      </div>
+
+      <div class="decision-grid" id="decision-grid">
+        <button class="decision-option approve ${recommendation.defaultAction === "approve" ? "active" : ""}" type="button" data-action="approve" onclick="selectAction('approve')">
+          <strong>Approve</strong>
+          <span class="subtle">Publish this through the normal flow and move to the next item.</span>
+        </button>
+        <button class="decision-option revise ${recommendation.defaultAction === "request_changes" ? "active" : ""}" type="button" data-action="request_changes" onclick="selectAction('request_changes')">
+          <strong>Request changes</strong>
+          <span class="subtle">Send this back with a useful note so the submitter can revise it.</span>
+        </button>
+        <button class="decision-option reject ${recommendation.defaultAction === "reject" ? "active" : ""}" type="button" data-action="reject" onclick="selectAction('reject')">
+          <strong>Reject</strong>
+          <span class="subtle">Stop this submission from moving forward.</span>
+        </button>
+      </div>
+
+      <div style="margin-top:14px;">
+        <input id="actedByEmail" type="text" value="${escapeHtml(detail.approver_email)}" placeholder="Reviewer email" />
+      </div>
+      <div style="margin-top:10px;">
+        <textarea id="notes" placeholder="Add context for the submitter or audit trail."></textarea>
+      </div>
+      <div class="chip-row" id="reason-chips" style="margin-top:10px;">
+        ${recommendation.reasonChips
+          .map(
+            (chip) => `<button class="chip" type="button" onclick="applyNote('${escapeHtml(chip)}')">${escapeHtml(chip)}</button>`
+          )
+          .join("")}
+      </div>
+      <div class="decision-actions" style="margin-top:14px; justify-content:space-between;">
+        <div class="decision-actions">
+          <button class="button-primary" id="submit-action" onclick="submitDecision('${escapeHtml(detail.id)}')">Save decision</button>
+          <button class="button-secondary" onclick="window.location.href='/'">Skip for now</button>
+        </div>
+        <p id="action-status" class="subtle"></p>
+      </div>
+    </div>
   </div>`;
 }
 
 async function renderHome(activeId) {
   const queueResponse = await fetchJson("/approvals/queue");
   const queue = queueResponse.items || [];
-  const selectedId = activeId || (queue[0] ? queue[0].id : null);
-  const detail = selectedId
-    ? await fetchJson(`/approval-requests/${selectedId}`)
-    : null;
+  const queueIds = queue.map((item) => item.id);
+  const selectedId = activeId || queueIds[0] || null;
+  const detail = selectedId ? await fetchJson(`/approval-requests/${selectedId}`) : null;
   const feedResponse = await fetchJson("/feed/internal");
   const feed = feedResponse.items || [];
   const failedEventsResponse = await fetchJson("/workflow-events?status=failed");
   const failedEvents = failedEventsResponse.items || [];
+  const highConcern = queue.filter((item) => Number(item.risk_score || 0) >= 0.75).length;
 
   return layout(`
-    <header>
+    <section class="hero">
       <div>
-        <h1>Club Content Approval Console</h1>
-        <p class="subtle">Moderation queue, review detail, and internal publishing status.</p>
+        <div class="eyebrow">Reviewer workspace</div>
+        <h1>Moderate one item at a time.</h1>
+        <p class="subtle" style="margin-top:10px; max-width:760px;">The job here is simple: understand the submission, trust the recommendation when it is routine, and leave a clear note only when the submitter needs to change something.</p>
       </div>
-      <span class="pill">${queue.length} pending</span>
-    </header>
-    <div class="grid">
+      ${renderStatusBadge(`${queue.length} waiting`, queue.length ? "review" : "good")}
+    </section>
+
+    <section class="topline">
+      <div class="metric">
+        <div class="metric-label">Queue size</div>
+        <strong>${escapeHtml(String(queue.length))}</strong>
+        <span class="subtle">Pending decisions right now</span>
+      </div>
+      <div class="metric">
+        <div class="metric-label">High concern</div>
+        <strong>${escapeHtml(String(highConcern))}</strong>
+        <span class="subtle">Needs slower review</span>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Oldest item</div>
+        <strong>${escapeHtml(queue[0] ? formatRelativeTime(queue[0].created_at) : "None")}</strong>
+        <span class="subtle">How long the top item has waited</span>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Reviewer mode</div>
+        <strong>Approve and move</strong>
+        <span class="subtle">Use notes only when the submitter needs help</span>
+      </div>
+    </section>
+
+    <section class="workspace">
       ${renderQueue(queue, selectedId)}
-      ${renderDetail(detail)}
-    </div>
-    ${renderFeed(feed)}
-    ${renderWorkflowEvents(failedEvents)}
+      ${renderFocus(detail, queueIds)}
+    </section>
+
+    <section style="margin-top:18px;">
+      ${renderFooterPanels(feed, failedEvents)}
+    </section>
+
     <script>
-      function setActionButtonsDisabled(disabled) {
-        document.querySelectorAll(".actions button").forEach((button) => {
-          button.disabled = disabled;
+      const queueIds = ${JSON.stringify(queueIds)};
+      let selectedAction = ${JSON.stringify(detail ? recommendationFor(detail).defaultAction : "approve")};
+
+      function setButtonsDisabled(disabled) {
+        document.querySelectorAll('button').forEach((button) => {
+          if (button.id !== 'skip-button') {
+            button.disabled = disabled;
+          }
         });
       }
 
       function applyNote(note) {
-        const input = document.getElementById("notes");
+        const input = document.getElementById('notes');
         input.value = note;
         input.focus();
       }
 
-      async function takeAction(approvalRequestId, action) {
-        const actedByEmail = document.getElementById("actedByEmail").value;
-        const notes = document.getElementById("notes").value.trim();
-        const status = document.getElementById("action-status");
-        if (!actedByEmail.trim()) {
-          status.textContent = "Reviewer email is required.";
+      function selectAction(action) {
+        selectedAction = action;
+        document.querySelectorAll('.decision-option').forEach((button) => {
+          button.classList.toggle('active', button.dataset.action === action);
+        });
+        const notes = document.getElementById('notes');
+        if (action === 'approve') {
+          notes.placeholder = 'Optional note for the audit trail.';
+        } else if (action === 'request_changes') {
+          notes.placeholder = 'Tell the submitter exactly what needs to change.';
+        } else {
+          notes.placeholder = 'Explain why this should not move forward.';
+        }
+      }
+
+      function nextQueueTarget(currentId) {
+        const index = queueIds.indexOf(currentId);
+        if (index === -1) return '/';
+        return queueIds[index + 1] ? '/?approvalRequestId=' + encodeURIComponent(queueIds[index + 1]) : '/';
+      }
+
+      async function submitDecision(approvalRequestId) {
+        const actedByEmail = document.getElementById('actedByEmail').value.trim();
+        const notes = document.getElementById('notes').value.trim();
+        const status = document.getElementById('action-status');
+
+        if (!actedByEmail) {
+          status.textContent = 'Reviewer email is required.';
           return;
         }
-        if (["reject", "request_changes"].includes(action) && !notes) {
-          status.textContent = "Add a note before rejecting or requesting changes.";
-          document.getElementById("notes").focus();
+        if (['reject', 'request_changes'].includes(selectedAction) && !notes) {
+          status.textContent = 'Add a clear reason before sending this back or rejecting it.';
+          document.getElementById('notes').focus();
           return;
         }
-        status.textContent = "Saving...";
-        setActionButtonsDisabled(true);
-        const response = await fetch("/ui/actions/" + approvalRequestId, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action, actedByEmail, notes })
+
+        status.textContent = 'Saving decision...';
+        setButtonsDisabled(true);
+
+        const response = await fetch('/ui/actions/' + approvalRequestId, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action: selectedAction, actedByEmail, notes })
         });
         const payload = await response.json();
         if (!response.ok) {
-          status.textContent = payload.error || "Action failed";
-          setActionButtonsDisabled(false);
+          status.textContent = payload.error || 'Action failed';
+          setButtonsDisabled(false);
           return;
         }
-        status.textContent = "Action saved. Reloading...";
-        window.location.href = "/";
+
+        status.textContent = 'Saved. Loading the next item...';
+        window.location.href = nextQueueTarget(approvalRequestId);
       }
 
       async function retryEvent(eventId) {
-        const status = document.getElementById("event-status");
-        status.textContent = "Retrying event...";
-        const response = await fetch("/ui/workflow-events/" + eventId + "/retry", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
+        const status = document.getElementById('event-status');
+        status.textContent = 'Retrying event...';
+        const response = await fetch('/ui/workflow-events/' + eventId + '/retry', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            actorEmail: "comms@demo-club.local",
-            notes: "Retry requested from admin console."
+            actorEmail: 'comms@demo-club.local',
+            notes: 'Retry requested from reviewer workspace.'
           })
         });
         const payload = await response.json();
         if (!response.ok) {
-          status.textContent = payload.error || "Retry failed";
+          status.textContent = payload.error || 'Retry failed';
           return;
         }
-        status.textContent = "Event reset. Reloading...";
-        window.location.href = "/";
+        status.textContent = 'Event reset. Reloading...';
+        window.location.reload();
       }
 
-      document.addEventListener("keydown", (event) => {
+      document.addEventListener('keydown', (event) => {
         const target = event.target;
-        const tagName = target && target.tagName ? target.tagName.toLowerCase() : "";
-        if (tagName === "input" || tagName === "textarea") {
+        const tagName = target && target.tagName ? target.tagName.toLowerCase() : '';
+        if (tagName === 'input' || tagName === 'textarea') {
           return;
         }
-        if (event.key === "a" || event.key === "A") {
-          const button = document.querySelector("button.approve");
-          if (button) button.click();
+        if (event.key === 'a' || event.key === 'A') {
+          selectAction('approve');
         }
-        if (event.key === "r" || event.key === "R") {
-          const button = document.querySelector("button.reject");
-          if (button) button.click();
+        if (event.key === 'c' || event.key === 'C') {
+          selectAction('request_changes');
         }
-        if (event.key === "c" || event.key === "C") {
-          const button = document.querySelector("button.revise");
-          if (button) button.click();
+        if (event.key === 'r' || event.key === 'R') {
+          selectAction('reject');
         }
       });
+
+      selectAction(selectedAction);
     </script>
   `);
 }
@@ -727,29 +870,20 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (
-      req.method === "POST" &&
-      /^\/ui\/actions\/[^/]+$/.test(url.pathname)
-    ) {
+    if (req.method === "POST" && /^\/ui\/actions\/[^/]+$/.test(url.pathname)) {
       const approvalRequestId = url.pathname.split("/")[3];
       const body = await readJson(req);
-      const payload = await fetchJson(
-        `/approval-requests/${approvalRequestId}/actions`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body)
-        }
-      );
+      const payload = await fetchJson(`/approval-requests/${approvalRequestId}/actions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body)
+      });
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify(payload));
       return;
     }
 
-    if (
-      req.method === "POST" &&
-      /^\/ui\/workflow-events\/[^/]+\/retry$/.test(url.pathname)
-    ) {
+    if (req.method === "POST" && /^\/ui\/workflow-events\/[^/]+\/retry$/.test(url.pathname)) {
       const eventId = url.pathname.split("/")[3];
       const body = await readJson(req);
       const payload = await fetchJson(`/workflow-events/${eventId}/retry`, {
@@ -765,8 +899,9 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
     res.end("Not found");
   } catch (error) {
+    console.error("admin-web error", error);
     res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
-    res.end(error.message || "Internal server error");
+    res.end(error.message || "Internal Server Error");
   }
 });
 
