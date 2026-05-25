@@ -128,21 +128,39 @@ emailed when delivery credentials are configured.
 Optional environment variables:
 
 - `RESEND_API_KEY`
+- `RESEND_WEBHOOK_SECRET`
 - `NOTIFICATION_FROM_EMAIL`
 
-Verification endpoint:
+Verification endpoints:
 
 - `GET /notification-delivery/status`
+- `POST /webhooks/resend`
 
 Without those values, notifications still appear in-app and delivery attempts fall back to
-log-only mode with audit log entries.
+log-only mode with audit log entries. If `RESEND_WEBHOOK_SECRET` is omitted, the webhook
+endpoint can still parse JSON payloads in dev, but signature verification stays disabled.
+
+Recommended Resend webhook events:
+
+- `email.sent`
+- `email.delivered`
+- `email.delivery_delayed`
+- `email.bounced`
+- `email.complained`
+- `email.failed`
+- `email.suppressed`
 
 VPS enablement steps:
 
-1. Copy `RESEND_API_KEY` and `NOTIFICATION_FROM_EMAIL` into `.env.vps`.
+1. Copy `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, and `NOTIFICATION_FROM_EMAIL` into `.env.vps`.
 2. Run `./scripts/update_vps.sh`.
-3. Run `./scripts/notification_smoke_vps.sh`.
-4. Confirm `GET /notification-delivery/status` reports `provider: resend` and `enabled: true`.
+3. Create or update a Resend webhook to `https://clubcontent-api.davmn.net/webhooks/resend`.
+4. Subscribe it to the recommended email events above.
+5. Run `./scripts/notification_smoke_vps.sh`.
+6. Confirm `GET /notification-delivery/status` reports `provider: resend`, `enabled: true`, and `webhook.secretConfigured: true`.
+
+Incoming webhook events are written to `audit_logs` and surfaced on `GET /notifications` as
+`deliveryStatus`, `deliveryProviderId`, and `deliveryUpdatedAt`.
 
 ### Example Upload Signing Payload
 

@@ -3,10 +3,12 @@ import { ensureSeedData } from "./bootstrap.js";
 import { withTransaction, getPool } from "./db.js";
 import {
   readJson,
+  readText,
   sendJson,
   sendMethodNotAllowed,
   sendNotFound
 } from "./http.js";
+import { Webhook } from "svix";
 import {
   createAndDeliverNotification,
   submissionEvents
@@ -19,6 +21,17 @@ const supportEmail = process.env.SUPPORT_EMAIL || "support@davmn.net";
 const companyName = process.env.COMPANY_NAME || "Club Content";
 const resendApiKey = process.env.RESEND_API_KEY || "";
 const notificationFromEmail = process.env.NOTIFICATION_FROM_EMAIL || "";
+const resendWebhookSecret = process.env.RESEND_WEBHOOK_SECRET || "";
+const resendWebhookEndpointPath = "/webhooks/resend";
+const resendWebhookEvents = [
+  "email.sent",
+  "email.delivered",
+  "email.delivery_delayed",
+  "email.bounced",
+  "email.complained",
+  "email.failed",
+  "email.suppressed"
+];
 
 function parseUrl(req) {
   return new URL(req.url, `http://${req.headers.host || "localhost"}`);
@@ -805,9 +818,21 @@ async function handleNotifications(res, searchParams) {
       n.type,
       n.payload,
       n.read_at AS "readAt",
-      n.created_at AS "createdAt"
+      n.created_at AS "createdAt",
+      latest_delivery.metadata->>'webhookType' AS "deliveryStatus",
+      latest_delivery.metadata->>'emailId' AS "deliveryProviderId",
+      latest_delivery.created_at AS "deliveryUpdatedAt"
     FROM notifications n
     JOIN users u ON u.id = n.user_id
+    LEFT JOIN LATERAL (
+      SELECT metadata, created_at
+      FROM audit_logs
+      WHERE entity_type = 'notification'
+        AND entity_id = n.id
+        AND action LIKE 'notification.email.webhook.%'
+      ORDER BY created_at DESC
+      LIMIT 1
+    ) AS latest_delivery ON TRUE
     WHERE u.email = $1
     ORDER BY n.created_at DESC
     LIMIT $2
@@ -824,8 +849,112 @@ function handleNotificationDeliveryStatus(res) {
       provider: resendApiKey ? "resend" : "log-only",
       enabled: Boolean(resendApiKey && notificationFromEmail),
       fromEmailConfigured: Boolean(notificationFromEmail),
-      supportEmail
+      supportEmail,
+      webhook: {
+        endpointPath: resendWebhookEndpointPath,
+        secretConfigured: Boolean(resendWebhookSecret),
+        subscribedEvents: resendWebhookEvents
+      }
     }
+  });
+}
+
+function normalizeWebhookAction(type) {
+  return String(type || "unknown")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "") || "unknown";
+}
+
+async function handleResendWebhook(req, res) {
+  const rawBody = await readText(req);
+
+  if (!rawBody) {
+    sendJson(res, 400, { error: "Webhook body is required" });
+    return;
+  }
+
+  let event;
+  let verified = false;
+
+  if (resendWebhookSecret) {
+    const svixHeaders = {
+      "svix-id": req.headers["svix-id"],
+      "svix-timestamp": req.headers["svix-timestamp"],
+      "svix-signature": req.headers["svix-signature"]
+    };
+
+    try {
+      event = new Webhook(resendWebhookSecret).verify(rawBody, svixHeaders);
+      verified = true;
+    } catch (error) {
+      sendJson(res, 400, {
+        error: "Invalid webhook signature",
+        detail: error instanceof Error ? error.message : "signature_verification_failed"
+      });
+      return;
+    }
+  } else {
+    event = JSON.parse(rawBody);
+  }
+
+  const webhookType = event?.type || "unknown";
+  const emailId = event?.data?.email_id || null;
+  const normalizedAction = normalizeWebhookAction(webhookType);
+  const recipientEmail = Array.isArray(event?.data?.to)
+    ? event.data.to[0] || null
+    : event?.data?.to || null;
+
+  const result = await withTransaction(async (client) => {
+    let matchedNotificationId = null;
+
+    if (emailId) {
+      const match = await client.query(
+        `
+        SELECT entity_id AS "notificationId"
+        FROM audit_logs
+        WHERE entity_type = 'notification'
+          AND action = 'notification.email.delivered'
+          AND metadata->'delivery'->>'providerId' = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+        `,
+        [emailId]
+      );
+
+      matchedNotificationId = match.rowCount ? match.rows[0].notificationId : null;
+    }
+
+    await client.query(
+      `
+      INSERT INTO audit_logs (entity_type, entity_id, action, metadata)
+      VALUES ($1, $2, $3, $4::jsonb)
+      `,
+      [
+        matchedNotificationId ? 'notification' : 'notification_webhook',
+        matchedNotificationId,
+        `notification.email.webhook.${normalizedAction}`,
+        JSON.stringify({
+          verified,
+          webhookType,
+          emailId,
+          recipientEmail,
+          createdAt: event?.created_at || null,
+          data: event?.data || {},
+          matchedNotificationId
+        })
+      ]
+    );
+
+    return { matchedNotificationId };
+  });
+
+  sendJson(res, 200, {
+    received: true,
+    verified,
+    webhookType,
+    matchedNotificationId: result.matchedNotificationId,
+    emailId
   });
 }
 
@@ -1016,6 +1145,11 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/notification-delivery/status") {
       handleNotificationDeliveryStatus(res);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === resendWebhookEndpointPath) {
+      await handleResendWebhook(req, res);
       return;
     }
 
