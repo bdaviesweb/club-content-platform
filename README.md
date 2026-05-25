@@ -85,6 +85,8 @@ Recommended routine:
 - `GET /approvals/queue`
 - `GET /approval-requests/:id`
 - `POST /approval-requests/:id/actions`
+- `GET /notifications?userEmail=...`
+- `POST /notifications/:id/read`
 - `GET /feed/internal`
 - `GET /workflow-events?status=failed|pending|all`
 - `POST /workflow-events/:id/retry`

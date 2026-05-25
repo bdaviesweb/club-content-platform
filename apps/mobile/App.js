@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -40,6 +41,12 @@ function formatSubmittedAt(value) {
   return date.toLocaleString();
 }
 
+function formatNotificationLabel(type) {
+  return String(type || "update")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
 export default function App() {
   const [apiBaseUrl, setApiBaseUrl] = useState(defaultConfig.apiBaseUrl);
   const [clubSlug, setClubSlug] = useState(defaultConfig.clubSlug);
@@ -52,6 +59,11 @@ export default function App() {
   const [submitting, setSubmitting] = useState(false);
   const [recentSubmissions, setRecentSubmissions] = useState([]);
   const [loadingRecent, setLoadingRecent] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState(null);
+  const [selectedSubmissionDetail, setSelectedSubmissionDetail] = useState(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
 
   const canSubmit = useMemo(() => {
     return Boolean(
@@ -66,6 +78,10 @@ export default function App() {
   const canLoadRecent = useMemo(() => {
     return Boolean(apiBaseUrl.trim() && clubSlug.trim() && submitterEmail.trim());
   }, [apiBaseUrl, clubSlug, submitterEmail]);
+
+  const unreadNotificationCount = useMemo(() => {
+    return notifications.filter((item) => !item.readAt).length;
+  }, [notifications]);
 
   async function loadRecentSubmissions() {
     if (!canLoadRecent) {
@@ -102,12 +118,96 @@ export default function App() {
     }
   }
 
+  async function loadNotifications() {
+    if (!canLoadRecent) {
+      setNotifications([]);
+      return;
+    }
+
+    setLoadingNotifications(true);
+
+    try {
+      const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
+      const query = new URLSearchParams({
+        userEmail: submitterEmail.trim(),
+        limit: "8"
+      });
+      const response = await fetch(`${baseUrl}/notifications?${query.toString()}`);
+
+      if (!response.ok) {
+        throw new Error(`Notifications failed: ${response.status}`);
+      }
+
+      const payload = await response.json();
+      setNotifications(Array.isArray(payload.items) ? payload.items : []);
+    } catch (error) {
+      setStatus(error.message || "Could not load notifications");
+    } finally {
+      setLoadingNotifications(false);
+    }
+  }
+
+  async function loadSubmissionDetail(submissionId) {
+    setLoadingDetail(true);
+
+    try {
+      const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
+      const response = await fetch(`${baseUrl}/submissions/${submissionId}`);
+
+      if (!response.ok) {
+        throw new Error(`Submission detail failed: ${response.status}`);
+      }
+
+      const payload = await response.json();
+      setSelectedSubmissionDetail(payload);
+      setSelectedSubmissionId(submissionId);
+    } catch (error) {
+      setStatus(error.message || "Could not load submission detail");
+      Alert.alert("Detail unavailable", error.message || "Unknown error");
+    } finally {
+      setLoadingDetail(false);
+    }
+  }
+
+  async function markNotificationRead(notificationId) {
+    try {
+      const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
+      const response = await fetch(`${baseUrl}/notifications/${notificationId}/read`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ userEmail: submitterEmail.trim() })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Mark read failed: ${response.status}`);
+      }
+
+      setNotifications((current) =>
+        current.map((item) =>
+          item.id === notificationId ? { ...item, readAt: new Date().toISOString() } : item
+        )
+      );
+    } catch (error) {
+      setStatus(error.message || "Could not mark notification read");
+    }
+  }
+
+  async function refreshDashboard() {
+    await Promise.all([loadRecentSubmissions(), loadNotifications()]);
+  }
+
   useEffect(() => {
     if (!canLoadRecent) {
       return;
     }
 
-    loadRecentSubmissions();
+    refreshDashboard();
+
+    const intervalId = setInterval(() => {
+      refreshDashboard();
+    }, 20000);
+
+    return () => clearInterval(intervalId);
   }, [canLoadRecent, apiBaseUrl, clubSlug, teamSlug, submitterEmail]);
 
   async function pickAsset() {
@@ -215,7 +315,7 @@ export default function App() {
       setStatus(`Submitted ${submissionPayload.submission.id}`);
       setCaption("");
       setAsset(null);
-      await loadRecentSubmissions();
+      await refreshDashboard();
       Alert.alert("Submission created", submissionPayload.submission.id);
     } catch (error) {
       setStatus(error.message || "Submission failed");
@@ -304,10 +404,10 @@ export default function App() {
           <Pressable
             disabled={loadingRecent || !canLoadRecent}
             style={[styles.secondaryButton, styles.refreshButton, (!canLoadRecent || loadingRecent) && styles.primaryButtonDisabled]}
-            onPress={loadRecentSubmissions}
+            onPress={refreshDashboard}
           >
             <Text style={styles.secondaryButtonText}>
-              {loadingRecent ? "Refreshing..." : "Refresh Recent Activity"}
+              {loadingRecent || loadingNotifications ? "Refreshing..." : "Refresh Activity"}
             </Text>
           </Pressable>
           <Pressable
@@ -334,7 +434,11 @@ export default function App() {
 
           {recentSubmissions.length ? (
             recentSubmissions.map((item) => (
-              <View key={item.id} style={styles.recentItem}>
+              <Pressable
+                key={item.id}
+                style={styles.recentItem}
+                onPress={() => loadSubmissionDetail(item.id)}
+              >
                 <View style={styles.recentMetaRow}>
                   <Text style={styles.recentStatus}>{item.status}</Text>
                   <Text style={styles.recentTime}>{formatSubmittedAt(item.created_at)}</Text>
@@ -345,7 +449,7 @@ export default function App() {
                 <Text style={styles.recentDetail}>
                   {item.content_type} · {item.visibility_target} · {item.media_count} media
                 </Text>
-              </View>
+              </Pressable>
             ))
           ) : (
             <Text style={styles.emptyStateText}>
@@ -353,7 +457,129 @@ export default function App() {
             </Text>
           )}
         </View>
+
+        <View style={styles.card}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Updates</Text>
+            <Text style={styles.unreadBadge}>{unreadNotificationCount} unread</Text>
+          </View>
+
+          {notifications.length ? (
+            notifications.map((item) => (
+              <Pressable
+                key={item.id}
+                style={[styles.notificationItem, !item.readAt && styles.notificationItemUnread]}
+                onPress={async () => {
+                  if (item.payload?.submissionId) {
+                    await loadSubmissionDetail(item.payload.submissionId);
+                  }
+
+                  if (!item.readAt) {
+                    await markNotificationRead(item.id);
+                  }
+                }}
+              >
+                <View style={styles.recentMetaRow}>
+                  <Text style={styles.notificationTitle}>{formatNotificationLabel(item.type)}</Text>
+                  <Text style={styles.recentTime}>{formatSubmittedAt(item.createdAt)}</Text>
+                </View>
+                <Text style={styles.notificationBody}>
+                  {item.payload?.notes ||
+                    item.payload?.summary ||
+                    `Submission ${item.payload?.submissionId || ""} moved to ${item.payload?.status || "a new state"}.`}
+                </Text>
+              </Pressable>
+            ))
+          ) : (
+            <Text style={styles.emptyStateText}>
+              No updates yet. Submission review updates will appear here.
+            </Text>
+          )}
+        </View>
       </ScrollView>
+
+      <Modal
+        visible={Boolean(selectedSubmissionId)}
+        animationType="slide"
+        transparent
+        onRequestClose={() => {
+          setSelectedSubmissionId(null);
+          setSelectedSubmissionDetail(null);
+        }}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Submission Detail</Text>
+              <Pressable
+                onPress={() => {
+                  setSelectedSubmissionId(null);
+                  setSelectedSubmissionDetail(null);
+                }}
+              >
+                <Text style={styles.closeButtonText}>Close</Text>
+              </Pressable>
+            </View>
+
+            {loadingDetail || !selectedSubmissionDetail ? (
+              <ActivityIndicator color="#17372c" />
+            ) : (
+              <ScrollView>
+                <Text style={styles.detailStatus}>
+                  {selectedSubmissionDetail.status} · {formatSubmittedAt(selectedSubmissionDetail.created_at)}
+                </Text>
+                <Text style={styles.detailSummary}>
+                  {selectedSubmissionDetail.raw_text?.trim() || "No caption provided"}
+                </Text>
+                <Text style={styles.detailLine}>
+                  Visibility: {selectedSubmissionDetail.visibility_target}
+                </Text>
+                <Text style={styles.detailLine}>
+                  Review score: {selectedSubmissionDetail.risk_score || "pending"}
+                </Text>
+                {selectedSubmissionDetail.latestReviewRun ? (
+                  <>
+                    <Text style={styles.detailHeading}>Latest Review</Text>
+                    <Text style={styles.detailLine}>
+                      {selectedSubmissionDetail.latestReviewRun.resultStatus} · {selectedSubmissionDetail.latestReviewRun.agentName}
+                    </Text>
+                    <Text style={styles.detailBody}>
+                      {selectedSubmissionDetail.latestReviewRun.summary}
+                    </Text>
+                  </>
+                ) : null}
+                {selectedSubmissionDetail.latestApprovalRequest ? (
+                  <>
+                    <Text style={styles.detailHeading}>Approval</Text>
+                    <Text style={styles.detailLine}>
+                      {selectedSubmissionDetail.latestApprovalRequest.state} · {selectedSubmissionDetail.latestApprovalRequest.approverName}
+                    </Text>
+                    {selectedSubmissionDetail.latestApprovalRequest.latestAction ? (
+                      <Text style={styles.detailBody}>
+                        Latest action: {selectedSubmissionDetail.latestApprovalRequest.latestAction.action}
+                        {selectedSubmissionDetail.latestApprovalRequest.latestAction.notes
+                          ? ` — ${selectedSubmissionDetail.latestApprovalRequest.latestAction.notes}`
+                          : ""}
+                      </Text>
+                    ) : null}
+                  </>
+                ) : null}
+                {selectedSubmissionDetail.publishedPost ? (
+                  <>
+                    <Text style={styles.detailHeading}>Publishing</Text>
+                    <Text style={styles.detailLine}>
+                      Published to {selectedSubmissionDetail.publishedPost.destinationName}
+                    </Text>
+                    <Text style={styles.detailBody}>
+                      {formatSubmittedAt(selectedSubmissionDetail.publishedPost.publishedAt)}
+                    </Text>
+                  </>
+                ) : null}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -520,5 +746,76 @@ const styles = StyleSheet.create({
     color: "#6d7a74",
     fontSize: 15,
     lineHeight: 22
+  },
+  unreadBadge: {
+    color: "#a54b24",
+    fontWeight: "700",
+    fontSize: 13
+  },
+  notificationItem: {
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#eadfce"
+  },
+  notificationItemUnread: {
+    backgroundColor: "#fff4e5",
+    marginHorizontal: -8,
+    paddingHorizontal: 8,
+    borderRadius: 12
+  },
+  notificationTitle: {
+    color: "#17372c",
+    fontWeight: "700"
+  },
+  notificationBody: {
+    color: "#465650",
+    fontSize: 14,
+    lineHeight: 21
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(23, 55, 44, 0.45)",
+    justifyContent: "flex-end",
+    padding: 12
+  },
+  modalCard: {
+    backgroundColor: "#fffaf2",
+    borderRadius: 24,
+    padding: 20,
+    maxHeight: "80%"
+  },
+  closeButtonText: {
+    color: "#a54b24",
+    fontWeight: "700"
+  },
+  detailStatus: {
+    color: "#17372c",
+    fontWeight: "700",
+    marginBottom: 12,
+    textTransform: "capitalize"
+  },
+  detailSummary: {
+    color: "#31433b",
+    fontSize: 16,
+    lineHeight: 24,
+    marginBottom: 14
+  },
+  detailHeading: {
+    color: "#17372c",
+    fontSize: 15,
+    fontWeight: "700",
+    marginTop: 12,
+    marginBottom: 6
+  },
+  detailLine: {
+    color: "#5d6a65",
+    fontSize: 14,
+    lineHeight: 21,
+    marginBottom: 4
+  },
+  detailBody: {
+    color: "#465650",
+    fontSize: 14,
+    lineHeight: 21
   }
 });

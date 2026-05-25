@@ -326,7 +326,8 @@ async function handleCreateUploadPlan(req, res) {
 }
 
 async function handleGetSubmission(res, submissionId) {
-  const result = await getPool().query(
+  const pool = getPool();
+  const result = await pool.query(
     `
     SELECT
       s.*,
@@ -354,7 +355,79 @@ async function handleGetSubmission(res, submissionId) {
     return;
   }
 
-  sendJson(res, 200, result.rows[0]);
+  const [latestReviewRun, latestApprovalRequest, publishedPost] = await Promise.all([
+    pool.query(
+      `
+      SELECT
+        rr.id,
+        rr.agent_name AS "agentName",
+        rr.model,
+        rr.result_status AS "resultStatus",
+        rr.confidence,
+        rr.summary,
+        rr.created_at AS "createdAt"
+      FROM review_runs rr
+      WHERE rr.submission_id = $1
+      ORDER BY rr.created_at DESC
+      LIMIT 1
+      `,
+      [submissionId]
+    ),
+    pool.query(
+      `
+      SELECT
+        ar.id,
+        ar.state,
+        ar.approver_role AS "approverRole",
+        ar.created_at AS "createdAt",
+        ar.updated_at AS "updatedAt",
+        u.full_name AS "approverName",
+        (
+          SELECT jsonb_build_object(
+            'id', aa.id,
+            'action', aa.action,
+            'notes', aa.notes,
+            'createdAt', aa.created_at,
+            'actedByName', au.full_name
+          )
+          FROM approval_actions aa
+          JOIN users au ON au.id = aa.acted_by_user_id
+          WHERE aa.approval_request_id = ar.id
+          ORDER BY aa.created_at DESC
+          LIMIT 1
+        ) AS "latestAction"
+      FROM approval_requests ar
+      JOIN users u ON u.id = ar.approver_user_id
+      WHERE ar.submission_id = $1
+      ORDER BY ar.created_at DESC
+      LIMIT 1
+      `,
+      [submissionId]
+    ),
+    pool.query(
+      `
+      SELECT
+        pp.id,
+        pp.external_post_id AS "externalPostId",
+        pp.published_at AS "publishedAt",
+        pd.name AS "destinationName",
+        pd.destination_type AS "destinationType"
+      FROM published_posts pp
+      JOIN publishing_destinations pd ON pd.id = pp.destination_id
+      WHERE pp.submission_id = $1
+      ORDER BY pp.published_at DESC
+      LIMIT 1
+      `,
+      [submissionId]
+    )
+  ]);
+
+  sendJson(res, 200, {
+    ...result.rows[0],
+    latestReviewRun: latestReviewRun.rows[0] || null,
+    latestApprovalRequest: latestApprovalRequest.rows[0] || null,
+    publishedPost: publishedPost.rows[0] || null
+  });
 }
 
 async function handleListSubmissions(res, query) {
@@ -644,6 +717,32 @@ async function handleApprovalAction(req, res, approvalRequestId) {
       ]
     );
 
+    if (normalizedAction !== "approve") {
+      await client.query(
+        `
+        INSERT INTO notifications (user_id, type, payload)
+        SELECT
+          s.submitted_by_user_id,
+          $2,
+          $3::jsonb
+        FROM submissions s
+        WHERE s.id = $1
+        `,
+        [
+          approvalRequest.rows[0].submission_id,
+          normalizedAction === "reject"
+            ? "submission_rejected"
+            : "submission_changes_requested",
+          JSON.stringify({
+            submissionId: approvalRequest.rows[0].submission_id,
+            approvalRequestId,
+            action: normalizedAction,
+            notes: notes || null
+          })
+        ]
+      );
+    }
+
     return { approvalRequestId, action: normalizedAction };
   });
 
@@ -689,6 +788,68 @@ async function handleInternalFeed(res) {
   );
 
   sendJson(res, 200, { items: result.rows });
+}
+
+async function handleNotifications(res, searchParams) {
+  const userEmail = searchParams.get("userEmail");
+  const requestedLimit = Number(searchParams.get("limit") || 10);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(Math.max(requestedLimit, 1), 25)
+    : 10;
+
+  if (!userEmail) {
+    sendJson(res, 400, { error: "userEmail is required" });
+    return;
+  }
+
+  const result = await getPool().query(
+    `
+    SELECT
+      n.id,
+      n.type,
+      n.payload,
+      n.read_at AS "readAt",
+      n.created_at AS "createdAt"
+    FROM notifications n
+    JOIN users u ON u.id = n.user_id
+    WHERE u.email = $1
+    ORDER BY n.created_at DESC
+    LIMIT $2
+    `,
+    [userEmail, limit]
+  );
+
+  sendJson(res, 200, { items: result.rows });
+}
+
+async function handleMarkNotificationRead(req, res, notificationId) {
+  const body = await readJson(req);
+  const userEmail = body.userEmail;
+
+  if (!userEmail) {
+    sendJson(res, 400, { error: "userEmail is required" });
+    return;
+  }
+
+  const result = await getPool().query(
+    `
+    UPDATE notifications n
+    SET read_at = COALESCE(n.read_at, NOW())
+    FROM users u
+    WHERE n.user_id = u.id
+      AND n.id = $1
+      AND u.email = $2
+    RETURNING n.id, n.read_at AS "readAt"
+    `,
+    [notificationId, userEmail]
+  );
+
+  if (!result.rowCount) {
+    sendNotFound(res);
+    return;
+  }
+
+  sendJson(res, 200, result.rows[0]);
 }
 
 async function handleWorkflowEvents(res, searchParams) {
@@ -841,11 +1002,24 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/notifications") {
+      await handleNotifications(res, url.searchParams);
+      return;
+    }
+
     if (
       req.method === "GET" &&
       /^\/approval-requests\/[^/]+$/.test(url.pathname)
     ) {
       await handleApprovalRequestDetail(res, url.pathname.split("/")[2]);
+      return;
+    }
+
+    if (
+      req.method === "POST" &&
+      /^\/notifications\/[^/]+\/read$/.test(url.pathname)
+    ) {
+      await handleMarkNotificationRead(req, res, url.pathname.split("/")[2]);
       return;
     }
 
