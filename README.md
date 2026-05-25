@@ -86,6 +86,7 @@ Recommended routine:
 - `GET /approval-requests/:id`
 - `POST /approval-requests/:id/actions`
 - `GET /notifications?userEmail=...`
+- `GET /notification-delivery/status`
 - `POST /notifications/:id/read`
 - `GET /feed/internal`
 - `GET /workflow-events?status=failed|pending|all`
@@ -129,8 +130,19 @@ Optional environment variables:
 - `RESEND_API_KEY`
 - `NOTIFICATION_FROM_EMAIL`
 
+Verification endpoint:
+
+- `GET /notification-delivery/status`
+
 Without those values, notifications still appear in-app and delivery attempts fall back to
 log-only mode with audit log entries.
+
+VPS enablement steps:
+
+1. Copy `RESEND_API_KEY` and `NOTIFICATION_FROM_EMAIL` into `.env.vps`.
+2. Run `./scripts/update_vps.sh`.
+3. Run `./scripts/notification_smoke_vps.sh`.
+4. Confirm `GET /notification-delivery/status` reports `provider: resend` and `enabled: true`.
 
 ### Example Upload Signing Payload
 

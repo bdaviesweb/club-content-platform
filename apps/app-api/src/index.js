@@ -17,6 +17,8 @@ const port = Number(process.env.API_PORT || 4000);
 const publicAppName = process.env.PUBLIC_PRODUCT_NAME || "Club Content";
 const supportEmail = process.env.SUPPORT_EMAIL || "support@davmn.net";
 const companyName = process.env.COMPANY_NAME || "Club Content";
+const resendApiKey = process.env.RESEND_API_KEY || "";
+const notificationFromEmail = process.env.NOTIFICATION_FROM_EMAIL || "";
 
 function parseUrl(req) {
   return new URL(req.url, `http://${req.headers.host || "localhost"}`);
@@ -816,6 +818,17 @@ async function handleNotifications(res, searchParams) {
   sendJson(res, 200, { items: result.rows });
 }
 
+function handleNotificationDeliveryStatus(res) {
+  sendJson(res, 200, {
+    email: {
+      provider: resendApiKey ? "resend" : "log-only",
+      enabled: Boolean(resendApiKey && notificationFromEmail),
+      fromEmailConfigured: Boolean(notificationFromEmail),
+      supportEmail
+    }
+  });
+}
+
 async function handleMarkNotificationRead(req, res, notificationId) {
   const body = await readJson(req);
   const userEmail = body.userEmail;
@@ -998,6 +1011,11 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/notifications") {
       await handleNotifications(res, url.searchParams);
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/notification-delivery/status") {
+      handleNotificationDeliveryStatus(res);
       return;
     }
 
