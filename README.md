@@ -119,6 +119,19 @@ Use the list endpoint to show a submitter their latest activity in mobile:
 GET /submissions?submitterEmail=coach@demo-club.local&clubSlug=demo-soccer-club&teamSlug=u14-girls&limit=8
 ```
 
+## Notification Delivery
+
+Submitter workflow notifications are stored in the `notifications` table and can also be
+emailed when delivery credentials are configured.
+
+Optional environment variables:
+
+- `RESEND_API_KEY`
+- `NOTIFICATION_FROM_EMAIL`
+
+Without those values, notifications still appear in-app and delivery attempts fall back to
+log-only mode with audit log entries.
+
 ### Example Upload Signing Payload
 
 ```json

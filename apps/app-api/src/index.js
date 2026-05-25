@@ -7,7 +7,10 @@ import {
   sendMethodNotAllowed,
   sendNotFound
 } from "./http.js";
-import { submissionEvents } from "../../../packages/shared/src/index.js";
+import {
+  createAndDeliverNotification,
+  submissionEvents
+} from "../../../packages/shared/src/index.js";
 import { createUploadPlan } from "./storage.js";
 
 const port = Number(process.env.API_PORT || 4000);
@@ -625,7 +628,7 @@ async function handleApprovalAction(req, res, approvalRequestId) {
   const result = await withTransaction(async (client) => {
     const approvalRequest = await client.query(
       `
-      SELECT ar.*, s.club_id, s.id AS submission_id
+      SELECT ar.*, s.club_id, s.id AS submission_id, s.submitted_by_user_id
       FROM approval_requests ar
       JOIN submissions s ON s.id = ar.submission_id
       WHERE ar.id = $1
@@ -718,29 +721,20 @@ async function handleApprovalAction(req, res, approvalRequestId) {
     );
 
     if (normalizedAction !== "approve") {
-      await client.query(
-        `
-        INSERT INTO notifications (user_id, type, payload)
-        SELECT
-          s.submitted_by_user_id,
-          $2,
-          $3::jsonb
-        FROM submissions s
-        WHERE s.id = $1
-        `,
-        [
-          approvalRequest.rows[0].submission_id,
+      await createAndDeliverNotification(client, {
+        userId: approvalRequest.rows[0].submitted_by_user_id,
+        type:
           normalizedAction === "reject"
             ? "submission_rejected"
             : "submission_changes_requested",
-          JSON.stringify({
-            submissionId: approvalRequest.rows[0].submission_id,
-            approvalRequestId,
-            action: normalizedAction,
-            notes: notes || null
-          })
-        ]
-      );
+        payload: {
+          submissionId: approvalRequest.rows[0].submission_id,
+          approvalRequestId,
+          action: normalizedAction,
+          notes: notes || null
+        },
+        actorUserId: actor.rows[0].id
+      });
     }
 
     return { approvalRequestId, action: normalizedAction };

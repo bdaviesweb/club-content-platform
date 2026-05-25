@@ -20,3 +20,9 @@ export const reviewThresholds = {
 };
 
 export const internalDestinationType = "internal_feed";
+
+export {
+  buildNotificationEmail,
+  createAndDeliverNotification,
+  sendEmailViaResend
+} from "./notification-delivery.js";

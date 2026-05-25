@@ -1,20 +1,11 @@
 import {
+  createAndDeliverNotification,
   internalDestinationType,
   reviewThresholds,
   submissionEvents
 } from "../../../packages/shared/src/index.js";
 import { draftCaption, scoreRisk, summarizeReview } from "./fallback-review.js";
 import { hasOpenAI, runModeration, runStructuredReview } from "./openai.js";
-
-async function createNotification(client, userId, type, payload) {
-  await client.query(
-    `
-    INSERT INTO notifications (user_id, type, payload)
-    VALUES ($1, $2, $3::jsonb)
-    `,
-    [userId, type, JSON.stringify(payload)]
-  );
-}
 
 export function chooseApproverRole(submission) {
   if (
@@ -288,11 +279,15 @@ export async function processSubmissionCreated(client, eventRow) {
     ]
   );
 
-  await createNotification(client, submission.submitted_by_user_id, "submission_review_started", {
-    submissionId: submission.id,
-    status: "needs_human_review",
-    approverRole: approver.role,
-    summary: reviewArtifacts.summary
+  await createAndDeliverNotification(client, {
+    userId: submission.submitted_by_user_id,
+    type: "submission_review_started",
+    payload: {
+      submissionId: submission.id,
+      status: "needs_human_review",
+      approverRole: approver.role,
+      summary: reviewArtifacts.summary
+    }
   });
 }
 
@@ -373,9 +368,13 @@ export async function processSubmissionApproved(client, eventRow) {
     ]
   );
 
-  await createNotification(client, submission.submitted_by_user_id, "submission_published", {
-    submissionId: submission.id,
-    status: "published",
-    destinationType: internalDestinationType
+  await createAndDeliverNotification(client, {
+    userId: submission.submitted_by_user_id,
+    type: "submission_published",
+    payload: {
+      submissionId: submission.id,
+      status: "published",
+      destinationType: internalDestinationType
+    }
   });
 }
