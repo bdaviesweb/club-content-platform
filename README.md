@@ -86,6 +86,8 @@ Recommended routine:
 - `GET /approval-requests/:id`
 - `POST /approval-requests/:id/actions`
 - `GET /notifications?userEmail=...`
+- `GET /push-tokens?userEmail=...`
+- `POST /push-tokens`
 - `GET /notification-delivery/status`
 - `POST /notifications/:id/read`
 - `GET /feed/internal`
@@ -130,6 +132,51 @@ Optional environment variables:
 - `RESEND_API_KEY`
 - `RESEND_WEBHOOK_SECRET`
 - `NOTIFICATION_FROM_EMAIL`
+- `PUSH_NOTIFICATIONS_ENABLED`
+- `PUSH_PROVIDER`
+- `PUSH_PROJECT_ID`
+- `DEMO_REVIEWER_EMAIL`
+- `DEMO_SUBMITTER_EMAIL`
+
+Push delivery is intentionally only groundwork in this slice. The backend now accepts and
+stores device registrations without a schema migration, but it does not yet fan out real
+provider sends when a notification is created.
+
+Current channel split:
+
+- in-app notifications: stored in `notifications`
+- email notifications: delivered from the existing notification pipeline when Resend is configured
+- push notifications: device registrations stored in `audit_logs` and exposed for later delivery work
+
+Push registration endpoints:
+
+- `POST /push-tokens`
+- `GET /push-tokens?userEmail=...`
+
+Example push registration payload:
+
+```json
+{
+  "userEmail": "coach@demo-club.local",
+  "installationId": "ios-sim-1",
+  "pushToken": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]",
+  "platform": "ios",
+  "provider": "expo",
+  "appId": "com.hermes.clubcontent",
+  "environment": "development",
+  "deviceLabel": "Robert iPhone 15",
+  "enabled": true
+}
+```
+
+To disable a device later, send the same `installationId` with `enabled: false`. That
+creates a new audit-log event instead of deleting history.
+
+Readback example:
+
+```text
+GET /push-tokens?userEmail=coach@demo-club.local
+```
 
 Verification endpoints:
 
@@ -139,6 +186,8 @@ Verification endpoints:
 Without those values, notifications still appear in-app and delivery attempts fall back to
 log-only mode with audit log entries. If `RESEND_WEBHOOK_SECRET` is omitted, the webhook
 endpoint can still parse JSON payloads in dev, but signature verification stays disabled.
+Push status is also surfaced on `GET /notification-delivery/status`, including whether push
+is enabled and whether a push project id is configured.
 
 Recommended Resend webhook events:
 
@@ -153,14 +202,67 @@ Recommended Resend webhook events:
 VPS enablement steps:
 
 1. Copy `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, and `NOTIFICATION_FROM_EMAIL` into `.env.vps`.
-2. Run `./scripts/update_vps.sh`.
-3. Create or update a Resend webhook to `https://clubcontent-api.davmn.net/webhooks/resend`.
-4. Subscribe it to the recommended email events above.
-5. Run `./scripts/notification_smoke_vps.sh`.
-6. Confirm `GET /notification-delivery/status` reports `provider: resend`, `enabled: true`, and `webhook.secretConfigured: true`.
+2. Set `DEMO_SUBMITTER_EMAIL` to a real inbox you control. Keep `EXPO_PUBLIC_SUBMITTER_EMAIL` aligned with the same address if you are using the mobile demo client.
+3. Set `DEMO_REVIEWER_EMAIL` if you also want approval-side emails to land in a real inbox.
+4. Redeploy or restart `app-api` so bootstrap re-applies the demo membership emails.
+5. Create or update a submission and let the worker emit the notification email.
+6. Create or update a Resend webhook to `https://clubcontent-api.davmn.net/webhooks/resend`.
+7. Subscribe it to the recommended email events above.
+8. Run `./scripts/notification_smoke_vps.sh`.
+9. Confirm `GET /notification-delivery/status` reports `provider: resend`, `enabled: true`, and `webhook.secretConfigured: true`.
+10. Check `GET /notifications?userEmail=<your demo inbox>` or the inbox itself to confirm the event progresses from `sent` to `delivered`.
 
 Incoming webhook events are written to `audit_logs` and surfaced on `GET /notifications` as
 `deliveryStatus`, `deliveryProviderId`, and `deliveryUpdatedAt`.
+
+## Push Notification Groundwork
+
+The API now supports lightweight push-token registration without a schema migration by using
+`audit_logs` as the source of truth for current device registrations.
+
+Environment variables:
+
+- `PUSH_NOTIFICATIONS_ENABLED`
+- `PUSH_PROVIDER` (default `expo`)
+- `PUSH_PROJECT_ID`
+
+Endpoints:
+
+- `POST /push-tokens`
+- `GET /push-tokens?userEmail=...`
+
+Registration payload shape:
+
+```json
+{
+  "userEmail": "coach@demo-club.local",
+  "installationId": "iphone-15-demo",
+  "pushToken": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]",
+  "platform": "ios",
+  "provider": "expo",
+  "appId": "com.hermes.clubcontent",
+  "environment": "development",
+  "deviceLabel": "Robert iPhone",
+  "enabled": true
+}
+```
+
+Revocation uses the same endpoint with `enabled: false` and the same `installationId`.
+The current list endpoint only returns active registrations and masks the token as `tokenPreview`
+for operator-facing reads.
+
+Push registrations are also written to `audit_logs` as `push_token.upserted` and
+`push_token.revoked`. The latest event per `installationId` is treated as the active token
+state. Future delivery work should resolve those active registrations for the target user
+and add a push send alongside the existing `createAndDeliverNotification(...)` in-app and
+email behavior.
+
+`app-api` bootstrap treats the demo submitter and reviewer as env-driven identities for the
+seeded demo club/team. On startup it will:
+
+- create the demo users if they do not exist
+- update the existing seeded user email in place when possible, so old demo submissions stay attached
+- switch the seeded `submitter_coach` or `club_comms` membership to the env-configured inbox when the target email already belongs to another user
 
 ### Example Upload Signing Payload
 

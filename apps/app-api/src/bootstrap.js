@@ -2,7 +2,7 @@ import { withTransaction } from "./db.js";
 import { internalDestinationType } from "../../../packages/shared/src/index.js";
 import { ensureBucket } from "./storage.js";
 
-const clubSeed = {
+const defaultClubSeed = {
   slug: "demo-soccer-club",
   name: "Demo Soccer Club",
   teamSlug: "u14-girls",
@@ -13,7 +13,114 @@ const clubSeed = {
   submitterName: "Demo Coach"
 };
 
+function getClubSeed() {
+  return {
+    slug: process.env.DEMO_CLUB_SLUG || defaultClubSeed.slug,
+    name: process.env.DEMO_CLUB_NAME || defaultClubSeed.name,
+    teamSlug: process.env.DEMO_TEAM_SLUG || defaultClubSeed.teamSlug,
+    teamName: process.env.DEMO_TEAM_NAME || defaultClubSeed.teamName,
+    approverEmail:
+      process.env.DEMO_REVIEWER_EMAIL ||
+      process.env.DEMO_APPROVER_EMAIL ||
+      defaultClubSeed.approverEmail,
+    approverName:
+      process.env.DEMO_REVIEWER_NAME ||
+      process.env.DEMO_APPROVER_NAME ||
+      defaultClubSeed.approverName,
+    submitterEmail:
+      process.env.DEMO_SUBMITTER_EMAIL ||
+      process.env.EXPO_PUBLIC_SUBMITTER_EMAIL ||
+      defaultClubSeed.submitterEmail,
+    submitterName: process.env.DEMO_SUBMITTER_NAME || defaultClubSeed.submitterName
+  };
+}
+
+async function ensureRoleMembership(client, { clubId, teamId, role, email, name }) {
+  const currentMembership = await client.query(
+    `
+    SELECT memberships.id, memberships.user_id, users.email
+    FROM memberships
+    INNER JOIN users ON users.id = memberships.user_id
+    WHERE memberships.club_id = $1
+      AND memberships.team_id = $2
+      AND memberships.role = $3
+    ORDER BY memberships.created_at ASC
+    LIMIT 1
+    `,
+    [clubId, teamId, role]
+  );
+
+  const targetUser = await client.query(
+    `
+    SELECT id
+    FROM users
+    WHERE email = $1
+    LIMIT 1
+    `,
+    [email]
+  );
+
+  let userId = targetUser.rows[0]?.id;
+
+  if (currentMembership.rows[0] && (!userId || userId === currentMembership.rows[0].user_id)) {
+    const updatedUser = await client.query(
+      `
+      UPDATE users
+      SET email = $1,
+          full_name = $2
+      WHERE id = $3
+      RETURNING id
+      `,
+      [email, name, currentMembership.rows[0].user_id]
+    );
+
+    userId = updatedUser.rows[0].id;
+  } else if (userId) {
+    await client.query(
+      `
+      UPDATE users
+      SET full_name = $1
+      WHERE id = $2
+      `,
+      [name, userId]
+    );
+  } else {
+    const createdUser = await client.query(
+      `
+      INSERT INTO users (email, full_name)
+      VALUES ($1, $2)
+      RETURNING id
+      `,
+      [email, name]
+    );
+
+    userId = createdUser.rows[0].id;
+  }
+
+  await client.query(
+    `
+    DELETE FROM memberships
+    WHERE club_id = $1
+      AND team_id = $2
+      AND role = $3
+      AND user_id <> $4
+    `,
+    [clubId, teamId, role, userId]
+  );
+
+  await client.query(
+    `
+    INSERT INTO memberships (club_id, team_id, user_id, role)
+    VALUES ($1, $2, $3, $4)
+    ON CONFLICT DO NOTHING
+    `,
+    [clubId, teamId, userId, role]
+  );
+}
+
 export async function ensureSeedData() {
+  const clubSeed = getClubSeed();
+
   await ensureBucket();
 
   await withTransaction(async (client) => {
@@ -41,43 +148,21 @@ export async function ensureSeedData() {
 
     const teamId = team.rows[0].id;
 
-    const approver = await client.query(
-      `
-      INSERT INTO users (email, full_name)
-      VALUES ($1, $2)
-      ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name
-      RETURNING id
-      `,
-      [clubSeed.approverEmail, clubSeed.approverName]
-    );
+    await ensureRoleMembership(client, {
+      clubId,
+      teamId,
+      role: "club_comms",
+      email: clubSeed.approverEmail,
+      name: clubSeed.approverName
+    });
 
-    const submitter = await client.query(
-      `
-      INSERT INTO users (email, full_name)
-      VALUES ($1, $2)
-      ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name
-      RETURNING id
-      `,
-      [clubSeed.submitterEmail, clubSeed.submitterName]
-    );
-
-    await client.query(
-      `
-      INSERT INTO memberships (club_id, team_id, user_id, role)
-      VALUES ($1, $2, $3, 'club_comms')
-      ON CONFLICT DO NOTHING
-      `,
-      [clubId, teamId, approver.rows[0].id]
-    );
-
-    await client.query(
-      `
-      INSERT INTO memberships (club_id, team_id, user_id, role)
-      VALUES ($1, $2, $3, 'submitter_coach')
-      ON CONFLICT DO NOTHING
-      `,
-      [clubId, teamId, submitter.rows[0].id]
-    );
+    await ensureRoleMembership(client, {
+      clubId,
+      teamId,
+      role: "submitter_coach",
+      email: clubSeed.submitterEmail,
+      name: clubSeed.submitterName
+    });
 
     await client.query(
       `

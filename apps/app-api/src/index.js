@@ -32,6 +32,10 @@ const resendWebhookEvents = [
   "email.failed",
   "email.suppressed"
 ];
+const pushNotificationsEnabled =
+  String(process.env.PUSH_NOTIFICATIONS_ENABLED || "").toLowerCase() === "true";
+const pushProvider = process.env.PUSH_PROVIDER || "expo";
+const pushProjectId = process.env.PUSH_PROJECT_ID || "";
 
 function parseUrl(req) {
   return new URL(req.url, `http://${req.headers.host || "localhost"}`);
@@ -51,6 +55,27 @@ function sendHtml(res, status, html) {
     "content-type": "text/html; charset=utf-8"
   });
   res.end(html);
+}
+
+function normalizeOptionalString(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function maskPushToken(pushToken) {
+  if (!pushToken) {
+    return null;
+  }
+
+  if (pushToken.length <= 12) {
+    return pushToken;
+  }
+
+  return `${pushToken.slice(0, 6)}...${pushToken.slice(-6)}`;
 }
 
 function renderPublicPage({ title, eyebrow, body }) {
@@ -843,6 +868,143 @@ async function handleNotifications(res, searchParams) {
   sendJson(res, 200, { items: result.rows });
 }
 
+async function handleRegisterPushToken(req, res) {
+  const body = await readJson(req);
+  const userEmail = normalizeOptionalString(body.userEmail);
+  const installationId = normalizeOptionalString(body.installationId);
+  const pushToken = normalizeOptionalString(body.pushToken);
+  const platform = normalizeOptionalString(body.platform);
+  const provider = normalizeOptionalString(body.provider) || pushProvider;
+  const appId = normalizeOptionalString(body.appId);
+  const environment = normalizeOptionalString(body.environment);
+  const deviceLabel = normalizeOptionalString(body.deviceLabel);
+  const enabled = body.enabled !== false;
+
+  if (!userEmail || !installationId) {
+    sendJson(res, 400, {
+      error: "userEmail and installationId are required"
+    });
+    return;
+  }
+
+  if (enabled && !pushToken) {
+    sendJson(res, 400, {
+      error: "pushToken is required when enabled is true"
+    });
+    return;
+  }
+
+  const result = await withTransaction(async (client) => {
+    const userResult = await client.query(
+      `SELECT id, email FROM users WHERE email = $1`,
+      [userEmail]
+    );
+
+    if (!userResult.rowCount) {
+      throw new Error(`Unknown userEmail: ${userEmail}`);
+    }
+
+    const userId = userResult.rows[0].id;
+    const action = enabled ? "push_token.upserted" : "push_token.revoked";
+    const metadata = {
+      push: {
+        provider,
+        installationId,
+        pushToken: enabled ? pushToken : null,
+        platform,
+        appId,
+        environment,
+        deviceLabel,
+        enabled
+      }
+    };
+
+    await client.query(
+      `
+      INSERT INTO audit_logs (entity_type, entity_id, action, metadata)
+      VALUES ('user', $1, $2, $3::jsonb)
+      `,
+      [userId, action, JSON.stringify(metadata)]
+    );
+
+    return {
+      userId,
+      userEmail: userResult.rows[0].email,
+      provider,
+      installationId,
+      platform,
+      appId,
+      environment,
+      deviceLabel,
+      enabled,
+      pushToken: enabled ? pushToken : null,
+      tokenPreview: enabled ? maskPushToken(pushToken) : null
+    };
+  });
+
+  sendJson(res, 200, { registration: result });
+}
+
+async function handleListPushTokens(res, searchParams) {
+  const userEmail = normalizeOptionalString(searchParams.get("userEmail"));
+
+  if (!userEmail) {
+    sendJson(res, 400, { error: "userEmail is required" });
+    return;
+  }
+
+  const result = await getPool().query(
+    `
+    WITH latest_push_state AS (
+      SELECT DISTINCT ON (u.id, al.metadata->'push'->>'installationId')
+        u.id AS user_id,
+        u.email AS user_email,
+        al.action,
+        al.created_at,
+        al.metadata->'push'->>'provider' AS provider,
+        al.metadata->'push'->>'installationId' AS installation_id,
+        al.metadata->'push'->>'pushToken' AS push_token,
+        al.metadata->'push'->>'platform' AS platform,
+        al.metadata->'push'->>'appId' AS app_id,
+        al.metadata->'push'->>'environment' AS environment,
+        al.metadata->'push'->>'deviceLabel' AS device_label,
+        COALESCE((al.metadata->'push'->>'enabled')::boolean, false) AS enabled
+      FROM audit_logs al
+      JOIN users u ON u.id = al.entity_id
+      WHERE al.entity_type = 'user'
+        AND al.action IN ('push_token.upserted', 'push_token.revoked')
+        AND u.email = $1
+        AND COALESCE(al.metadata->'push'->>'installationId', '') <> ''
+      ORDER BY u.id, al.metadata->'push'->>'installationId', al.created_at DESC
+    )
+    SELECT
+      user_id AS "userId",
+      user_email AS "userEmail",
+      provider,
+      installation_id AS "installationId",
+      push_token AS "pushToken",
+      platform,
+      app_id AS "appId",
+      environment,
+      device_label AS "deviceLabel",
+      enabled,
+      created_at AS "updatedAt"
+    FROM latest_push_state
+    WHERE enabled = TRUE
+    ORDER BY created_at DESC
+    `
+    ,
+    [userEmail]
+  );
+
+  sendJson(res, 200, {
+    items: result.rows.map((row) => ({
+      ...row,
+      tokenPreview: maskPushToken(row.pushToken)
+    }))
+  });
+}
+
 function handleNotificationDeliveryStatus(res) {
   sendJson(res, 200, {
     email: {
@@ -855,6 +1017,13 @@ function handleNotificationDeliveryStatus(res) {
         secretConfigured: Boolean(resendWebhookSecret),
         subscribedEvents: resendWebhookEvents
       }
+    },
+    push: {
+      provider: pushProvider,
+      enabled: pushNotificationsEnabled,
+      projectIdConfigured: Boolean(pushProjectId),
+      projectId: pushProjectId || null,
+      registrationEndpoint: "/push-tokens"
     }
   });
 }
@@ -1140,6 +1309,16 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/notifications") {
       await handleNotifications(res, url.searchParams);
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/push-tokens") {
+      await handleListPushTokens(res, url.searchParams);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/push-tokens") {
+      await handleRegisterPushToken(req, res);
       return;
     }
 
