@@ -54,6 +54,27 @@ The planned public hosts are:
 - `https://clubcontent-api.davmn.net`
 - `https://clubcontent-uploads.davmn.net`
 
+## Git And Deploy Workflow
+
+The repo is now set up to match the other GitHub-backed projects:
+
+- local Codex/Hermes work happens in this repo
+- `origin` is GitHub
+- the dev VPS runs a real git clone from `/srv/repos/projects/club-content-platform`
+
+Useful scripts:
+
+- `./scripts/deploy_vps.sh` - bootstrap or force-sync the repo to the VPS
+- `./scripts/update_vps.sh` - normal day-to-day flow after pushing to GitHub
+- `./scripts/smoke_vps.sh` - check VPS API health and approval queue from your Mac
+
+Recommended routine:
+
+1. make changes locally in Codex or Hermes
+2. commit and push to GitHub
+3. run `./scripts/update_vps.sh`
+4. run `./scripts/smoke_vps.sh`
+
 ## API Endpoints
 
 - `GET /health`

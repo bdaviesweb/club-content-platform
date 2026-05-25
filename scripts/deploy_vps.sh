@@ -24,3 +24,5 @@ ssh "${REMOTE_HOST}" "cd '${REMOTE_DIR}' && docker compose -f docker-compose.vps
 
 echo "Done. Next check:"
 echo "ssh ${REMOTE_HOST} 'cd ${REMOTE_DIR} && docker compose -f docker-compose.vps.yml ps'"
+echo "For day-to-day updates after GitHub pushes, use:"
+echo "./scripts/update_vps.sh"
