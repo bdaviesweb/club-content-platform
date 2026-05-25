@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  ImageBackground,
   Modal,
   Pressable,
   SafeAreaView,
@@ -542,20 +543,34 @@ export default function App() {
 
                   {isVideoAsset(asset) ? (
                     <View style={styles.videoPreviewStage}>
-                      <Text style={styles.videoPreviewTag}>Video selected</Text>
-                      <Text style={styles.videoPreviewName}>{asset.name}</Text>
-                      <Text style={styles.videoPreviewCopy}>
-                        Playback preview is the next upgrade. For now, this clip is selected and ready to submit.
-                      </Text>
+                      <View style={styles.previewMediaOverlay}>
+                        <View style={styles.previewChip}>
+                          <Text style={styles.previewChipText}>Video</Text>
+                        </View>
+                        <Text style={styles.videoPreviewName}>{asset.name}</Text>
+                        <Text style={styles.videoPreviewCopy}>
+                          Playback preview is the next upgrade. For now, this clip is selected and ready to submit.
+                        </Text>
+                      </View>
                     </View>
                   ) : (
-                    <Image source={{ uri: asset.uri }} style={styles.previewImage} resizeMode="cover" />
+                    <ImageBackground source={{ uri: asset.uri }} style={styles.previewImage} imageStyle={styles.previewImageMedia}>
+                      <View style={styles.previewImageShade}>
+                        <View style={styles.previewChipRow}>
+                          <View style={styles.previewChip}>
+                            <Text style={styles.previewChipText}>Photo</Text>
+                          </View>
+                          <View style={styles.previewChip}>
+                            <Text style={styles.previewChipText}>{formatVisibilityLabel(visibilityTarget)}</Text>
+                          </View>
+                        </View>
+                        <View style={styles.previewMediaOverlay}>
+                          <Text style={styles.previewAssetName}>{asset.name}</Text>
+                          <Text style={styles.previewOverlayHint}>Check the shot, add a short note, and send it in.</Text>
+                        </View>
+                      </View>
+                    </ImageBackground>
                   )}
-
-                  <View style={styles.overlayMetaRow}>
-                    <Text style={styles.overlayMetaText}>{asset.name}</Text>
-                    <Text style={styles.overlayMetaText}>{formatVisibilityLabel(visibilityTarget)}</Text>
-                  </View>
 
                   <View style={styles.composerSheet}>
                     <View style={styles.sheetTopRow}>
@@ -1194,9 +1209,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#fffaf3",
     borderRadius: 34,
     padding: 14,
-    gap: 12,
+    gap: 0,
     borderWidth: 1,
-    borderColor: "#e3d4bf"
+    borderColor: "#e3d4bf",
+    overflow: "hidden"
   },
   previewHeaderRow: {
     flexDirection: "row",
@@ -1223,24 +1239,58 @@ const styles = StyleSheet.create({
   },
   previewImage: {
     width: "100%",
-    height: 430,
-    borderRadius: 28,
+    height: 470,
+    justifyContent: "flex-end",
     backgroundColor: "#d6ddd7"
   },
+  previewImageMedia: {
+    borderRadius: 28
+  },
+  previewImageShade: {
+    flex: 1,
+    justifyContent: "space-between",
+    padding: 16,
+    backgroundColor: "rgba(11, 24, 18, 0.18)"
+  },
   videoPreviewStage: {
-    minHeight: 340,
+    minHeight: 420,
     borderRadius: 28,
     backgroundColor: "#18382f",
-    padding: 24,
-    justifyContent: "center",
-    gap: 10
+    padding: 18,
+    justifyContent: "flex-end",
+    overflow: "hidden"
   },
-  videoPreviewTag: {
-    color: "#d9c2a5",
-    textTransform: "uppercase",
-    letterSpacing: 1.3,
-    fontSize: 12,
+  previewMediaOverlay: {
+    backgroundColor: "rgba(10, 23, 18, 0.58)",
+    borderRadius: 24,
+    padding: 16,
+    gap: 8
+  },
+  previewChipRow: {
+    flexDirection: "row",
+    gap: 8
+  },
+  previewChip: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 247, 236, 0.88)"
+  },
+  previewChipText: {
+    color: "#3f3a34",
+    fontWeight: "800",
+    fontSize: 12
+  },
+  previewAssetName: {
+    color: "#fff8ef",
+    fontSize: 24,
+    lineHeight: 27,
     fontWeight: "800"
+  },
+  previewOverlayHint: {
+    color: "#e0e7e2",
+    lineHeight: 20
   },
   videoPreviewName: {
     color: "#fcf8ef",
@@ -1252,23 +1302,15 @@ const styles = StyleSheet.create({
     color: "#d1dbd6",
     lineHeight: 22
   },
-  overlayMetaRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 10,
-    paddingHorizontal: 6
-  },
-  overlayMetaText: {
-    color: "#707671",
-    fontSize: 13,
-    flex: 1
-  },
   composerSheet: {
     borderRadius: 30,
     backgroundColor: "#f7efe2",
     padding: 18,
     gap: 12,
-    marginTop: -6
+    marginTop: -22,
+    marginHorizontal: 8,
+    borderWidth: 1,
+    borderColor: "rgba(227, 212, 191, 0.9)"
   },
   sheetTopRow: {
     flexDirection: "row",
