@@ -558,7 +558,16 @@ export default function App() {
                   </View>
 
                   <View style={styles.composerSheet}>
-                    <Text style={styles.sheetLabel}>Who should see this first?</Text>
+                    <View style={styles.sheetTopRow}>
+                      <View>
+                        <Text style={styles.sheetLabel}>Almost there</Text>
+                        <Text style={styles.sheetTitle}>Add a quick note and send it in.</Text>
+                      </View>
+                      <View style={styles.inlineMetaPill}>
+                        <Text style={styles.inlineMetaPillText}>{formatVisibilityLabel(visibilityTarget)}</Text>
+                      </View>
+                    </View>
+
                     <View style={styles.audienceRow}>
                       {[
                         { key: "internal", label: "Internal" },
@@ -632,20 +641,22 @@ export default function App() {
                 <Text style={styles.statusHeroKicker}>Your posts</Text>
                 <Text style={styles.statusHeroTitle}>Clear status, no digging.</Text>
                 <Text style={styles.statusHeroBody}>
-                  Every update moves from received to review to approval to posting. This feed tells you what happened and what needs attention.
+                  Check what is live, what needs attention, and what is still waiting on review without opening the admin side.
                 </Text>
                 <View style={styles.statusCountRow}>
-                  <View style={styles.statusCountPill}>
-                    <Text style={styles.statusCountValue}>{submissionStats.inReview}</Text>
-                    <Text style={styles.statusCountLabel}>In review</Text>
+                  <View style={styles.statusCountPillPrimary}>
+                    <Text style={styles.statusCountValuePrimary}>{submissionStats.inReview}</Text>
+                    <Text style={styles.statusCountLabelPrimary}>In review right now</Text>
                   </View>
-                  <View style={styles.statusCountPill}>
-                    <Text style={styles.statusCountValue}>{submissionStats.needsAttention}</Text>
-                    <Text style={styles.statusCountLabel}>Needs attention</Text>
-                  </View>
-                  <View style={styles.statusCountPill}>
-                    <Text style={styles.statusCountValue}>{submissionStats.published}</Text>
-                    <Text style={styles.statusCountLabel}>Posted</Text>
+                  <View style={styles.statusCountStack}>
+                    <View style={styles.statusCountPillSmall}>
+                      <Text style={styles.statusCountValueSmall}>{submissionStats.needsAttention}</Text>
+                      <Text style={styles.statusCountLabelSmall}>Needs attention</Text>
+                    </View>
+                    <View style={styles.statusCountPillSmall}>
+                      <Text style={styles.statusCountValueSmall}>{submissionStats.published}</Text>
+                      <Text style={styles.statusCountLabelSmall}>Posted</Text>
+                    </View>
                   </View>
                 </View>
               </View>
@@ -751,8 +762,8 @@ export default function App() {
                 </View>
 
                 {recentSubmissions.length ? (
-                  recentSubmissions.map((item) => (
-                    <Pressable key={item.id} style={styles.feedCard} onPress={() => loadSubmissionDetail(item.id)}>
+                  recentSubmissions.map((item, index) => (
+                    <Pressable key={item.id} style={[styles.feedCard, index === 0 && styles.feedCardFeatured]} onPress={() => loadSubmissionDetail(item.id)}>
                       <View style={styles.statusBadgeRow}>
                         <View
                           style={[
@@ -1253,10 +1264,17 @@ const styles = StyleSheet.create({
     flex: 1
   },
   composerSheet: {
-    borderRadius: 28,
+    borderRadius: 30,
     backgroundColor: "#f7efe2",
-    padding: 16,
-    gap: 12
+    padding: 18,
+    gap: 12,
+    marginTop: -6
+  },
+  sheetTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    alignItems: "flex-start"
   },
   sheetLabel: {
     color: "#7f715f",
@@ -1264,6 +1282,25 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 1.3
+  },
+  sheetTitle: {
+    marginTop: 4,
+    color: "#11261f",
+    fontSize: 20,
+    lineHeight: 23,
+    fontWeight: "800",
+    maxWidth: 220
+  },
+  inlineMetaPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#efe1cf"
+  },
+  inlineMetaPillText: {
+    color: "#6e5f4b",
+    fontWeight: "800",
+    fontSize: 12
   },
   audienceRow: {
     flexDirection: "row",
@@ -1386,25 +1423,49 @@ const styles = StyleSheet.create({
   },
   statusCountRow: {
     flexDirection: "row",
-    gap: 10
+    gap: 10,
+    alignItems: "stretch"
   },
-  statusCountPill: {
-    flex: 1,
-    borderRadius: 20,
-    padding: 14,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    alignItems: "center"
+  statusCountPillPrimary: {
+    flex: 1.15,
+    borderRadius: 22,
+    padding: 16,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    justifyContent: "space-between"
   },
-  statusCountValue: {
+  statusCountValuePrimary: {
     color: "#fff8ef",
-    fontSize: 24,
+    fontSize: 34,
+    lineHeight: 36,
     fontWeight: "800"
   },
-  statusCountLabel: {
+  statusCountLabelPrimary: {
     color: "#d5dfda",
     fontSize: 12,
     textTransform: "uppercase",
-    letterSpacing: 1.2,
+    letterSpacing: 1.2
+  },
+  statusCountStack: {
+    flex: 1,
+    gap: 10
+  },
+  statusCountPillSmall: {
+    flex: 1,
+    borderRadius: 18,
+    padding: 14,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    justifyContent: "center"
+  },
+  statusCountValueSmall: {
+    color: "#fff8ef",
+    fontSize: 22,
+    fontWeight: "800"
+  },
+  statusCountLabelSmall: {
+    color: "#d5dfda",
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
     marginTop: 4
   },
   sectionBlock: {
@@ -1435,11 +1496,16 @@ const styles = StyleSheet.create({
   },
   latestPostCard: {
     backgroundColor: "#fffaf3",
-    borderRadius: 26,
+    borderRadius: 30,
     padding: 18,
     borderWidth: 1,
     borderColor: "#e3d4bf",
-    gap: 12
+    gap: 12,
+    shadowColor: "#10261e",
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 4
   },
   statusBadgeRow: {
     flexDirection: "row",
@@ -1542,6 +1608,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e3d4bf",
     gap: 10
+  },
+  feedCardFeatured: {
+    backgroundColor: "#fffdf8"
   },
   notificationCard: {
     backgroundColor: "#fffaf3",
