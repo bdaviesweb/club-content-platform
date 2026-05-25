@@ -330,6 +330,27 @@ function layout(content, title = "Club Content Ops") {
         border-left: 3px solid var(--line-strong);
         padding-left: 12px;
       }
+      details.disclosure {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--paper-2);
+        padding: 0;
+      }
+      details.disclosure summary {
+        list-style: none;
+        cursor: pointer;
+        padding: 14px;
+        font-weight: 700;
+      }
+      details.disclosure summary::-webkit-details-marker {
+        display: none;
+      }
+      details.disclosure[open] summary {
+        border-bottom: 1px solid var(--line);
+      }
+      .disclosure-body {
+        padding: 14px;
+      }
       .decision-panel {
         position: sticky;
         bottom: 14px;
@@ -401,6 +422,14 @@ function layout(content, title = "Club Content Ops") {
         border-radius: 999px;
         padding: 8px 12px;
         cursor: pointer;
+      }
+      .decision-support {
+        display: grid;
+        gap: 10px;
+        margin-top: 14px;
+      }
+      .decision-copy {
+        min-height: 22px;
       }
       .hidden { display: none; }
       .footer-panels {
@@ -612,21 +641,25 @@ function renderFocus(detail, queueIds) {
       </div>
     </div>
 
-    <div class="panel">
-      <h3>Review signals</h3>
-      <div class="summary-list" style="margin-top:12px;">${reviewSignals}</div>
-    </div>
+    <details class="disclosure">
+      <summary>Review signals and model context</summary>
+      <div class="disclosure-body">
+        <div class="summary-list">${reviewSignals}</div>
+      </div>
+    </details>
 
-    <div class="panel">
-      <h3>Action history</h3>
-      <div class="history-list" style="margin-top:12px;">${history}</div>
-    </div>
+    <details class="disclosure">
+      <summary>Action history</summary>
+      <div class="disclosure-body">
+        <div class="history-list">${history}</div>
+      </div>
+    </details>
 
     <div class="panel decision-panel">
       <div class="header-row">
         <div>
           <h3>Make the call</h3>
-          <p class="subtle" style="margin-top:6px;">Approve if this can move now. Use changes when the submitter can fix it. Reject when it should stop here.</p>
+          <p class="subtle" style="margin-top:6px;">Default to the fastest correct decision. Only ask the submitter for more when they can fix the item.</p>
         </div>
         <div class="badge-row">
           ${renderStatusBadge("A approve", "good")}
@@ -637,36 +670,39 @@ function renderFocus(detail, queueIds) {
 
       <div class="decision-grid" id="decision-grid">
         <button class="decision-option approve ${recommendation.defaultAction === "approve" ? "active" : ""}" type="button" data-action="approve" onclick="selectAction('approve')">
-          <strong>Approve</strong>
-          <span class="subtle">Publish this through the normal flow and move to the next item.</span>
+          <strong>Approve and next</strong>
+          <span class="subtle">Publish this through the normal flow and load the next queued item.</span>
         </button>
         <button class="decision-option revise ${recommendation.defaultAction === "request_changes" ? "active" : ""}" type="button" data-action="request_changes" onclick="selectAction('request_changes')">
-          <strong>Request changes</strong>
-          <span class="subtle">Send this back with a useful note so the submitter can revise it.</span>
+          <strong>Send back for changes</strong>
+          <span class="subtle">Require a short, actionable note for the submitter.</span>
         </button>
         <button class="decision-option reject ${recommendation.defaultAction === "reject" ? "active" : ""}" type="button" data-action="reject" onclick="selectAction('reject')">
-          <strong>Reject</strong>
-          <span class="subtle">Stop this submission from moving forward.</span>
+          <strong>Reject submission</strong>
+          <span class="subtle">Stop this item and record why it should not move forward.</span>
         </button>
       </div>
 
-      <div style="margin-top:14px;">
-        <input id="actedByEmail" type="text" value="${escapeHtml(detail.approver_email)}" placeholder="Reviewer email" />
-      </div>
-      <div style="margin-top:10px;">
-        <textarea id="notes" placeholder="Add context for the submitter or audit trail."></textarea>
-      </div>
-      <div class="chip-row" id="reason-chips" style="margin-top:10px;">
-        ${recommendation.reasonChips
-          .map(
-            (chip) => `<button class="chip" type="button" onclick="applyNote('${escapeHtml(chip)}')">${escapeHtml(chip)}</button>`
-          )
-          .join("")}
+      <div class="decision-support">
+        <div>
+          <input id="actedByEmail" type="text" value="${escapeHtml(detail.approver_email)}" placeholder="Reviewer email" />
+        </div>
+        <p id="decision-copy" class="subtle decision-copy"></p>
+        <div id="notes-wrap" class="hidden">
+          <textarea id="notes" placeholder="Tell the submitter exactly what needs to change."></textarea>
+        </div>
+        <div class="chip-row hidden" id="reason-chips">
+          ${recommendation.reasonChips
+            .map(
+              (chip) => `<button class="chip" type="button" onclick="applyNote('${escapeHtml(chip)}')">${escapeHtml(chip)}</button>`
+            )
+            .join("")}
+        </div>
       </div>
       <div class="decision-actions" style="margin-top:14px; justify-content:space-between;">
         <div class="decision-actions">
-          <button class="button-primary" id="submit-action" onclick="submitDecision('${escapeHtml(detail.id)}')">Save decision</button>
-          <button class="button-secondary" onclick="window.location.href='/'">Skip for now</button>
+          <button class="button-primary" id="submit-action" onclick="submitDecision('${escapeHtml(detail.id)}')">Approve and next</button>
+          <button class="button-secondary" id="skip-button" onclick="window.location.href='/'">Skip for now</button>
         </div>
         <p id="action-status" class="subtle"></p>
       </div>
@@ -751,12 +787,30 @@ async function renderHome(activeId) {
         document.querySelectorAll('.decision-option').forEach((button) => {
           button.classList.toggle('active', button.dataset.action === action);
         });
+
+        const submit = document.getElementById('submit-action');
+        const notesWrap = document.getElementById('notes-wrap');
+        const chips = document.getElementById('reason-chips');
         const notes = document.getElementById('notes');
+        const decisionCopy = document.getElementById('decision-copy');
+
         if (action === 'approve') {
-          notes.placeholder = 'Optional note for the audit trail.';
+          submit.textContent = 'Approve and next';
+          decisionCopy.textContent = 'This will publish the item and move straight to the next queued review.';
+          notesWrap.classList.add('hidden');
+          chips.classList.add('hidden');
+          notes.value = '';
         } else if (action === 'request_changes') {
+          submit.textContent = 'Send back with note';
+          decisionCopy.textContent = 'This will return the item to the submitter. A clear note is required.';
+          notesWrap.classList.remove('hidden');
+          chips.classList.remove('hidden');
           notes.placeholder = 'Tell the submitter exactly what needs to change.';
         } else {
+          submit.textContent = 'Reject submission';
+          decisionCopy.textContent = 'This will stop the item here. Record a short reason for the audit trail.';
+          notesWrap.classList.remove('hidden');
+          chips.classList.remove('hidden');
           notes.placeholder = 'Explain why this should not move forward.';
         }
       }
