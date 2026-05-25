@@ -357,6 +357,64 @@ async function handleGetSubmission(res, submissionId) {
   sendJson(res, 200, result.rows[0]);
 }
 
+async function handleListSubmissions(res, query) {
+  const submitterEmail = query.get("submitterEmail");
+  const clubSlug = query.get("clubSlug");
+  const teamSlug = query.get("teamSlug");
+  const requestedLimit = Number(query.get("limit") || 10);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(Math.max(requestedLimit, 1), 25)
+    : 10;
+
+  if (!submitterEmail) {
+    sendJson(res, 400, { error: "submitterEmail is required" });
+    return;
+  }
+
+  const values = [submitterEmail];
+  const filters = [`u.email = $1`];
+
+  if (clubSlug) {
+    values.push(clubSlug);
+    filters.push(`c.slug = $${values.length}`);
+  }
+
+  if (teamSlug) {
+    values.push(teamSlug);
+    filters.push(`t.slug = $${values.length}`);
+  }
+
+  values.push(limit);
+
+  const result = await getPool().query(
+    `
+    SELECT
+      s.id,
+      s.content_type,
+      s.raw_text,
+      s.visibility_target,
+      s.status,
+      s.risk_score,
+      s.created_at,
+      c.slug AS club_slug,
+      t.slug AS team_slug,
+      COALESCE(COUNT(sm.id), 0) AS media_count
+    FROM submissions s
+    JOIN users u ON u.id = s.submitted_by_user_id
+    JOIN clubs c ON c.id = s.club_id
+    LEFT JOIN teams t ON t.id = s.team_id
+    LEFT JOIN submission_media sm ON sm.submission_id = s.id
+    WHERE ${filters.join(" AND ")}
+    GROUP BY s.id, c.slug, t.slug
+    ORDER BY s.created_at DESC
+    LIMIT $${values.length}
+    `,
+    values
+  );
+
+  sendJson(res, 200, { items: result.rows });
+}
+
 async function handleApprovalQueue(res) {
   const result = await getPool().query(
     `
@@ -765,6 +823,11 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "POST" && url.pathname === "/uploads/sign") {
       await handleCreateUploadPlan(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/submissions") {
+      await handleListSubmissions(res, url.searchParams);
       return;
     }
 

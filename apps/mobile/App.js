@@ -1,7 +1,7 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import { StatusBar } from "expo-status-bar";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -26,6 +26,20 @@ function normalizeApiBaseUrl(value) {
   return value.replace(/\/+$/, "");
 }
 
+function formatSubmittedAt(value) {
+  if (!value) {
+    return "Unknown time";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown time";
+  }
+
+  return date.toLocaleString();
+}
+
 export default function App() {
   const [apiBaseUrl, setApiBaseUrl] = useState(defaultConfig.apiBaseUrl);
   const [clubSlug, setClubSlug] = useState(defaultConfig.clubSlug);
@@ -36,6 +50,8 @@ export default function App() {
   const [asset, setAsset] = useState(null);
   const [status, setStatus] = useState("Pick media, add a caption, and submit.");
   const [submitting, setSubmitting] = useState(false);
+  const [recentSubmissions, setRecentSubmissions] = useState([]);
+  const [loadingRecent, setLoadingRecent] = useState(false);
 
   const canSubmit = useMemo(() => {
     return Boolean(
@@ -46,6 +62,53 @@ export default function App() {
         submitterEmail.trim()
     );
   }, [asset, caption, apiBaseUrl, clubSlug, submitterEmail]);
+
+  const canLoadRecent = useMemo(() => {
+    return Boolean(apiBaseUrl.trim() && clubSlug.trim() && submitterEmail.trim());
+  }, [apiBaseUrl, clubSlug, submitterEmail]);
+
+  async function loadRecentSubmissions() {
+    if (!canLoadRecent) {
+      setRecentSubmissions([]);
+      return;
+    }
+
+    setLoadingRecent(true);
+
+    try {
+      const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
+      const query = new URLSearchParams({
+        submitterEmail: submitterEmail.trim(),
+        clubSlug: clubSlug.trim(),
+        limit: "8"
+      });
+
+      if (teamSlug.trim()) {
+        query.set("teamSlug", teamSlug.trim());
+      }
+
+      const response = await fetch(`${baseUrl}/submissions?${query.toString()}`);
+
+      if (!response.ok) {
+        throw new Error(`Recent submissions failed: ${response.status}`);
+      }
+
+      const payload = await response.json();
+      setRecentSubmissions(Array.isArray(payload.items) ? payload.items : []);
+    } catch (error) {
+      setStatus(error.message || "Could not load recent submissions");
+    } finally {
+      setLoadingRecent(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!canLoadRecent) {
+      return;
+    }
+
+    loadRecentSubmissions();
+  }, [canLoadRecent, apiBaseUrl, clubSlug, teamSlug, submitterEmail]);
 
   async function pickAsset() {
     const result = await DocumentPicker.getDocumentAsync({
@@ -152,6 +215,7 @@ export default function App() {
       setStatus(`Submitted ${submissionPayload.submission.id}`);
       setCaption("");
       setAsset(null);
+      await loadRecentSubmissions();
       Alert.alert("Submission created", submissionPayload.submission.id);
     } catch (error) {
       setStatus(error.message || "Submission failed");
@@ -238,6 +302,15 @@ export default function App() {
           <Text style={styles.sectionTitle}>Status</Text>
           <Text style={styles.statusText}>{status}</Text>
           <Pressable
+            disabled={loadingRecent || !canLoadRecent}
+            style={[styles.secondaryButton, styles.refreshButton, (!canLoadRecent || loadingRecent) && styles.primaryButtonDisabled]}
+            onPress={loadRecentSubmissions}
+          >
+            <Text style={styles.secondaryButtonText}>
+              {loadingRecent ? "Refreshing..." : "Refresh Recent Activity"}
+            </Text>
+          </Pressable>
+          <Pressable
             disabled={!canSubmit || submitting}
             style={[
               styles.primaryButton,
@@ -251,6 +324,34 @@ export default function App() {
               <Text style={styles.primaryButtonText}>Upload and Submit</Text>
             )}
           </Pressable>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Recent Submissions</Text>
+            {loadingRecent ? <ActivityIndicator color="#17372c" /> : null}
+          </View>
+
+          {recentSubmissions.length ? (
+            recentSubmissions.map((item) => (
+              <View key={item.id} style={styles.recentItem}>
+                <View style={styles.recentMetaRow}>
+                  <Text style={styles.recentStatus}>{item.status}</Text>
+                  <Text style={styles.recentTime}>{formatSubmittedAt(item.created_at)}</Text>
+                </View>
+                <Text style={styles.recentSummary}>
+                  {item.raw_text?.trim() || "No caption provided"}
+                </Text>
+                <Text style={styles.recentDetail}>
+                  {item.content_type} · {item.visibility_target} · {item.media_count} media
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.emptyStateText}>
+              No submissions yet for this submitter and team.
+            </Text>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -307,6 +408,12 @@ const styles = StyleSheet.create({
     color: "#17372c",
     marginBottom: 12
   },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12
+  },
   input: {
     backgroundColor: "#ffffff",
     borderRadius: 16,
@@ -332,6 +439,9 @@ const styles = StyleSheet.create({
     color: "#7a4f2b",
     fontSize: 16,
     fontWeight: "600"
+  },
+  refreshButton: {
+    marginBottom: 14
   },
   visibilityRow: {
     flexDirection: "row",
@@ -374,5 +484,41 @@ const styles = StyleSheet.create({
     color: "#fff7ef",
     fontSize: 16,
     fontWeight: "700"
+  },
+  recentItem: {
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#eadfce"
+  },
+  recentMetaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 8
+  },
+  recentStatus: {
+    textTransform: "capitalize",
+    color: "#17372c",
+    fontWeight: "700"
+  },
+  recentTime: {
+    color: "#7b867f",
+    fontSize: 12
+  },
+  recentSummary: {
+    color: "#31433b",
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 6
+  },
+  recentDetail: {
+    color: "#7a6b5b",
+    fontSize: 13,
+    textTransform: "capitalize"
+  },
+  emptyStateText: {
+    color: "#6d7a74",
+    fontSize: 15,
+    lineHeight: 22
   }
 });

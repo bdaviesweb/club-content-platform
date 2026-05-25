@@ -8,6 +8,7 @@ Expo-based mobile client for the club content workflow.
 2. Call `POST /uploads/sign`
 3. Upload the file to the returned presigned URL
 4. Call `POST /submissions` with the returned `objectKey`
+5. Refresh or review recent submission status directly in the app
 
 ## Run
 

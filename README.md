@@ -79,6 +79,7 @@ Recommended routine:
 
 - `GET /health`
 - `POST /submissions`
+- `GET /submissions?submitterEmail=...&clubSlug=...&teamSlug=...`
 - `POST /uploads/sign`
 - `GET /submissions/:id`
 - `GET /approvals/queue`
@@ -106,6 +107,14 @@ Recommended routine:
     }
   ]
 }
+```
+
+### Recent Submission Query
+
+Use the list endpoint to show a submitter their latest activity in mobile:
+
+```text
+GET /submissions?submitterEmail=coach@demo-club.local&clubSlug=demo-soccer-club&teamSlug=u14-girls&limit=8
 ```
 
 ### Example Upload Signing Payload
