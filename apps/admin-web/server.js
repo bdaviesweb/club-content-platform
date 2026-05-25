@@ -612,14 +612,13 @@ function renderFocus(detail, queueIds) {
               <strong>Caption draft</strong>
               <p>${escapeHtml(detail.caption_draft || "No caption draft generated.")}</p>
             </div>
-            <div class="summary-item">
-              <strong>Media attached</strong>
-              <pre>${escapeHtml(mediaSummary)}</pre>
-            </div>
           </div>
         </div>
-        <div class="focus-block">
-          <h3>Why this recommendation?</h3>
+      </div>
+
+      <details class="disclosure" style="margin-top:16px;">
+        <summary>Decision context and system details</summary>
+        <div class="disclosure-body">
           <div class="summary-list">
             <div class="summary-item">
               <strong>Routing</strong>
@@ -636,9 +635,13 @@ function renderFocus(detail, queueIds) {
                 ${renderStatusBadge(formatLabel(detail.state), "neutral")}
               </div>
             </div>
+            <div class="summary-item">
+              <strong>Media attached</strong>
+              <pre>${escapeHtml(mediaSummary)}</pre>
+            </div>
           </div>
         </div>
-      </div>
+      </details>
     </div>
 
     <details class="disclosure">
@@ -689,6 +692,7 @@ function renderFocus(detail, queueIds) {
         </div>
         <p id="decision-copy" class="subtle decision-copy"></p>
         <div id="notes-wrap" class="hidden">
+          <p id="note-guidance" class="subtle hidden"></p>
           <textarea id="notes" placeholder="Tell the submitter exactly what needs to change."></textarea>
         </div>
         <div class="chip-row hidden" id="reason-chips">
@@ -793,24 +797,31 @@ async function renderHome(activeId) {
         const chips = document.getElementById('reason-chips');
         const notes = document.getElementById('notes');
         const decisionCopy = document.getElementById('decision-copy');
+        const noteGuidance = document.getElementById('note-guidance');
 
         if (action === 'approve') {
           submit.textContent = 'Approve and next';
           decisionCopy.textContent = 'This will publish the item and move straight to the next queued review.';
           notesWrap.classList.add('hidden');
           chips.classList.add('hidden');
+          noteGuidance.classList.add('hidden');
+          noteGuidance.textContent = '';
           notes.value = '';
         } else if (action === 'request_changes') {
           submit.textContent = 'Send back with note';
           decisionCopy.textContent = 'This will return the item to the submitter. A clear note is required.';
           notesWrap.classList.remove('hidden');
           chips.classList.remove('hidden');
+          noteGuidance.classList.remove('hidden');
+          noteGuidance.textContent = 'Tell the submitter exactly what to fix so the item can come straight back into review.';
           notes.placeholder = 'Tell the submitter exactly what needs to change.';
         } else {
           submit.textContent = 'Reject submission';
           decisionCopy.textContent = 'This will stop the item here. Record a short reason for the audit trail.';
           notesWrap.classList.remove('hidden');
           chips.classList.remove('hidden');
+          noteGuidance.classList.remove('hidden');
+          noteGuidance.textContent = 'State the policy or club-fit reason clearly enough that another reviewer could defend the decision.';
           notes.placeholder = 'Explain why this should not move forward.';
         }
       }
