@@ -79,7 +79,7 @@ function getStatusTone(value) {
   if (["rejected", "changes_requested", "needs_metadata"].includes(normalized)) {
     return "attention";
   }
-  if (["needs_human_review"].includes(normalized)) return "info";
+  if (normalized === "needs_human_review") return "info";
   return "neutral";
 }
 
@@ -194,12 +194,6 @@ function isVideoAsset(selectedAsset) {
   );
 }
 
-function stageTone(stageState) {
-  if (stageState === "complete") return "complete";
-  if (stageState === "current") return "current";
-  return "pending";
-}
-
 export default function App() {
   const [apiBaseUrl, setApiBaseUrl] = useState(defaultConfig.apiBaseUrl);
   const [clubSlug, setClubSlug] = useState(defaultConfig.clubSlug);
@@ -221,11 +215,10 @@ export default function App() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [activeView, setActiveView] = useState("post");
   const [settingsVisible, setSettingsVisible] = useState(false);
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
 
   const canSubmit = useMemo(() => {
-    return Boolean(
-      asset && apiBaseUrl.trim() && clubSlug.trim() && submitterEmail.trim()
-    );
+    return Boolean(asset && apiBaseUrl.trim() && clubSlug.trim() && submitterEmail.trim());
   }, [asset, apiBaseUrl, clubSlug, submitterEmail]);
 
   const canLoadRecent = useMemo(() => {
@@ -432,10 +425,7 @@ export default function App() {
         })
       });
 
-      if (!signResponse.ok) {
-        throw new Error(`Upload signing failed: ${signResponse.status}`);
-      }
-
+      if (!signResponse.ok) throw new Error(`Upload signing failed: ${signResponse.status}`);
       const signPayload = await signResponse.json();
       const uploadPlan = signPayload.uploads?.[0];
       if (!uploadPlan) throw new Error("Upload signing returned no upload plan");
@@ -464,10 +454,7 @@ export default function App() {
         })
       });
 
-      if (!submissionResponse.ok) {
-        throw new Error(`Submission failed: ${submissionResponse.status}`);
-      }
-
+      if (!submissionResponse.ok) throw new Error(`Submission failed: ${submissionResponse.status}`);
       const submissionPayload = await submissionResponse.json();
       setStatus(`Submitted ${submissionPayload.submission.id}`);
       setCaption("");
@@ -483,18 +470,11 @@ export default function App() {
     }
   }
 
-  const statusHeadline = asset
-    ? "Preview and submit"
-    : "Capture the moment";
-  const statusSubhead = asset
-    ? "Make sure it looks right, add a short caption if you want, then send it in."
-    : "Take a quick photo or choose one from your library. Keep it simple and keep it moving.";
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
       <View style={styles.screen}>
-        <View style={styles.topBar}>
+        <View style={styles.chromeBar}>
           <View>
             <Text style={styles.appName}>Club Content</Text>
             <Text style={styles.appSubtitle}>Post fast. Track clearly.</Text>
@@ -504,24 +484,18 @@ export default function App() {
           </Pressable>
         </View>
 
-        <View style={styles.viewSwitch}>
+        <View style={styles.segmentRow}>
           <Pressable
-            style={[styles.viewSwitchPill, activeView === "post" && styles.viewSwitchPillActive]}
+            style={[styles.segmentButton, activeView === "post" && styles.segmentButtonActive]}
             onPress={() => setActiveView("post")}
           >
-            <Text
-              style={[styles.viewSwitchText, activeView === "post" && styles.viewSwitchTextActive]}
-            >
-              Post
-            </Text>
+            <Text style={[styles.segmentText, activeView === "post" && styles.segmentTextActive]}>Post</Text>
           </Pressable>
           <Pressable
-            style={[styles.viewSwitchPill, activeView === "status" && styles.viewSwitchPillActive]}
+            style={[styles.segmentButton, activeView === "status" && styles.segmentButtonActive]}
             onPress={() => setActiveView("status")}
           >
-            <Text
-              style={[styles.viewSwitchText, activeView === "status" && styles.viewSwitchTextActive]}
-            >
+            <Text style={[styles.segmentText, activeView === "status" && styles.segmentTextActive]}>
               Status{unreadNotificationCount ? ` (${unreadNotificationCount})` : ""}
             </Text>
           </Pressable>
@@ -531,12 +505,16 @@ export default function App() {
           {activeView === "post" ? (
             <>
               {!asset ? (
-                <View style={styles.captureCard}>
+                <View style={styles.captureStage}>
+                  <View style={styles.captureGlowOne} />
+                  <View style={styles.captureGlowTwo} />
                   <Text style={styles.captureKicker}>Capture first</Text>
-                  <Text style={styles.captureTitle}>{statusHeadline}</Text>
-                  <Text style={styles.captureBody}>{statusSubhead}</Text>
+                  <Text style={styles.captureTitle}>Capture the moment</Text>
+                  <Text style={styles.captureBody}>
+                    Take a quick photo or choose one from your library. Keep it simple and keep it moving.
+                  </Text>
 
-                  <View style={styles.captureButtons}>
+                  <View style={styles.captureActionStack}>
                     <Pressable style={styles.primaryCaptureButton} onPress={captureWithCamera}>
                       <Text style={styles.primaryCaptureButtonText}>Take photo or video</Text>
                     </Pressable>
@@ -551,94 +529,99 @@ export default function App() {
                   </View>
                 </View>
               ) : (
-                <View style={styles.previewCard}>
-                  <View style={styles.previewTopRow}>
+                <View style={styles.previewStage}>
+                  <View style={styles.previewHeaderRow}>
                     <View>
                       <Text style={styles.captureKicker}>Preview</Text>
-                      <Text style={styles.previewTitle}>{formatContentTypeLabel(isVideoAsset(asset) ? "video" : "photo")}</Text>
+                      <Text style={styles.previewTitle}>Looks good?</Text>
                     </View>
-                    <Pressable style={styles.smallGhostButton} onPress={clearDraft}>
-                      <Text style={styles.smallGhostButtonText}>Start over</Text>
+                    <Pressable style={styles.topGhostButton} onPress={clearDraft}>
+                      <Text style={styles.topGhostButtonText}>Start over</Text>
                     </Pressable>
                   </View>
 
                   {isVideoAsset(asset) ? (
-                    <View style={styles.videoPlaceholder}>
-                      <Text style={styles.videoPlaceholderLabel}>Video selected</Text>
-                      <Text style={styles.videoPlaceholderName}>{asset.name}</Text>
-                      <Text style={styles.videoPlaceholderHint}>Playback preview can come next. For now, the video is selected and ready.</Text>
+                    <View style={styles.videoPreviewStage}>
+                      <Text style={styles.videoPreviewTag}>Video selected</Text>
+                      <Text style={styles.videoPreviewName}>{asset.name}</Text>
+                      <Text style={styles.videoPreviewCopy}>
+                        Playback preview is the next upgrade. For now, this clip is selected and ready to submit.
+                      </Text>
                     </View>
                   ) : (
                     <Image source={{ uri: asset.uri }} style={styles.previewImage} resizeMode="cover" />
                   )}
 
-                  <View style={styles.previewMetaRow}>
-                    <Text style={styles.previewMeta}>{asset.name}</Text>
-                    <Text style={styles.previewMeta}>{formatVisibilityLabel(visibilityTarget)}</Text>
+                  <View style={styles.overlayMetaRow}>
+                    <Text style={styles.overlayMetaText}>{asset.name}</Text>
+                    <Text style={styles.overlayMetaText}>{formatVisibilityLabel(visibilityTarget)}</Text>
                   </View>
 
-                  <View style={styles.audienceRow}>
-                    {[
-                      { key: "internal", label: "Internal" },
-                      { key: "public", label: "Public" }
-                    ].map((option) => (
-                      <Pressable
-                        key={option.key}
-                        style={[
-                          styles.audiencePill,
-                          visibilityTarget === option.key && styles.audiencePillActive
-                        ]}
-                        onPress={() => setVisibilityTarget(option.key)}
-                      >
-                        <Text
+                  <View style={styles.composerSheet}>
+                    <Text style={styles.sheetLabel}>Who should see this first?</Text>
+                    <View style={styles.audienceRow}>
+                      {[
+                        { key: "internal", label: "Internal" },
+                        { key: "public", label: "Public" }
+                      ].map((option) => (
+                        <Pressable
+                          key={option.key}
                           style={[
-                            styles.audiencePillText,
-                            visibilityTarget === option.key && styles.audiencePillTextActive
+                            styles.audiencePill,
+                            visibilityTarget === option.key && styles.audiencePillActive
                           ]}
+                          onPress={() => setVisibilityTarget(option.key)}
                         >
-                          {option.label}
-                        </Text>
+                          <Text
+                            style={[
+                              styles.audiencePillText,
+                              visibilityTarget === option.key && styles.audiencePillTextActive
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+
+                    <TextInput
+                      multiline
+                      style={styles.captionInput}
+                      value={caption}
+                      onChangeText={setCaption}
+                      placeholder="Add a short caption if it helps."
+                      placeholderTextColor="#8f908c"
+                    />
+
+                    <View style={styles.submitRow}>
+                      <Pressable style={styles.inlineButton} onPress={pickFromLibrary}>
+                        <Text style={styles.inlineButtonText}>Swap media</Text>
                       </Pressable>
-                    ))}
-                  </View>
-
-                  <TextInput
-                    multiline
-                    style={styles.captionInput}
-                    value={caption}
-                    onChangeText={setCaption}
-                    placeholder="Add a short caption if it helps."
-                    placeholderTextColor="#8a8c86"
-                  />
-
-                  <View style={styles.submitRow}>
-                    <Pressable style={styles.secondaryCaptureButton} onPress={pickFromLibrary}>
-                      <Text style={styles.secondaryCaptureButtonText}>Swap media</Text>
-                    </Pressable>
-                    <Pressable
-                      disabled={!canSubmit || submitting}
-                      style={[styles.submitButton, (!canSubmit || submitting) && styles.buttonDisabled]}
-                      onPress={submit}
-                    >
-                      {submitting ? (
-                        <ActivityIndicator color="#fffdf8" />
-                      ) : (
-                        <Text style={styles.submitButtonText}>Submit for review</Text>
-                      )}
-                    </Pressable>
+                      <Pressable
+                        disabled={!canSubmit || submitting}
+                        style={[styles.submitButton, (!canSubmit || submitting) && styles.buttonDisabled]}
+                        onPress={submit}
+                      >
+                        {submitting ? (
+                          <ActivityIndicator color="#fffdf8" />
+                        ) : (
+                          <Text style={styles.submitButtonText}>Submit for review</Text>
+                        )}
+                      </Pressable>
+                    </View>
                   </View>
                 </View>
               )}
 
-              <View style={styles.statusStripCard}>
-                <Text style={styles.statusStripKicker}>Latest status</Text>
-                <Text style={styles.statusStripTitle}>
+              <View style={styles.miniStatusCard}>
+                <Text style={styles.miniStatusKicker}>Latest status</Text>
+                <Text style={styles.miniStatusTitle}>
                   {latestSubmission ? formatStatusLabel(latestSubmission.status) : "No posts yet"}
                 </Text>
-                <Text style={styles.statusStripBody}>{latestStatusSummary}</Text>
+                <Text style={styles.miniStatusBody}>{latestStatusSummary}</Text>
                 {latestSubmission ? (
-                  <Pressable style={styles.inlineLinkButton} onPress={() => setActiveView("status")}>
-                    <Text style={styles.inlineLinkButtonText}>Open status feed</Text>
+                  <Pressable style={styles.inlineStatusLink} onPress={() => setActiveView("status")}>
+                    <Text style={styles.inlineStatusLinkText}>Open status feed</Text>
                   </Pressable>
                 ) : null}
               </View>
@@ -667,14 +650,14 @@ export default function App() {
                 </View>
               </View>
 
-              <View style={styles.feedSection}>
+              <View style={styles.sectionBlock}>
                 <View style={styles.sectionHeader}>
                   <View>
                     <Text style={styles.sectionKicker}>Newest post</Text>
                     <Text style={styles.sectionTitle}>Where it stands</Text>
                   </View>
-                  <Pressable style={styles.smallGhostButton} onPress={refreshStatusFeed}>
-                    <Text style={styles.smallGhostButtonText}>
+                  <Pressable style={styles.topGhostButton} onPress={refreshStatusFeed}>
+                    <Text style={styles.topGhostButtonText}>
                       {loadingRecent || loadingNotifications ? "Refreshing" : "Refresh"}
                     </Text>
                   </Pressable>
@@ -718,8 +701,8 @@ export default function App() {
                             <View
                               style={[
                                 styles.progressDot,
-                                stageTone(state) === "complete" && styles.progressDotComplete,
-                                stageTone(state) === "current" && styles.progressDotCurrent
+                                state === "complete" && styles.progressDotComplete,
+                                state === "current" && styles.progressDotCurrent
                               ]}
                             >
                               <Text
@@ -759,7 +742,7 @@ export default function App() {
                 )}
               </View>
 
-              <View style={styles.feedSection}>
+              <View style={styles.sectionBlock}>
                 <View style={styles.sectionHeader}>
                   <View>
                     <Text style={styles.sectionKicker}>Recent posts</Text>
@@ -805,7 +788,7 @@ export default function App() {
                 )}
               </View>
 
-              <View style={styles.feedSection}>
+              <View style={styles.sectionBlock}>
                 <View style={styles.sectionHeader}>
                   <View>
                     <Text style={styles.sectionKicker}>Updates</Text>
@@ -858,16 +841,80 @@ export default function App() {
             <View style={styles.sectionHeader}>
               <View>
                 <Text style={styles.sectionKicker}>Settings</Text>
-                <Text style={styles.sectionTitle}>Submitter connection</Text>
+                <Text style={styles.sectionTitle}>Your posting setup</Text>
               </View>
               <Pressable onPress={() => setSettingsVisible(false)}>
                 <Text style={styles.closeButtonText}>Done</Text>
               </Pressable>
             </View>
-            <TextInput autoCapitalize="none" style={styles.input} value={apiBaseUrl} onChangeText={setApiBaseUrl} placeholder="API base URL" />
-            <TextInput style={styles.input} value={clubSlug} onChangeText={setClubSlug} placeholder="Club slug" />
-            <TextInput style={styles.input} value={teamSlug} onChangeText={setTeamSlug} placeholder="Team slug" />
-            <TextInput autoCapitalize="none" style={[styles.input, styles.inputLast]} value={submitterEmail} onChangeText={setSubmitterEmail} placeholder="Submitter email" />
+
+            <View style={styles.settingsCard}>
+              <Text style={styles.settingsLabel}>Submitter email</Text>
+              <TextInput
+                autoCapitalize="none"
+                style={styles.input}
+                value={submitterEmail}
+                onChangeText={setSubmitterEmail}
+                placeholder="Submitter email"
+              />
+            </View>
+
+            <View style={styles.settingsCard}>
+              <Text style={styles.settingsLabel}>Club</Text>
+              <TextInput style={styles.input} value={clubSlug} onChangeText={setClubSlug} placeholder="Club slug" />
+              <TextInput style={[styles.input, styles.settingsStackTop]} value={teamSlug} onChangeText={setTeamSlug} placeholder="Team slug" />
+            </View>
+
+            <View style={styles.settingsCard}>
+              <Text style={styles.settingsLabel}>Audience default</Text>
+              <View style={styles.audienceRow}>
+                {[
+                  { key: "internal", label: "Internal" },
+                  { key: "public", label: "Public" }
+                ].map((option) => (
+                  <Pressable
+                    key={option.key}
+                    style={[
+                      styles.audiencePill,
+                      visibilityTarget === option.key && styles.audiencePillActive
+                    ]}
+                    onPress={() => setVisibilityTarget(option.key)}
+                  >
+                    <Text
+                      style={[
+                        styles.audiencePillText,
+                        visibilityTarget === option.key && styles.audiencePillTextActive
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            <Pressable style={styles.advancedToggle} onPress={() => setShowAdvancedSettings((current) => !current)}>
+              <Text style={styles.advancedToggleTitle}>Advanced connection</Text>
+              <Text style={styles.advancedToggleCopy}>
+                {showAdvancedSettings ? "Hide backend settings" : "Show backend settings used for internal and beta builds"}
+              </Text>
+            </Pressable>
+
+            {showAdvancedSettings ? (
+              <View style={styles.settingsCard}>
+                <Text style={styles.settingsLabel}>API base URL</Text>
+                <TextInput
+                  autoCapitalize="none"
+                  style={styles.input}
+                  value={apiBaseUrl}
+                  onChangeText={setApiBaseUrl}
+                  placeholder="API base URL"
+                />
+                <Text style={styles.advancedHelpText}>
+                  For TestFlight and production-style builds, this should be preconfigured so normal users never need to edit it.
+                </Text>
+              </View>
+            ) : null}
           </View>
         </View>
       </Modal>
@@ -978,9 +1025,7 @@ export default function App() {
                   <>
                     <Text style={styles.detailHeading}>Publishing</Text>
                     <Text style={styles.detailBody}>Published to {selectedSubmissionDetail.publishedPost.destinationName}</Text>
-                    <Text style={styles.detailBody}>
-                      {formatSubmittedAt(selectedSubmissionDetail.publishedPost.publishedAt)}
-                    </Text>
+                    <Text style={styles.detailBody}>{formatSubmittedAt(selectedSubmissionDetail.publishedPost.publishedAt)}</Text>
                   </>
                 ) : null}
               </ScrollView>
@@ -995,12 +1040,12 @@ export default function App() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#f6f1e8"
+    backgroundColor: "#f7f1e7"
   },
   screen: {
     flex: 1
   },
-  topBar: {
+  chromeBar: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -1011,80 +1056,101 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 24,
     lineHeight: 28,
-    color: "#10261e",
+    color: "#11261f",
     fontWeight: "800"
   },
   appSubtitle: {
     fontSize: 13,
-    color: "#68766f"
+    color: "#6c736d"
   },
   settingsButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
     borderRadius: 999,
     backgroundColor: "rgba(16,38,30,0.06)"
   },
   settingsButtonText: {
-    color: "#10261e",
-    fontWeight: "700"
+    color: "#11261f",
+    fontWeight: "800"
   },
-  viewSwitch: {
+  segmentRow: {
     flexDirection: "row",
     gap: 10,
     paddingHorizontal: 20,
     paddingBottom: 10
   },
-  viewSwitchPill: {
+  segmentButton: {
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.68)"
+    backgroundColor: "rgba(255,255,255,0.72)"
   },
-  viewSwitchPillActive: {
+  segmentButtonActive: {
     backgroundColor: "#12372d"
   },
-  viewSwitchText: {
+  segmentText: {
     color: "#12372d",
-    fontWeight: "700"
+    fontWeight: "800"
   },
-  viewSwitchTextActive: {
-    color: "#fdf8f0"
+  segmentTextActive: {
+    color: "#fff8ef"
   },
   container: {
     paddingHorizontal: 20,
     paddingBottom: 28,
     gap: 18
   },
-  captureCard: {
+  captureStage: {
+    overflow: "hidden",
     backgroundColor: "#12372d",
-    borderRadius: 30,
+    borderRadius: 34,
     padding: 22,
-    gap: 18
+    gap: 18,
+    position: "relative"
+  },
+  captureGlowOne: {
+    position: "absolute",
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: "rgba(212, 153, 85, 0.16)",
+    top: -40,
+    right: -20
+  },
+  captureGlowTwo: {
+    position: "absolute",
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    bottom: -60,
+    left: -30
   },
   captureKicker: {
     fontSize: 12,
     letterSpacing: 1.4,
     textTransform: "uppercase",
     color: "#d9c2a5",
-    fontWeight: "700"
+    fontWeight: "800"
   },
   captureTitle: {
-    fontSize: 36,
-    lineHeight: 38,
+    fontSize: 34,
+    lineHeight: 37,
     color: "#fbf7f0",
     fontWeight: "800"
   },
   captureBody: {
     fontSize: 16,
     lineHeight: 24,
-    color: "#d6e0db"
+    color: "#d7e0db",
+    maxWidth: 300
   },
-  captureButtons: {
+  captureActionStack: {
     gap: 12
   },
   primaryCaptureButton: {
-    backgroundColor: "#f9f3ea",
-    borderRadius: 22,
+    borderRadius: 24,
+    backgroundColor: "#fff6ea",
     paddingVertical: 18,
     alignItems: "center"
   },
@@ -1094,8 +1160,8 @@ const styles = StyleSheet.create({
     fontWeight: "800"
   },
   secondaryCaptureButton: {
-    backgroundColor: "rgba(255,255,255,0.08)",
     borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.08)",
     paddingVertical: 16,
     paddingHorizontal: 18,
     alignItems: "center"
@@ -1110,78 +1176,94 @@ const styles = StyleSheet.create({
     gap: 10
   },
   captureHint: {
-    color: "#d1dbd6",
+    color: "#d1dad5",
     fontSize: 13
   },
-  previewCard: {
+  previewStage: {
     backgroundColor: "#fffaf3",
-    borderRadius: 30,
-    padding: 16,
-    gap: 14,
+    borderRadius: 34,
+    padding: 14,
+    gap: 12,
     borderWidth: 1,
-    borderColor: "#e1d3bd"
+    borderColor: "#e3d4bf"
   },
-  previewTopRow: {
+  previewHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center"
+    alignItems: "center",
+    paddingHorizontal: 6,
+    paddingTop: 4
   },
   previewTitle: {
-    fontSize: 28,
-    lineHeight: 30,
-    color: "#10261e",
+    fontSize: 30,
+    lineHeight: 32,
+    color: "#11261f",
     fontWeight: "800"
   },
-  smallGhostButton: {
+  topGhostButton: {
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 999,
     backgroundColor: "rgba(16,38,30,0.06)"
   },
-  smallGhostButtonText: {
+  topGhostButtonText: {
     color: "#12372d",
-    fontWeight: "700"
+    fontWeight: "800"
   },
   previewImage: {
     width: "100%",
     height: 430,
-    borderRadius: 26,
-    backgroundColor: "#d5ddd8"
+    borderRadius: 28,
+    backgroundColor: "#d6ddd7"
   },
-  videoPlaceholder: {
-    minHeight: 320,
-    borderRadius: 26,
+  videoPreviewStage: {
+    minHeight: 340,
+    borderRadius: 28,
     backgroundColor: "#18382f",
-    padding: 22,
+    padding: 24,
     justifyContent: "center",
     gap: 10
   },
-  videoPlaceholderLabel: {
-    color: "#d8c2a7",
+  videoPreviewTag: {
+    color: "#d9c2a5",
     textTransform: "uppercase",
-    letterSpacing: 1.2,
-    fontWeight: "700",
-    fontSize: 12
-  },
-  videoPlaceholderName: {
-    color: "#fbf7f0",
-    fontSize: 24,
-    lineHeight: 28,
+    letterSpacing: 1.3,
+    fontSize: 12,
     fontWeight: "800"
   },
-  videoPlaceholderHint: {
+  videoPreviewName: {
+    color: "#fcf8ef",
+    fontSize: 26,
+    lineHeight: 30,
+    fontWeight: "800"
+  },
+  videoPreviewCopy: {
     color: "#d1dbd6",
     lineHeight: 22
   },
-  previewMetaRow: {
+  overlayMetaRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 12
+    gap: 10,
+    paddingHorizontal: 6
   },
-  previewMeta: {
-    color: "#6c756f",
+  overlayMetaText: {
+    color: "#707671",
     fontSize: 13,
     flex: 1
+  },
+  composerSheet: {
+    borderRadius: 28,
+    backgroundColor: "#f7efe2",
+    padding: 16,
+    gap: 12
+  },
+  sheetLabel: {
+    color: "#7f715f",
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1.3
   },
   audienceRow: {
     flexDirection: "row",
@@ -1191,27 +1273,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 999,
-    backgroundColor: "#f0e6d8"
+    backgroundColor: "#f0e4d2"
   },
   audiencePillActive: {
     backgroundColor: "#12372d"
   },
   audiencePillText: {
-    color: "#6e5940",
-    fontWeight: "700"
+    color: "#6f614f",
+    fontWeight: "800"
   },
   audiencePillTextActive: {
-    color: "#fff8ee"
+    color: "#fff8ef"
   },
   captionInput: {
-    minHeight: 110,
+    minHeight: 108,
     borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 16,
     backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "#e1d3bd",
-    color: "#10261e",
+    borderColor: "#e3d4bf",
+    color: "#11261f",
     textAlignVertical: "top",
     fontSize: 16,
     lineHeight: 22
@@ -1219,6 +1301,16 @@ const styles = StyleSheet.create({
   submitRow: {
     flexDirection: "row",
     gap: 10
+  },
+  inlineButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderRadius: 22,
+    backgroundColor: "#eadccc"
+  },
+  inlineButtonText: {
+    color: "#5f5142",
+    fontWeight: "800"
   },
   submitButton: {
     flex: 1,
@@ -1236,42 +1328,42 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.45
   },
-  statusStripCard: {
+  miniStatusCard: {
     backgroundColor: "#fffaf3",
-    borderRadius: 24,
+    borderRadius: 26,
     padding: 18,
     borderWidth: 1,
-    borderColor: "#e1d3bd",
+    borderColor: "#e3d4bf",
     gap: 8
   },
-  statusStripKicker: {
+  miniStatusKicker: {
     fontSize: 12,
     letterSpacing: 1.3,
     textTransform: "uppercase",
-    color: "#8d7659",
-    fontWeight: "700"
-  },
-  statusStripTitle: {
-    fontSize: 22,
-    lineHeight: 25,
-    color: "#10261e",
+    color: "#8b765b",
     fontWeight: "800"
   },
-  statusStripBody: {
-    color: "#5f6862",
+  miniStatusTitle: {
+    fontSize: 22,
+    lineHeight: 25,
+    color: "#11261f",
+    fontWeight: "800"
+  },
+  miniStatusBody: {
+    color: "#5e6762",
     lineHeight: 21
   },
-  inlineLinkButton: {
+  inlineStatusLink: {
     alignSelf: "flex-start",
     marginTop: 4
   },
-  inlineLinkButtonText: {
+  inlineStatusLinkText: {
     color: "#176744",
     fontWeight: "800"
   },
   statusHeroCard: {
     backgroundColor: "#12372d",
-    borderRadius: 28,
+    borderRadius: 30,
     padding: 20,
     gap: 12
   },
@@ -1280,7 +1372,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
     textTransform: "uppercase",
     color: "#d9c2a5",
-    fontWeight: "700"
+    fontWeight: "800"
   },
   statusHeroTitle: {
     fontSize: 30,
@@ -1315,7 +1407,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     marginTop: 4
   },
-  feedSection: {
+  sectionBlock: {
     gap: 12
   },
   sectionHeader: {
@@ -1329,12 +1421,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1.3,
     textTransform: "uppercase",
     color: "#8d7659",
-    fontWeight: "700"
+    fontWeight: "800"
   },
   sectionTitle: {
     fontSize: 26,
     lineHeight: 28,
-    color: "#10261e",
+    color: "#11261f",
     fontWeight: "800"
   },
   unreadBadge: {
@@ -1343,10 +1435,10 @@ const styles = StyleSheet.create({
   },
   latestPostCard: {
     backgroundColor: "#fffaf3",
-    borderRadius: 24,
+    borderRadius: 26,
     padding: 18,
     borderWidth: 1,
-    borderColor: "#e1d3bd",
+    borderColor: "#e3d4bf",
     gap: 12
   },
   statusBadgeRow: {
@@ -1361,15 +1453,9 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "rgba(102,117,109,0.12)"
   },
-  statusBadgeSuccess: {
-    backgroundColor: "#dff0e7"
-  },
-  statusBadgeAttention: {
-    backgroundColor: "#f6dfdc"
-  },
-  statusBadgeInfo: {
-    backgroundColor: "#dce9f1"
-  },
+  statusBadgeSuccess: { backgroundColor: "#dff0e7" },
+  statusBadgeAttention: { backgroundColor: "#f6dfdc" },
+  statusBadgeInfo: { backgroundColor: "#dce9f1" },
   statusBadgeText: {
     color: "#67766d",
     fontWeight: "800",
@@ -1379,7 +1465,7 @@ const styles = StyleSheet.create({
   statusBadgeTextAttention: { color: "#8b342e" },
   statusBadgeTextInfo: { color: "#305e7a" },
   feedTime: {
-    color: "#7a7f7a",
+    color: "#7b807a",
     fontSize: 12,
     flexShrink: 1,
     textAlign: "right"
@@ -1387,7 +1473,7 @@ const styles = StyleSheet.create({
   feedHeadline: {
     fontSize: 20,
     lineHeight: 24,
-    color: "#10261e",
+    color: "#11261f",
     fontWeight: "800"
   },
   feedSupport: {
@@ -1415,32 +1501,24 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: "#ece5d7",
+    backgroundColor: "#ece4d5",
     alignItems: "center",
     justifyContent: "center"
   },
-  progressDotComplete: {
-    backgroundColor: "#176744"
-  },
-  progressDotCurrent: {
-    backgroundColor: "#c38a45"
-  },
+  progressDotComplete: { backgroundColor: "#176744" },
+  progressDotCurrent: { backgroundColor: "#c58d49" },
   progressDotText: {
     color: "#84755f",
     fontWeight: "800",
     fontSize: 12
   },
-  progressDotTextActive: {
-    color: "#fff9ef"
-  },
+  progressDotTextActive: { color: "#fff9ef" },
   progressLabel: {
-    color: "#8a847b",
+    color: "#8b847b",
     fontSize: 11,
     fontWeight: "700"
   },
-  progressLabelActive: {
-    color: "#10261e"
-  },
+  progressLabelActive: { color: "#11261f" },
   metaChipRow: {
     flexDirection: "row",
     gap: 8,
@@ -1450,27 +1528,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: "#f1e8da"
+    backgroundColor: "#f1e6d6"
   },
   metaChipText: {
     color: "#6d604f",
-    fontWeight: "700",
+    fontWeight: "800",
     fontSize: 12
   },
   feedCard: {
     backgroundColor: "#fffaf3",
-    borderRadius: 22,
+    borderRadius: 24,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#e1d3bd",
+    borderColor: "#e3d4bf",
     gap: 10
   },
   notificationCard: {
     backgroundColor: "#fffaf3",
-    borderRadius: 22,
+    borderRadius: 24,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#e1d3bd",
+    borderColor: "#e3d4bf",
     gap: 10
   },
   notificationCardUnread: {
@@ -1496,7 +1574,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#176744"
   },
   notificationTitle: {
-    color: "#10261e",
+    color: "#11261f",
     fontWeight: "800",
     flexShrink: 1
   },
@@ -1524,8 +1602,8 @@ const styles = StyleSheet.create({
   modalCard: {
     maxHeight: "88%",
     backgroundColor: "#fffaf3",
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
     padding: 20,
     gap: 12
   },
@@ -1534,21 +1612,54 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: 16
   },
+  settingsCard: {
+    backgroundColor: "#f7efe2",
+    borderRadius: 22,
+    padding: 14,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "#eadfcd"
+  },
+  settingsLabel: {
+    color: "#6d5e4d",
+    fontWeight: "800",
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 1.2
+  },
+  advancedToggle: {
+    borderRadius: 22,
+    padding: 14,
+    backgroundColor: "rgba(16,38,30,0.05)"
+  },
+  advancedToggleTitle: {
+    color: "#11261f",
+    fontWeight: "800"
+  },
+  advancedToggleCopy: {
+    color: "#66726c",
+    marginTop: 6,
+    lineHeight: 20
+  },
+  advancedHelpText: {
+    color: "#6a736d",
+    lineHeight: 20
+  },
+  settingsStackTop: {
+    marginTop: 4
+  },
   input: {
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#e1d3bd",
+    borderColor: "#e3d4bf",
     backgroundColor: "#ffffff",
     paddingHorizontal: 14,
     paddingVertical: 14,
-    color: "#10261e"
-  },
-  inputLast: {
-    marginBottom: 4
+    color: "#11261f"
   },
   detailHero: {
     backgroundColor: "#f1e8da",
-    borderRadius: 20,
+    borderRadius: 22,
     padding: 16,
     gap: 8
   },
@@ -1557,7 +1668,7 @@ const styles = StyleSheet.create({
     fontWeight: "800"
   },
   detailSummary: {
-    color: "#10261e",
+    color: "#11261f",
     fontSize: 22,
     lineHeight: 26,
     fontWeight: "800"
@@ -1568,7 +1679,7 @@ const styles = StyleSheet.create({
   detailHeading: {
     marginTop: 16,
     marginBottom: 6,
-    color: "#10261e",
+    color: "#11261f",
     fontWeight: "800",
     fontSize: 16
   },
