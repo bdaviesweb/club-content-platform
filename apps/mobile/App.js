@@ -23,6 +23,13 @@ const defaultConfig = {
     process.env.EXPO_PUBLIC_SUBMITTER_EMAIL || "coach@demo-club.local"
 };
 
+const progressStages = [
+  { key: "submitted", label: "Received" },
+  { key: "needs_human_review", label: "Review" },
+  { key: "approved", label: "Approved" },
+  { key: "published", label: "Published" }
+];
+
 function normalizeApiBaseUrl(value) {
   return value.replace(/\/+$/, "");
 }
@@ -63,6 +70,8 @@ function formatStatusLabel(value) {
       return "Not Approved";
     case "changes_requested":
       return "Changes Requested";
+    case "needs_metadata":
+      return "Needs More Detail";
     default:
       return normalized
         .replaceAll("_", " ")
@@ -73,11 +82,11 @@ function formatStatusLabel(value) {
 function getStatusTone(value) {
   const normalized = String(value || "submitted").toLowerCase();
 
-  if (normalized === "published" || normalized === "approved") {
+  if (["published", "approved"].includes(normalized)) {
     return "success";
   }
 
-  if (normalized === "rejected" || normalized === "changes_requested") {
+  if (["rejected", "changes_requested", "needs_metadata"].includes(normalized)) {
     return "attention";
   }
 
@@ -120,7 +129,15 @@ function formatRiskScoreLabel(value) {
     return String(value);
   }
 
-  return `${score.toFixed(2)} risk score`;
+  if (score >= 0.75) {
+    return "High review concern";
+  }
+
+  if (score >= 0.35) {
+    return "Moderate review concern";
+  }
+
+  return "Low review concern";
 }
 
 function summarizeSubmissionProgress(item) {
@@ -131,14 +148,14 @@ function summarizeSubmissionProgress(item) {
   }
 
   if (status === "approved") {
-    return "Approved and ready for publishing.";
+    return "Approved and queued for publishing.";
   }
 
   if (status === "rejected") {
     return "Stopped in review.";
   }
 
-  if (status === "changes_requested") {
+  if (status === "changes_requested" || status === "needs_metadata") {
     return "Needs an update before it can move forward.";
   }
 
@@ -166,8 +183,13 @@ function buildNotificationBody(item) {
     return "Your submission entered the review queue.";
   }
 
-  const subject = item?.payload?.submissionId ? `Submission ${item.payload.submissionId}` : "This submission";
-  return `${subject} moved to ${formatStatusLabel(item?.payload?.status || "updated").toLowerCase()}.`;
+  const subject = item?.payload?.submissionId
+    ? `Submission ${item.payload.submissionId}`
+    : "This submission";
+
+  return `${subject} moved to ${formatStatusLabel(
+    item?.payload?.status || "updated"
+  ).toLowerCase()}.`;
 }
 
 function buildNotificationMeta(item) {
@@ -184,6 +206,58 @@ function buildNotificationMeta(item) {
   }
 
   return meta.join(" · ");
+}
+
+function countStatuses(items) {
+  return items.reduce(
+    (accumulator, item) => {
+      const status = String(item?.status || "submitted").toLowerCase();
+      accumulator.total += 1;
+
+      if (status === "published") {
+        accumulator.published += 1;
+      }
+
+      if (status === "needs_human_review") {
+        accumulator.inReview += 1;
+      }
+
+      if (["changes_requested", "needs_metadata", "rejected"].includes(status)) {
+        accumulator.needsAttention += 1;
+      }
+
+      return accumulator;
+    },
+    { total: 0, published: 0, inReview: 0, needsAttention: 0 }
+  );
+}
+
+function getProgressStageState(status, stageKey) {
+  const normalized = String(status || "submitted").toLowerCase();
+  const stageIndex = progressStages.findIndex((item) => item.key === stageKey);
+  const currentIndex = progressStages.findIndex((item) => item.key === normalized);
+
+  if (["changes_requested", "needs_metadata", "rejected"].includes(normalized)) {
+    if (stageKey === "submitted") {
+      return "complete";
+    }
+
+    if (stageKey === "needs_human_review") {
+      return "current";
+    }
+
+    return "pending";
+  }
+
+  if (stageIndex === currentIndex) {
+    return "current";
+  }
+
+  if (stageIndex !== -1 && currentIndex !== -1 && stageIndex < currentIndex) {
+    return "complete";
+  }
+
+  return "pending";
 }
 
 export default function App() {
@@ -223,6 +297,10 @@ export default function App() {
   const unreadNotificationCount = useMemo(() => {
     return notifications.filter((item) => !item.readAt).length;
   }, [notifications]);
+
+  const submissionStats = useMemo(() => countStatuses(recentSubmissions), [recentSubmissions]);
+
+  const latestSubmission = recentSubmissions[0] || null;
 
   async function loadRecentSubmissions() {
     if (!canLoadRecent) {
@@ -345,7 +423,7 @@ export default function App() {
     ? status
     : canSubmit
       ? "Ready to send this update into the club workflow."
-      : "Pick media, add a caption, and confirm your submitter details.";
+      : "Add one asset, write the update, and confirm who is submitting it.";
 
   useEffect(() => {
     if (!canLoadRecent) {
@@ -451,7 +529,8 @@ export default function App() {
           media: [
             {
               objectKey: uploadPlan.objectKey,
-              mediaType: guessContentTypeFromAsset(asset) === "video" ? "video" : "image",
+              mediaType:
+                guessContentTypeFromAsset(asset) === "video" ? "video" : "image",
               mimeType: asset.mimeType || "application/octet-stream"
             }
           ]
@@ -480,54 +559,91 @@ export default function App() {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.hero}>
-          <Text style={styles.kicker}>Mobile Submission</Text>
-          <Text style={styles.title}>Club Content Capture</Text>
-          <Text style={styles.subtitle}>
-            Capture the update, send it for review, and follow what happens next.
-          </Text>
+        <View style={styles.heroPanel}>
+          <View style={styles.heroTextBlock}>
+            <Text style={styles.kicker}>Creator Dashboard</Text>
+            <Text style={styles.title}>Club Content</Text>
+            <Text style={styles.subtitle}>
+              Send updates into review, track what changed, and see the latest workflow
+              activity without digging through admin screens.
+            </Text>
+          </View>
+
+          <View style={styles.heroStatsRow}>
+            <View style={styles.heroStatCard}>
+              <Text style={styles.heroStatLabel}>Submitted</Text>
+              <Text style={styles.heroStatValue}>{submissionStats.total}</Text>
+            </View>
+            <View style={styles.heroStatCard}>
+              <Text style={styles.heroStatLabel}>In Review</Text>
+              <Text style={styles.heroStatValue}>{submissionStats.inReview}</Text>
+            </View>
+            <View style={styles.heroStatCard}>
+              <Text style={styles.heroStatLabel}>Published</Text>
+              <Text style={styles.heroStatValue}>{submissionStats.published}</Text>
+            </View>
+          </View>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Connection</Text>
-          <TextInput
-            autoCapitalize="none"
-            style={styles.input}
-            value={apiBaseUrl}
-            onChangeText={setApiBaseUrl}
-            placeholder="API base URL"
-          />
-        </View>
+        <View style={styles.panelCard}>
+          <View style={styles.panelHeaderRow}>
+            <View>
+              <Text style={styles.panelEyebrow}>Current draft</Text>
+              <Text style={styles.panelTitle}>Create the next update</Text>
+            </View>
+            <View style={styles.liveBadge}>
+              <Text style={styles.liveBadgeText}>
+                {submitting ? "Sending" : latestSubmission ? formatStatusLabel(latestSubmission.status) : "Ready"}
+              </Text>
+            </View>
+          </View>
 
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Club Context</Text>
-          <TextInput style={styles.input} value={clubSlug} onChangeText={setClubSlug} placeholder="Club slug" />
-          <TextInput style={styles.input} value={teamSlug} onChangeText={setTeamSlug} placeholder="Team slug" />
-          <TextInput
-            autoCapitalize="none"
-            style={styles.input}
-            value={submitterEmail}
-            onChangeText={setSubmitterEmail}
-            placeholder="Submitter email"
-          />
-        </View>
+          <Text style={styles.panelBodyText}>{dashboardStatusText}</Text>
 
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Submission</Text>
-          <Pressable style={styles.secondaryButton} onPress={pickAsset}>
-            <Text style={styles.secondaryButtonText}>
-              {asset ? `Replace Media: ${asset.name}` : "Choose Photo or Video"}
-            </Text>
-          </Pressable>
-          {asset ? (
-            <Text style={styles.helperText}>
-              {formatContentTypeLabel(guessContentTypeFromAsset(asset))} selected and ready to upload.
-            </Text>
-          ) : (
-            <Text style={styles.helperText}>
-              Add one photo or video for this update.
-            </Text>
-          )}
+          <View style={styles.assetRow}>
+            <Pressable style={styles.assetPickerCard} onPress={pickAsset}>
+              <Text style={styles.assetPickerLabel}>Media</Text>
+              <Text style={styles.assetPickerTitle}>
+                {asset ? asset.name : "Choose photo or video"}
+              </Text>
+              <Text style={styles.assetPickerHint}>
+                {asset
+                  ? `${formatContentTypeLabel(guessContentTypeFromAsset(asset))} selected and ready.`
+                  : "One asset per post keeps review fast."}
+              </Text>
+            </Pressable>
+
+            <View style={styles.composerMetaCard}>
+              <Text style={styles.assetPickerLabel}>Audience</Text>
+              <View style={styles.visibilityRow}>
+                {["internal", "public"].map((value) => (
+                  <Pressable
+                    key={value}
+                    style={[
+                      styles.visibilityPill,
+                      visibilityTarget === value && styles.visibilityPillActive
+                    ]}
+                    onPress={() => setVisibilityTarget(value)}
+                  >
+                    <Text
+                      style={[
+                        styles.visibilityPillText,
+                        visibilityTarget === value && styles.visibilityPillTextActive
+                      ]}
+                    >
+                      {formatVisibilityLabel(value)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={styles.metaHint}>
+                {visibilityTarget === "public"
+                  ? "Public posts may need extra review before they publish."
+                  : "Internal updates stay in the club workflow unless published later."}
+              </Text>
+            </View>
+          </View>
+
           <TextInput
             multiline
             style={[styles.input, styles.textArea]}
@@ -535,82 +651,149 @@ export default function App() {
             onChangeText={setCaption}
             placeholder="Write the update parents, coaches, or staff should know"
           />
-          <View style={styles.visibilityRow}>
-            {["internal", "public"].map((value) => (
-              <Pressable
-                key={value}
-                style={[
-                  styles.visibilityPill,
-                  visibilityTarget === value && styles.visibilityPillActive
-                ]}
-                onPress={() => setVisibilityTarget(value)}
-              >
-                <Text
-                  style={[
-                    styles.visibilityPillText,
-                    visibilityTarget === value && styles.visibilityPillTextActive
-                  ]}
-                >
-                  {formatVisibilityLabel(value)}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          <Text style={styles.helperText}>
-            {visibilityTarget === "public"
-              ? "Public posts may need extra review before they are published."
-              : "Internal updates stay inside the club workflow unless published later."}
-          </Text>
-        </View>
 
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Status</Text>
-          <Text style={styles.statusText}>{dashboardStatusText}</Text>
+          <View style={styles.actionRow}>
+            <Pressable
+              disabled={loadingRecent || !canLoadRecent}
+              style={[
+                styles.ghostButton,
+                (!canLoadRecent || loadingRecent) && styles.buttonDisabled
+              ]}
+              onPress={refreshDashboard}
+            >
+              <Text style={styles.ghostButtonText}>
+                {loadingRecent || loadingNotifications ? "Refreshing..." : "Refresh"}
+              </Text>
+            </Pressable>
+            <Pressable
+              disabled={!canSubmit || submitting}
+              style={[
+                styles.primaryButton,
+                (!canSubmit || submitting) && styles.buttonDisabled
+              ]}
+              onPress={submit}
+            >
+              {submitting ? (
+                <ActivityIndicator color="#fdf9f2" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Send for review</Text>
+              )}
+            </Pressable>
+          </View>
+
           {!submitting && status !== "Pick media, add a caption, and submit." ? (
             <Text style={styles.statusMetaText}>{status}</Text>
           ) : null}
-          <Pressable
-            disabled={loadingRecent || !canLoadRecent}
-            style={[styles.secondaryButton, styles.refreshButton, (!canLoadRecent || loadingRecent) && styles.primaryButtonDisabled]}
-            onPress={refreshDashboard}
-          >
-            <Text style={styles.secondaryButtonText}>
-              {loadingRecent || loadingNotifications ? "Refreshing..." : "Refresh Submissions and Updates"}
-            </Text>
-          </Pressable>
-          <Pressable
-            disabled={!canSubmit || submitting}
-            style={[
-              styles.primaryButton,
-              (!canSubmit || submitting) && styles.primaryButtonDisabled
-            ]}
-            onPress={submit}
-          >
-            {submitting ? (
-              <ActivityIndicator color="#fff7ef" />
-            ) : (
-              <Text style={styles.primaryButtonText}>Send for Review</Text>
-            )}
-          </Pressable>
         </View>
 
-        <View style={styles.card}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Recent Submissions</Text>
-            {loadingRecent ? <ActivityIndicator color="#17372c" /> : null}
+        <View style={styles.panelCard}>
+          <View style={styles.panelHeaderRow}>
+            <View>
+              <Text style={styles.panelEyebrow}>Workflow</Text>
+              <Text style={styles.panelTitle}>Your latest status</Text>
+            </View>
+            <Text style={styles.inlineMetaText}>
+              {latestSubmission ? formatSubmittedAt(latestSubmission.created_at) : "Waiting for first post"}
+            </Text>
+          </View>
+
+          {latestSubmission ? (
+            <>
+              <View style={styles.latestStatusCard}>
+                <View
+                  style={[
+                    styles.statusPill,
+                    getStatusTone(latestSubmission.status) === "success" && styles.statusPillSuccess,
+                    getStatusTone(latestSubmission.status) === "attention" && styles.statusPillAttention
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusPillText,
+                      getStatusTone(latestSubmission.status) === "success" && styles.statusPillTextSuccess,
+                      getStatusTone(latestSubmission.status) === "attention" && styles.statusPillTextAttention
+                    ]}
+                  >
+                    {formatStatusLabel(latestSubmission.status)}
+                  </Text>
+                </View>
+                <Text style={styles.latestStatusSummary}>
+                  {latestSubmission.raw_text?.trim() || "No caption provided"}
+                </Text>
+                <Text style={styles.latestStatusBody}>
+                  {summarizeSubmissionProgress(latestSubmission)}
+                </Text>
+              </View>
+
+              <View style={styles.progressTrack}>
+                {progressStages.map((stage, index) => {
+                  const stageState = getProgressStageState(latestSubmission.status, stage.key);
+                  return (
+                    <View key={stage.key} style={styles.progressStep}>
+                      <View
+                        style={[
+                          styles.progressDot,
+                          stageState === "complete" && styles.progressDotComplete,
+                          stageState === "current" && styles.progressDotCurrent
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.progressDotText,
+                            stageState !== "pending" && styles.progressDotTextActive
+                          ]}
+                        >
+                          {index + 1}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.progressLabel,
+                          stageState !== "pending" && styles.progressLabelActive
+                        ]}
+                      >
+                        {stage.label}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+
+              <View style={styles.metaChipRow}>
+                <View style={styles.metaChip}>
+                  <Text style={styles.metaChipText}>{formatVisibilityLabel(latestSubmission.visibility_target)}</Text>
+                </View>
+                <View style={styles.metaChip}>
+                  <Text style={styles.metaChipText}>{formatMediaCountLabel(latestSubmission.media_count)}</Text>
+                </View>
+                <View style={styles.metaChip}>
+                  <Text style={styles.metaChipText}>{formatRiskScoreLabel(latestSubmission.risk_score)}</Text>
+                </View>
+              </View>
+            </>
+          ) : (
+            <Text style={styles.emptyStateText}>
+              Your first upload will create a live workflow timeline here.
+            </Text>
+          )}
+        </View>
+
+        <View style={styles.panelCard}>
+          <View style={styles.panelHeaderRow}>
+            <View>
+              <Text style={styles.panelEyebrow}>Recent activity</Text>
+              <Text style={styles.panelTitle}>Submissions</Text>
+            </View>
+            {loadingRecent ? <ActivityIndicator color="#16352f" /> : null}
           </View>
           <Text style={styles.sectionIntro}>
-            Your latest uploads and where they stand in the workflow.
+            Open any item for the full review, approval, and publish history.
           </Text>
 
           {recentSubmissions.length ? (
             recentSubmissions.map((item) => (
-              <Pressable
-                key={item.id}
-                style={styles.recentItem}
-                onPress={() => loadSubmissionDetail(item.id)}
-              >
-                <View style={styles.recentMetaRow}>
+              <Pressable key={item.id} style={styles.feedCard} onPress={() => loadSubmissionDetail(item.id)}>
+                <View style={styles.feedCardTopRow}>
                   <View
                     style={[
                       styles.statusPill,
@@ -628,18 +811,21 @@ export default function App() {
                       {formatStatusLabel(item.status)}
                     </Text>
                   </View>
-                  <Text style={styles.recentTime}>{formatSubmittedAt(item.created_at)}</Text>
+                  <Text style={styles.feedTime}>{formatSubmittedAt(item.created_at)}</Text>
                 </View>
-                <Text style={styles.recentSummary}>
-                  {item.raw_text?.trim() || "No caption provided"}
-                </Text>
-                <Text style={styles.recentProgress}>{summarizeSubmissionProgress(item)}</Text>
-                <Text style={styles.recentDetail}>
-                  {formatContentTypeLabel(item.content_type)} · {formatVisibilityLabel(item.visibility_target)} · {formatMediaCountLabel(item.media_count)}
-                </Text>
-                <Text style={styles.recentDetail}>
-                  {formatRiskScoreLabel(item.risk_score)} · Tap for detail
-                </Text>
+                <Text style={styles.feedHeadline}>{item.raw_text?.trim() || "No caption provided"}</Text>
+                <Text style={styles.feedSupport}>{summarizeSubmissionProgress(item)}</Text>
+                <View style={styles.metaChipRow}>
+                  <View style={styles.metaChip}>
+                    <Text style={styles.metaChipText}>{formatContentTypeLabel(item.content_type)}</Text>
+                  </View>
+                  <View style={styles.metaChip}>
+                    <Text style={styles.metaChipText}>{formatVisibilityLabel(item.visibility_target)}</Text>
+                  </View>
+                  <View style={styles.metaChip}>
+                    <Text style={styles.metaChipText}>{formatMediaCountLabel(item.media_count)}</Text>
+                  </View>
+                </View>
               </Pressable>
             ))
           ) : loadingRecent ? (
@@ -648,14 +834,17 @@ export default function App() {
             <Text style={styles.errorStateText}>{recentError}</Text>
           ) : (
             <Text style={styles.emptyStateText}>
-              No submissions yet for this submitter and team. Your next upload will appear here.
+              No submissions yet for this submitter and team.
             </Text>
           )}
         </View>
 
-        <View style={styles.card}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Updates</Text>
+        <View style={styles.panelCard}>
+          <View style={styles.panelHeaderRow}>
+            <View>
+              <Text style={styles.panelEyebrow}>Notifications</Text>
+              <Text style={styles.panelTitle}>Workflow updates</Text>
+            </View>
             <Text style={styles.unreadBadge}>
               {unreadNotificationCount ? `${unreadNotificationCount} unread` : "All caught up"}
             </Text>
@@ -668,7 +857,7 @@ export default function App() {
             notifications.map((item) => (
               <Pressable
                 key={item.id}
-                style={[styles.notificationItem, !item.readAt && styles.notificationItemUnread]}
+                style={[styles.notificationCard, !item.readAt && styles.notificationCardUnread]}
                 onPress={async () => {
                   if (item.payload?.submissionId) {
                     await loadSubmissionDetail(item.payload.submissionId);
@@ -679,16 +868,14 @@ export default function App() {
                   }
                 }}
               >
-                <View style={styles.recentMetaRow}>
-                  <View style={styles.notificationTitleRow}>
+                <View style={styles.feedCardTopRow}>
+                  <View style={styles.notificationHeaderRow}>
                     {!item.readAt ? <View style={styles.unreadDot} /> : null}
                     <Text style={styles.notificationTitle}>{formatNotificationLabel(item.type)}</Text>
                   </View>
-                  <Text style={styles.recentTime}>{formatSubmittedAt(item.createdAt)}</Text>
+                  <Text style={styles.feedTime}>{formatSubmittedAt(item.createdAt)}</Text>
                 </View>
-                <Text style={styles.notificationBody}>
-                  {buildNotificationBody(item)}
-                </Text>
+                <Text style={styles.notificationBody}>{buildNotificationBody(item)}</Text>
                 {buildNotificationMeta(item) ? (
                   <Text style={styles.notificationMeta}>{buildNotificationMeta(item)}</Text>
                 ) : null}
@@ -704,6 +891,32 @@ export default function App() {
             </Text>
           )}
         </View>
+
+        <View style={styles.panelCard}>
+          <View style={styles.panelHeaderRow}>
+            <View>
+              <Text style={styles.panelEyebrow}>Connection</Text>
+              <Text style={styles.panelTitle}>Submitter settings</Text>
+            </View>
+            <Text style={styles.inlineMetaText}>Editable in app</Text>
+          </View>
+          <TextInput
+            autoCapitalize="none"
+            style={styles.input}
+            value={apiBaseUrl}
+            onChangeText={setApiBaseUrl}
+            placeholder="API base URL"
+          />
+          <TextInput style={styles.input} value={clubSlug} onChangeText={setClubSlug} placeholder="Club slug" />
+          <TextInput style={styles.input} value={teamSlug} onChangeText={setTeamSlug} placeholder="Team slug" />
+          <TextInput
+            autoCapitalize="none"
+            style={[styles.input, styles.inputLast]}
+            value={submitterEmail}
+            onChangeText={setSubmitterEmail}
+            placeholder="Submitter email"
+          />
+        </View>
       </ScrollView>
 
       <Modal
@@ -717,8 +930,11 @@ export default function App() {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Submission Detail</Text>
+            <View style={styles.panelHeaderRow}>
+              <View>
+                <Text style={styles.panelEyebrow}>Submission detail</Text>
+                <Text style={styles.panelTitle}>Workflow timeline</Text>
+              </View>
               <Pressable
                 onPress={() => {
                   setSelectedSubmissionId(null);
@@ -730,31 +946,81 @@ export default function App() {
             </View>
 
             {loadingDetail || !selectedSubmissionDetail ? (
-              <ActivityIndicator color="#17372c" />
+              <ActivityIndicator color="#16352f" />
             ) : (
               <ScrollView>
-                <Text style={styles.detailStatus}>
-                  {formatStatusLabel(selectedSubmissionDetail.status)} · {formatSubmittedAt(selectedSubmissionDetail.created_at)}
-                </Text>
-                <Text style={styles.detailSummary}>
-                  {selectedSubmissionDetail.raw_text?.trim() || "No caption provided"}
-                </Text>
-                <Text style={styles.detailLine}>
-                  {formatContentTypeLabel(selectedSubmissionDetail.content_type)} · {formatMediaCountLabel(selectedSubmissionDetail.media?.length)}
-                </Text>
-                <Text style={styles.detailLine}>
-                  Visibility: {formatVisibilityLabel(selectedSubmissionDetail.visibility_target)}
-                </Text>
+                <View style={styles.modalSummaryCard}>
+                  <Text style={styles.detailStatus}>
+                    {formatStatusLabel(selectedSubmissionDetail.status)} · {formatSubmittedAt(selectedSubmissionDetail.created_at)}
+                  </Text>
+                  <Text style={styles.detailSummary}>
+                    {selectedSubmissionDetail.raw_text?.trim() || "No caption provided"}
+                  </Text>
+                  <View style={styles.metaChipRow}>
+                    <View style={styles.metaChip}>
+                      <Text style={styles.metaChipText}>
+                        {formatContentTypeLabel(selectedSubmissionDetail.content_type)}
+                      </Text>
+                    </View>
+                    <View style={styles.metaChip}>
+                      <Text style={styles.metaChipText}>
+                        {formatMediaCountLabel(selectedSubmissionDetail.media?.length)}
+                      </Text>
+                    </View>
+                    <View style={styles.metaChip}>
+                      <Text style={styles.metaChipText}>
+                        {formatVisibilityLabel(selectedSubmissionDetail.visibility_target)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.progressTrackDetail}>
+                  {progressStages.map((stage, index) => {
+                    const stageState = getProgressStageState(selectedSubmissionDetail.status, stage.key);
+                    return (
+                      <View key={stage.key} style={styles.progressStep}>
+                        <View
+                          style={[
+                            styles.progressDot,
+                            stageState === "complete" && styles.progressDotComplete,
+                            stageState === "current" && styles.progressDotCurrent
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.progressDotText,
+                              stageState !== "pending" && styles.progressDotTextActive
+                            ]}
+                          >
+                            {index + 1}
+                          </Text>
+                        </View>
+                        <Text
+                          style={[
+                            styles.progressLabel,
+                            stageState !== "pending" && styles.progressLabelActive
+                          ]}
+                        >
+                          {stage.label}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+
                 <Text style={styles.detailLine}>
                   Review score: {formatRiskScoreLabel(selectedSubmissionDetail.risk_score)}
                 </Text>
                 <Text style={styles.detailLine}>
                   Club: {selectedSubmissionDetail.club_slug}
-                  {selectedSubmissionDetail.team_slug ? ` · Team: ${selectedSubmissionDetail.team_slug}` : ""}
+                  {selectedSubmissionDetail.team_slug
+                    ? ` · Team: ${selectedSubmissionDetail.team_slug}`
+                    : ""}
                 </Text>
                 {selectedSubmissionDetail.latestReviewRun ? (
                   <>
-                    <Text style={styles.detailHeading}>Latest Review</Text>
+                    <Text style={styles.detailHeading}>Latest review</Text>
                     <Text style={styles.detailLine}>
                       {formatStatusLabel(selectedSubmissionDetail.latestReviewRun.resultStatus)} · {selectedSubmissionDetail.latestReviewRun.agentName}
                     </Text>
@@ -805,161 +1071,347 @@ export default function App() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#f7efe1"
+    backgroundColor: "#f3efe7"
   },
   container: {
-    padding: 20,
+    padding: 18,
+    paddingBottom: 28,
     gap: 18
   },
-  hero: {
-    paddingTop: 12,
-    paddingBottom: 8
+  heroPanel: {
+    backgroundColor: "#12372d",
+    borderRadius: 28,
+    padding: 22,
+    gap: 18
+  },
+  heroTextBlock: {
+    gap: 8
   },
   kicker: {
-    fontSize: 13,
-    letterSpacing: 1.4,
+    fontSize: 12,
+    letterSpacing: 1.5,
     textTransform: "uppercase",
-    color: "#a54b24",
-    marginBottom: 8
+    color: "#d9c2a5",
+    fontWeight: "700"
   },
   title: {
     fontSize: 34,
     lineHeight: 38,
-    color: "#17372c",
-    fontWeight: "700"
+    color: "#fbf7f0",
+    fontWeight: "800"
   },
   subtitle: {
-    marginTop: 10,
-    fontSize: 16,
-    lineHeight: 23,
-    color: "#53635e"
+    fontSize: 15,
+    lineHeight: 22,
+    color: "#d7e1db"
   },
-  card: {
-    backgroundColor: "#fffaf2",
-    borderRadius: 22,
+  heroStatsRow: {
+    flexDirection: "row",
+    gap: 12
+  },
+  heroStatCard: {
+    flex: 1,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderRadius: 20,
+    padding: 14,
+    gap: 6
+  },
+  heroStatLabel: {
+    color: "#d0ddd5",
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 1
+  },
+  heroStatValue: {
+    color: "#fbf7f0",
+    fontSize: 24,
+    fontWeight: "800"
+  },
+  panelCard: {
+    backgroundColor: "#fcfaf6",
+    borderRadius: 24,
     padding: 18,
     borderWidth: 1,
-    borderColor: "#e3d7c4",
-    shadowColor: "#1b332a",
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
+    borderColor: "#e4ddd2",
+    gap: 14,
+    shadowColor: "#20352c",
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
-    elevation: 3
+    elevation: 2
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#17372c",
-    marginBottom: 12
-  },
-  sectionHeaderRow: {
+  panelHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12
+    gap: 12
+  },
+  panelEyebrow: {
+    color: "#8b6b4c",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1.1
+  },
+  panelTitle: {
+    color: "#17352e",
+    fontSize: 22,
+    lineHeight: 26,
+    fontWeight: "800",
+    marginTop: 2
+  },
+  panelBodyText: {
+    color: "#53625d",
+    fontSize: 15,
+    lineHeight: 22
+  },
+  liveBadge: {
+    backgroundColor: "#edf3ee",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8
+  },
+  liveBadgeText: {
+    color: "#1e4b3b",
+    fontSize: 12,
+    fontWeight: "700"
+  },
+  assetRow: {
+    gap: 12
+  },
+  assetPickerCard: {
+    backgroundColor: "#f6efe6",
+    borderRadius: 20,
+    padding: 16,
+    gap: 6
+  },
+  composerMetaCard: {
+    backgroundColor: "#f6efe6",
+    borderRadius: 20,
+    padding: 16,
+    gap: 10
+  },
+  assetPickerLabel: {
+    color: "#8b6b4c",
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    fontWeight: "700"
+  },
+  assetPickerTitle: {
+    color: "#17352e",
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: "700"
+  },
+  assetPickerHint: {
+    color: "#6f6960",
+    fontSize: 14,
+    lineHeight: 20
+  },
+  metaHint: {
+    color: "#6f6960",
+    fontSize: 13,
+    lineHeight: 19
   },
   input: {
     backgroundColor: "#ffffff",
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#ded2c1",
+    borderColor: "#ddd5c9",
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 13,
     fontSize: 16,
-    marginBottom: 12
+    color: "#17352e"
+  },
+  inputLast: {
+    marginBottom: 0
   },
   textArea: {
     minHeight: 120,
     textAlignVertical: "top"
   },
-  helperText: {
-    color: "#6a756f",
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: -4,
-    marginBottom: 12
-  },
-  secondaryButton: {
-    backgroundColor: "#f0e5d5",
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    marginBottom: 12
-  },
-  secondaryButtonText: {
-    color: "#7a4f2b",
-    fontSize: 16,
-    fontWeight: "600"
-  },
-  refreshButton: {
-    marginBottom: 14
-  },
   visibilityRow: {
     flexDirection: "row",
-    gap: 10
+    gap: 10,
+    flexWrap: "wrap"
   },
   visibilityPill: {
     paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     borderRadius: 999,
-    backgroundColor: "#efe3d1"
+    backgroundColor: "#e7ddd0"
   },
   visibilityPillActive: {
-    backgroundColor: "#17372c"
+    backgroundColor: "#17352e"
   },
   visibilityPillText: {
-    textTransform: "capitalize",
-    color: "#755139",
-    fontWeight: "600"
+    color: "#76563b",
+    fontWeight: "700",
+    fontSize: 13
   },
   visibilityPillTextActive: {
-    color: "#fffaf2"
+    color: "#fcfaf6"
   },
-  statusText: {
-    color: "#57645f",
+  actionRow: {
+    flexDirection: "row",
+    gap: 12
+  },
+  primaryButton: {
+    flex: 1,
+    minHeight: 54,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#17352e"
+  },
+  primaryButtonText: {
+    color: "#fdf9f2",
+    fontSize: 16,
+    fontWeight: "800"
+  },
+  ghostButton: {
+    minHeight: 54,
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#efe7da"
+  },
+  ghostButtonText: {
+    color: "#77553a",
     fontSize: 15,
-    lineHeight: 22,
-    marginBottom: 6
+    fontWeight: "700"
+  },
+  buttonDisabled: {
+    opacity: 0.5
   },
   statusMetaText: {
     color: "#8a7460",
     fontSize: 13,
-    lineHeight: 18,
-    marginBottom: 14
+    lineHeight: 18
   },
-  primaryButton: {
-    backgroundColor: "#17372c",
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 54
+  inlineMetaText: {
+    color: "#7c807b",
+    fontSize: 12,
+    fontWeight: "600"
   },
-  primaryButtonDisabled: {
-    opacity: 0.5
+  latestStatusCard: {
+    backgroundColor: "#f6efe6",
+    borderRadius: 20,
+    padding: 16,
+    gap: 8
   },
-  primaryButtonText: {
-    color: "#fff7ef",
-    fontSize: 16,
+  latestStatusSummary: {
+    color: "#17352e",
+    fontSize: 17,
+    lineHeight: 24,
     fontWeight: "700"
   },
-  recentItem: {
-    paddingVertical: 14,
-    borderTopWidth: 1,
-    borderTopColor: "#eadfce"
+  latestStatusBody: {
+    color: "#5a6863",
+    fontSize: 14,
+    lineHeight: 21
+  },
+  progressTrack: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8
+  },
+  progressTrackDetail: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+    marginVertical: 14
+  },
+  progressStep: {
+    flex: 1,
+    alignItems: "center",
+    gap: 8
+  },
+  progressDot: {
+    width: 34,
+    height: 34,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#d7d0c5",
+    backgroundColor: "#f6f1ea",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  progressDotComplete: {
+    backgroundColor: "#dbeedc",
+    borderColor: "#91c29c"
+  },
+  progressDotCurrent: {
+    backgroundColor: "#17352e",
+    borderColor: "#17352e"
+  },
+  progressDotText: {
+    color: "#8a857b",
+    fontWeight: "700"
+  },
+  progressDotTextActive: {
+    color: "#fcfaf6"
+  },
+  progressLabel: {
+    color: "#8a857b",
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center"
+  },
+  progressLabelActive: {
+    color: "#17352e"
+  },
+  metaChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  metaChip: {
+    backgroundColor: "#f1ebdf",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8
+  },
+  metaChipText: {
+    color: "#6b5b49",
+    fontSize: 12,
+    fontWeight: "700"
   },
   sectionIntro: {
-    color: "#67756f",
+    color: "#61706a",
     fontSize: 14,
     lineHeight: 20,
-    marginTop: -2,
-    marginBottom: 4
+    marginTop: -4
   },
-  recentMetaRow: {
+  feedCard: {
+    backgroundColor: "#f7f2eb",
+    borderRadius: 20,
+    padding: 16,
+    gap: 10
+  },
+  feedCardTopRow: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
-    marginBottom: 8
+    alignItems: "center",
+    gap: 10
+  },
+  feedTime: {
+    color: "#7b817b",
+    fontSize: 12,
+    flexShrink: 0
+  },
+  feedHeadline: {
+    color: "#17352e",
+    fontSize: 16,
+    lineHeight: 23,
+    fontWeight: "700"
+  },
+  feedSupport: {
+    color: "#5c6964",
+    fontSize: 14,
+    lineHeight: 20
   },
   statusPill: {
     backgroundColor: "#edf1ee",
@@ -975,7 +1427,8 @@ const styles = StyleSheet.create({
   },
   statusPillText: {
     color: "#355047",
-    fontWeight: "700"
+    fontWeight: "700",
+    fontSize: 12
   },
   statusPillTextSuccess: {
     color: "#1f5a34"
@@ -983,30 +1436,8 @@ const styles = StyleSheet.create({
   statusPillTextAttention: {
     color: "#9a4d2d"
   },
-  recentTime: {
-    color: "#7b867f",
-    fontSize: 12
-  },
-  recentSummary: {
-    color: "#31433b",
-    fontSize: 15,
-    lineHeight: 22,
-    marginBottom: 6
-  },
-  recentProgress: {
-    color: "#53645d",
-    fontSize: 13,
-    lineHeight: 19,
-    marginBottom: 6
-  },
-  recentDetail: {
-    color: "#7a6b5b",
-    fontSize: 13,
-    lineHeight: 18,
-    marginBottom: 3
-  },
   emptyStateText: {
-    color: "#6d7a74",
+    color: "#68746f",
     fontSize: 15,
     lineHeight: 22
   },
@@ -1017,21 +1448,23 @@ const styles = StyleSheet.create({
   },
   unreadBadge: {
     color: "#a54b24",
-    fontWeight: "700",
-    fontSize: 13
+    fontWeight: "800",
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.8
   },
-  notificationItem: {
-    paddingVertical: 14,
-    borderTopWidth: 1,
-    borderTopColor: "#eadfce"
+  notificationCard: {
+    backgroundColor: "#f7f2eb",
+    borderRadius: 20,
+    padding: 16,
+    gap: 8
   },
-  notificationItemUnread: {
-    backgroundColor: "#fff4e5",
-    marginHorizontal: -8,
-    paddingHorizontal: 8,
-    borderRadius: 12
+  notificationCardUnread: {
+    backgroundColor: "#fff0dd",
+    borderWidth: 1,
+    borderColor: "#f0d2ad"
   },
-  notificationTitleRow: {
+  notificationHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -1044,8 +1477,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#c96a37"
   },
   notificationTitle: {
-    color: "#17372c",
-    fontWeight: "700"
+    color: "#17352e",
+    fontWeight: "700",
+    fontSize: 15,
+    flexShrink: 1
   },
   notificationBody: {
     color: "#465650",
@@ -1055,41 +1490,45 @@ const styles = StyleSheet.create({
   notificationMeta: {
     color: "#8a7460",
     fontSize: 12,
-    lineHeight: 17,
-    marginTop: 8
+    lineHeight: 17
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(23, 55, 44, 0.45)",
+    backgroundColor: "rgba(16, 40, 33, 0.42)",
     justifyContent: "flex-end",
     padding: 12
   },
   modalCard: {
-    backgroundColor: "#fffaf2",
-    borderRadius: 24,
+    backgroundColor: "#fcfaf6",
+    borderRadius: 28,
     padding: 20,
-    maxHeight: "80%"
+    maxHeight: "84%"
+  },
+  modalSummaryCard: {
+    backgroundColor: "#f6efe6",
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 14,
+    gap: 10
   },
   closeButtonText: {
     color: "#a54b24",
-    fontWeight: "700"
+    fontWeight: "800"
   },
   detailStatus: {
-    color: "#17372c",
-    fontWeight: "700",
-    marginBottom: 12,
+    color: "#17352e",
+    fontWeight: "800",
     textTransform: "capitalize"
   },
   detailSummary: {
     color: "#31433b",
     fontSize: 16,
-    lineHeight: 24,
-    marginBottom: 14
+    lineHeight: 24
   },
   detailHeading: {
-    color: "#17372c",
+    color: "#17352e",
     fontSize: 15,
-    fontWeight: "700",
+    fontWeight: "800",
     marginTop: 12,
     marginBottom: 6
   },
