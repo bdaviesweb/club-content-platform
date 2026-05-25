@@ -7,43 +7,67 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
+function humanizeToken(value) {
+  if (!value) {
+    return "";
+  }
+
+  return String(value)
+    .replaceAll(/[_-]+/g, " ")
+    .replaceAll(/\s+/g, " ")
+    .trim();
+}
+
+function titleCaseWords(value) {
+  return humanizeToken(value).replaceAll(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function buildNotificationMessage(type, payload) {
   switch (type) {
     case "submission_review_started":
       return {
-        subject: "Your submission is in review",
-        intro: "Your club submission has entered the review queue.",
+        subject: "Review has started for your submission",
+        intro: "Your club submission is now with a reviewer.",
         detail:
-          payload.summary || "A reviewer will look at your submission before it is published.",
-        statusLine: `Current status: ${payload.status || "needs_human_review"}`
+          payload.summary ||
+          "A reviewer will check the content before anything is published.",
+        statusLine: `Status: ${titleCaseWords(payload.status || "needs_human_review")}`,
+        statusExplanation: "No action is needed from you right now."
       };
     case "submission_published":
       return {
-        subject: "Your submission was published",
-        intro: "Your club submission has been published successfully.",
-        detail: `Destination: ${payload.destinationType || "internal feed"}`,
-        statusLine: `Current status: ${payload.status || "published"}`
+        subject: "Your submission is published",
+        intro: "Your club submission was approved and is now live.",
+        detail: `Published to ${humanizeToken(payload.destinationType || "internal feed")}.`,
+        statusLine: `Status: ${titleCaseWords(payload.status || "published")}`,
+        statusExplanation:
+          "People with access to that destination can now see this post."
       };
     case "submission_rejected":
       return {
-        subject: "Your submission was rejected",
-        intro: "Your club submission was rejected during review.",
-        detail: payload.notes || "A reviewer rejected the submission.",
-        statusLine: "Current status: rejected"
+        subject: "Your submission was not approved",
+        intro: "Your club submission was reviewed and will not be published in its current form.",
+        detail: payload.notes || "The reviewer decided not to move this submission forward.",
+        statusLine: "Status: Rejected",
+        statusExplanation:
+          "This review is closed. If you still want this content published, start a new submission."
       };
     case "submission_changes_requested":
       return {
-        subject: "Changes requested for your submission",
-        intro: "Your club submission needs an update before it can move forward.",
-        detail: payload.notes || "A reviewer requested changes or more metadata.",
-        statusLine: "Current status: needs changes"
+        subject: "Changes requested before publishing",
+        intro: "Your club submission needs updates before it can be approved.",
+        detail: payload.notes || "The reviewer requested revisions or more detail.",
+        statusLine: "Status: Changes requested",
+        statusExplanation:
+          "Review is paused until you update the submission and send it back."
       };
     default:
       return {
         subject: "There is an update on your submission",
         intro: "Your club submission has a new workflow update.",
         detail: payload.notes || "Open the app to review the latest status.",
-        statusLine: `Current status: ${payload.status || "updated"}`
+        statusLine: `Status: ${titleCaseWords(payload.status || "updated")}`,
+        statusExplanation: "Open the app to review the latest details."
       };
   }
 }
@@ -69,6 +93,7 @@ export function buildNotificationEmail({
     message.intro,
     message.detail,
     message.statusLine,
+    message.statusExplanation,
     `Submission ID: ${submissionId}`,
     safeAppUrl ? `App: ${safeAppUrl}` : null,
     `Support: ${safeSupportEmail}`,
@@ -98,6 +123,9 @@ export function buildNotificationEmail({
         )}</p>
         <p style="margin:0 0 8px;color:#102238;font-weight:600;">${escapeHtml(
           message.statusLine
+        )}</p>
+        <p style="margin:0 0 12px;color:#445364;line-height:1.6;">${escapeHtml(
+          message.statusExplanation
         )}</p>
         <p style="margin:0 0 16px;color:#445364;line-height:1.6;">Submission ID: <code>${escapeHtml(
           submissionId

@@ -47,6 +47,145 @@ function formatNotificationLabel(type) {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
+function formatStatusLabel(value) {
+  const normalized = String(value || "submitted").toLowerCase();
+
+  switch (normalized) {
+    case "submitted":
+      return "Submitted";
+    case "needs_human_review":
+      return "In Review";
+    case "approved":
+      return "Approved";
+    case "published":
+      return "Published";
+    case "rejected":
+      return "Not Approved";
+    case "changes_requested":
+      return "Changes Requested";
+    default:
+      return normalized
+        .replaceAll("_", " ")
+        .replace(/\b\w/g, (character) => character.toUpperCase());
+  }
+}
+
+function getStatusTone(value) {
+  const normalized = String(value || "submitted").toLowerCase();
+
+  if (normalized === "published" || normalized === "approved") {
+    return "success";
+  }
+
+  if (normalized === "rejected" || normalized === "changes_requested") {
+    return "attention";
+  }
+
+  return "neutral";
+}
+
+function formatVisibilityLabel(value) {
+  const normalized = String(value || "internal").toLowerCase();
+
+  switch (normalized) {
+    case "internal":
+      return "Internal only";
+    case "public":
+      return "Public post";
+    default:
+      return normalized
+        .replaceAll("_", " ")
+        .replace(/\b\w/g, (character) => character.toUpperCase());
+  }
+}
+
+function formatContentTypeLabel(value) {
+  const normalized = String(value || "photo").toLowerCase();
+  return normalized === "video" ? "Video" : "Photo";
+}
+
+function formatMediaCountLabel(value) {
+  const count = Number(value || 0);
+  return `${count} ${count === 1 ? "file" : "files"}`;
+}
+
+function formatRiskScoreLabel(value) {
+  if (value === null || value === undefined || value === "") {
+    return "Pending review";
+  }
+
+  const score = Number(value);
+
+  if (Number.isNaN(score)) {
+    return String(value);
+  }
+
+  return `${score.toFixed(2)} risk score`;
+}
+
+function summarizeSubmissionProgress(item) {
+  const status = String(item?.status || "").toLowerCase();
+
+  if (status === "published") {
+    return "Shared successfully.";
+  }
+
+  if (status === "approved") {
+    return "Approved and ready for publishing.";
+  }
+
+  if (status === "rejected") {
+    return "Stopped in review.";
+  }
+
+  if (status === "changes_requested") {
+    return "Needs an update before it can move forward.";
+  }
+
+  if (status === "needs_human_review") {
+    return "Waiting on reviewer follow-up.";
+  }
+
+  return "Captured and waiting for workflow updates.";
+}
+
+function buildNotificationBody(item) {
+  if (item?.payload?.notes) {
+    return item.payload.notes;
+  }
+
+  if (item?.payload?.summary) {
+    return item.payload.summary;
+  }
+
+  if (item?.type === "submission_published") {
+    return `Published to ${item.payload?.destinationType || "the club feed"}.`;
+  }
+
+  if (item?.type === "submission_review_started") {
+    return "Your submission entered the review queue.";
+  }
+
+  const subject = item?.payload?.submissionId ? `Submission ${item.payload.submissionId}` : "This submission";
+  return `${subject} moved to ${formatStatusLabel(item?.payload?.status || "updated").toLowerCase()}.`;
+}
+
+function buildNotificationMeta(item) {
+  const meta = [];
+
+  if (item?.payload?.status) {
+    meta.push(formatStatusLabel(item.payload.status));
+  }
+
+  if (item?.deliveryStatus) {
+    meta.push(formatNotificationLabel(item.deliveryStatus));
+  } else if (item?.deliveryUpdatedAt) {
+    meta.push("Email updated");
+  }
+
+  return meta.join(" · ");
+}
+
 export default function App() {
   const [apiBaseUrl, setApiBaseUrl] = useState(defaultConfig.apiBaseUrl);
   const [clubSlug, setClubSlug] = useState(defaultConfig.clubSlug);
@@ -59,8 +198,10 @@ export default function App() {
   const [submitting, setSubmitting] = useState(false);
   const [recentSubmissions, setRecentSubmissions] = useState([]);
   const [loadingRecent, setLoadingRecent] = useState(false);
+  const [recentError, setRecentError] = useState("");
   const [notifications, setNotifications] = useState([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [notificationsError, setNotificationsError] = useState("");
   const [selectedSubmissionId, setSelectedSubmissionId] = useState(null);
   const [selectedSubmissionDetail, setSelectedSubmissionDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -90,6 +231,7 @@ export default function App() {
     }
 
     setLoadingRecent(true);
+    setRecentError("");
 
     try {
       const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
@@ -112,6 +254,7 @@ export default function App() {
       const payload = await response.json();
       setRecentSubmissions(Array.isArray(payload.items) ? payload.items : []);
     } catch (error) {
+      setRecentError(error.message || "Could not load recent submissions");
       setStatus(error.message || "Could not load recent submissions");
     } finally {
       setLoadingRecent(false);
@@ -125,6 +268,7 @@ export default function App() {
     }
 
     setLoadingNotifications(true);
+    setNotificationsError("");
 
     try {
       const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
@@ -141,6 +285,7 @@ export default function App() {
       const payload = await response.json();
       setNotifications(Array.isArray(payload.items) ? payload.items : []);
     } catch (error) {
+      setNotificationsError(error.message || "Could not load notifications");
       setStatus(error.message || "Could not load notifications");
     } finally {
       setLoadingNotifications(false);
@@ -195,6 +340,12 @@ export default function App() {
   async function refreshDashboard() {
     await Promise.all([loadRecentSubmissions(), loadNotifications()]);
   }
+
+  const dashboardStatusText = submitting
+    ? status
+    : canSubmit
+      ? "Ready to send this update into the club workflow."
+      : "Pick media, add a caption, and confirm your submitter details.";
 
   useEffect(() => {
     if (!canLoadRecent) {
@@ -333,7 +484,7 @@ export default function App() {
           <Text style={styles.kicker}>Mobile Submission</Text>
           <Text style={styles.title}>Club Content Capture</Text>
           <Text style={styles.subtitle}>
-            Signed upload, content submission, and review handoff from one screen.
+            Capture the update, send it for review, and follow what happens next.
           </Text>
         </View>
 
@@ -365,15 +516,24 @@ export default function App() {
           <Text style={styles.sectionTitle}>Submission</Text>
           <Pressable style={styles.secondaryButton} onPress={pickAsset}>
             <Text style={styles.secondaryButtonText}>
-              {asset ? `Replace Media: ${asset.name}` : "Pick Photo or Video"}
+              {asset ? `Replace Media: ${asset.name}` : "Choose Photo or Video"}
             </Text>
           </Pressable>
+          {asset ? (
+            <Text style={styles.helperText}>
+              {formatContentTypeLabel(guessContentTypeFromAsset(asset))} selected and ready to upload.
+            </Text>
+          ) : (
+            <Text style={styles.helperText}>
+              Add one photo or video for this update.
+            </Text>
+          )}
           <TextInput
             multiline
             style={[styles.input, styles.textArea]}
             value={caption}
             onChangeText={setCaption}
-            placeholder="Write the update or caption"
+            placeholder="Write the update parents, coaches, or staff should know"
           />
           <View style={styles.visibilityRow}>
             {["internal", "public"].map((value) => (
@@ -391,23 +551,31 @@ export default function App() {
                     visibilityTarget === value && styles.visibilityPillTextActive
                   ]}
                 >
-                  {value}
+                  {formatVisibilityLabel(value)}
                 </Text>
               </Pressable>
             ))}
           </View>
+          <Text style={styles.helperText}>
+            {visibilityTarget === "public"
+              ? "Public posts may need extra review before they are published."
+              : "Internal updates stay inside the club workflow unless published later."}
+          </Text>
         </View>
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Status</Text>
-          <Text style={styles.statusText}>{status}</Text>
+          <Text style={styles.statusText}>{dashboardStatusText}</Text>
+          {!submitting && status !== "Pick media, add a caption, and submit." ? (
+            <Text style={styles.statusMetaText}>{status}</Text>
+          ) : null}
           <Pressable
             disabled={loadingRecent || !canLoadRecent}
             style={[styles.secondaryButton, styles.refreshButton, (!canLoadRecent || loadingRecent) && styles.primaryButtonDisabled]}
             onPress={refreshDashboard}
           >
             <Text style={styles.secondaryButtonText}>
-              {loadingRecent || loadingNotifications ? "Refreshing..." : "Refresh Activity"}
+              {loadingRecent || loadingNotifications ? "Refreshing..." : "Refresh Submissions and Updates"}
             </Text>
           </Pressable>
           <Pressable
@@ -421,7 +589,7 @@ export default function App() {
             {submitting ? (
               <ActivityIndicator color="#fff7ef" />
             ) : (
-              <Text style={styles.primaryButtonText}>Upload and Submit</Text>
+              <Text style={styles.primaryButtonText}>Send for Review</Text>
             )}
           </Pressable>
         </View>
@@ -431,6 +599,9 @@ export default function App() {
             <Text style={styles.sectionTitle}>Recent Submissions</Text>
             {loadingRecent ? <ActivityIndicator color="#17372c" /> : null}
           </View>
+          <Text style={styles.sectionIntro}>
+            Your latest uploads and where they stand in the workflow.
+          </Text>
 
           {recentSubmissions.length ? (
             recentSubmissions.map((item) => (
@@ -440,20 +611,44 @@ export default function App() {
                 onPress={() => loadSubmissionDetail(item.id)}
               >
                 <View style={styles.recentMetaRow}>
-                  <Text style={styles.recentStatus}>{item.status}</Text>
+                  <View
+                    style={[
+                      styles.statusPill,
+                      getStatusTone(item.status) === "success" && styles.statusPillSuccess,
+                      getStatusTone(item.status) === "attention" && styles.statusPillAttention
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.statusPillText,
+                        getStatusTone(item.status) === "success" && styles.statusPillTextSuccess,
+                        getStatusTone(item.status) === "attention" && styles.statusPillTextAttention
+                      ]}
+                    >
+                      {formatStatusLabel(item.status)}
+                    </Text>
+                  </View>
                   <Text style={styles.recentTime}>{formatSubmittedAt(item.created_at)}</Text>
                 </View>
                 <Text style={styles.recentSummary}>
                   {item.raw_text?.trim() || "No caption provided"}
                 </Text>
+                <Text style={styles.recentProgress}>{summarizeSubmissionProgress(item)}</Text>
                 <Text style={styles.recentDetail}>
-                  {item.content_type} · {item.visibility_target} · {item.media_count} media
+                  {formatContentTypeLabel(item.content_type)} · {formatVisibilityLabel(item.visibility_target)} · {formatMediaCountLabel(item.media_count)}
+                </Text>
+                <Text style={styles.recentDetail}>
+                  {formatRiskScoreLabel(item.risk_score)} · Tap for detail
                 </Text>
               </Pressable>
             ))
+          ) : loadingRecent ? (
+            <Text style={styles.emptyStateText}>Loading recent submissions...</Text>
+          ) : recentError ? (
+            <Text style={styles.errorStateText}>{recentError}</Text>
           ) : (
             <Text style={styles.emptyStateText}>
-              No submissions yet for this submitter and team.
+              No submissions yet for this submitter and team. Your next upload will appear here.
             </Text>
           )}
         </View>
@@ -461,8 +656,13 @@ export default function App() {
         <View style={styles.card}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Updates</Text>
-            <Text style={styles.unreadBadge}>{unreadNotificationCount} unread</Text>
+            <Text style={styles.unreadBadge}>
+              {unreadNotificationCount ? `${unreadNotificationCount} unread` : "All caught up"}
+            </Text>
           </View>
+          <Text style={styles.sectionIntro}>
+            Review, approval, publishing, and delivery updates for your submissions.
+          </Text>
 
           {notifications.length ? (
             notifications.map((item) => (
@@ -480,19 +680,27 @@ export default function App() {
                 }}
               >
                 <View style={styles.recentMetaRow}>
-                  <Text style={styles.notificationTitle}>{formatNotificationLabel(item.type)}</Text>
+                  <View style={styles.notificationTitleRow}>
+                    {!item.readAt ? <View style={styles.unreadDot} /> : null}
+                    <Text style={styles.notificationTitle}>{formatNotificationLabel(item.type)}</Text>
+                  </View>
                   <Text style={styles.recentTime}>{formatSubmittedAt(item.createdAt)}</Text>
                 </View>
                 <Text style={styles.notificationBody}>
-                  {item.payload?.notes ||
-                    item.payload?.summary ||
-                    `Submission ${item.payload?.submissionId || ""} moved to ${item.payload?.status || "a new state"}.`}
+                  {buildNotificationBody(item)}
                 </Text>
+                {buildNotificationMeta(item) ? (
+                  <Text style={styles.notificationMeta}>{buildNotificationMeta(item)}</Text>
+                ) : null}
               </Pressable>
             ))
+          ) : loadingNotifications ? (
+            <Text style={styles.emptyStateText}>Loading updates...</Text>
+          ) : notificationsError ? (
+            <Text style={styles.errorStateText}>{notificationsError}</Text>
           ) : (
             <Text style={styles.emptyStateText}>
-              No updates yet. Submission review updates will appear here.
+              No updates yet. Review and publishing activity will show up here after you submit.
             </Text>
           )}
         </View>
@@ -526,22 +734,29 @@ export default function App() {
             ) : (
               <ScrollView>
                 <Text style={styles.detailStatus}>
-                  {selectedSubmissionDetail.status} · {formatSubmittedAt(selectedSubmissionDetail.created_at)}
+                  {formatStatusLabel(selectedSubmissionDetail.status)} · {formatSubmittedAt(selectedSubmissionDetail.created_at)}
                 </Text>
                 <Text style={styles.detailSummary}>
                   {selectedSubmissionDetail.raw_text?.trim() || "No caption provided"}
                 </Text>
                 <Text style={styles.detailLine}>
-                  Visibility: {selectedSubmissionDetail.visibility_target}
+                  {formatContentTypeLabel(selectedSubmissionDetail.content_type)} · {formatMediaCountLabel(selectedSubmissionDetail.media?.length)}
                 </Text>
                 <Text style={styles.detailLine}>
-                  Review score: {selectedSubmissionDetail.risk_score || "pending"}
+                  Visibility: {formatVisibilityLabel(selectedSubmissionDetail.visibility_target)}
+                </Text>
+                <Text style={styles.detailLine}>
+                  Review score: {formatRiskScoreLabel(selectedSubmissionDetail.risk_score)}
+                </Text>
+                <Text style={styles.detailLine}>
+                  Club: {selectedSubmissionDetail.club_slug}
+                  {selectedSubmissionDetail.team_slug ? ` · Team: ${selectedSubmissionDetail.team_slug}` : ""}
                 </Text>
                 {selectedSubmissionDetail.latestReviewRun ? (
                   <>
                     <Text style={styles.detailHeading}>Latest Review</Text>
                     <Text style={styles.detailLine}>
-                      {selectedSubmissionDetail.latestReviewRun.resultStatus} · {selectedSubmissionDetail.latestReviewRun.agentName}
+                      {formatStatusLabel(selectedSubmissionDetail.latestReviewRun.resultStatus)} · {selectedSubmissionDetail.latestReviewRun.agentName}
                     </Text>
                     <Text style={styles.detailBody}>
                       {selectedSubmissionDetail.latestReviewRun.summary}
@@ -552,11 +767,11 @@ export default function App() {
                   <>
                     <Text style={styles.detailHeading}>Approval</Text>
                     <Text style={styles.detailLine}>
-                      {selectedSubmissionDetail.latestApprovalRequest.state} · {selectedSubmissionDetail.latestApprovalRequest.approverName}
+                      {formatStatusLabel(selectedSubmissionDetail.latestApprovalRequest.state)} · {selectedSubmissionDetail.latestApprovalRequest.approverName}
                     </Text>
                     {selectedSubmissionDetail.latestApprovalRequest.latestAction ? (
                       <Text style={styles.detailBody}>
-                        Latest action: {selectedSubmissionDetail.latestApprovalRequest.latestAction.action}
+                        Latest action: {formatStatusLabel(selectedSubmissionDetail.latestApprovalRequest.latestAction.action)}
                         {selectedSubmissionDetail.latestApprovalRequest.latestAction.notes
                           ? ` — ${selectedSubmissionDetail.latestApprovalRequest.latestAction.notes}`
                           : ""}
@@ -572,6 +787,9 @@ export default function App() {
                     </Text>
                     <Text style={styles.detailBody}>
                       {formatSubmittedAt(selectedSubmissionDetail.publishedPost.publishedAt)}
+                      {selectedSubmissionDetail.publishedPost.destinationType
+                        ? ` · ${formatNotificationLabel(selectedSubmissionDetail.publishedPost.destinationType)}`
+                        : ""}
                     </Text>
                   </>
                 ) : null}
@@ -654,6 +872,13 @@ const styles = StyleSheet.create({
     minHeight: 120,
     textAlignVertical: "top"
   },
+  helperText: {
+    color: "#6a756f",
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: -4,
+    marginBottom: 12
+  },
   secondaryButton: {
     backgroundColor: "#f0e5d5",
     borderRadius: 16,
@@ -694,6 +919,12 @@ const styles = StyleSheet.create({
     color: "#57645f",
     fontSize: 15,
     lineHeight: 22,
+    marginBottom: 6
+  },
+  statusMetaText: {
+    color: "#8a7460",
+    fontSize: 13,
+    lineHeight: 18,
     marginBottom: 14
   },
   primaryButton: {
@@ -716,16 +947,41 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#eadfce"
   },
+  sectionIntro: {
+    color: "#67756f",
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: -2,
+    marginBottom: 4
+  },
   recentMetaRow: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
     marginBottom: 8
   },
-  recentStatus: {
-    textTransform: "capitalize",
-    color: "#17372c",
+  statusPill: {
+    backgroundColor: "#edf1ee",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6
+  },
+  statusPillSuccess: {
+    backgroundColor: "#deefe1"
+  },
+  statusPillAttention: {
+    backgroundColor: "#fbe6dc"
+  },
+  statusPillText: {
+    color: "#355047",
     fontWeight: "700"
+  },
+  statusPillTextSuccess: {
+    color: "#1f5a34"
+  },
+  statusPillTextAttention: {
+    color: "#9a4d2d"
   },
   recentTime: {
     color: "#7b867f",
@@ -737,13 +993,25 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 6
   },
+  recentProgress: {
+    color: "#53645d",
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 6
+  },
   recentDetail: {
     color: "#7a6b5b",
     fontSize: 13,
-    textTransform: "capitalize"
+    lineHeight: 18,
+    marginBottom: 3
   },
   emptyStateText: {
     color: "#6d7a74",
+    fontSize: 15,
+    lineHeight: 22
+  },
+  errorStateText: {
+    color: "#a54b24",
     fontSize: 15,
     lineHeight: 22
   },
@@ -763,6 +1031,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     borderRadius: 12
   },
+  notificationTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 1
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "#c96a37"
+  },
   notificationTitle: {
     color: "#17372c",
     fontWeight: "700"
@@ -771,6 +1051,12 @@ const styles = StyleSheet.create({
     color: "#465650",
     fontSize: 14,
     lineHeight: 21
+  },
+  notificationMeta: {
+    color: "#8a7460",
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 8
   },
   modalBackdrop: {
     flex: 1,
