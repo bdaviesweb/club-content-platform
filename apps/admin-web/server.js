@@ -567,14 +567,14 @@ function renderQueue(queue, activeId) {
       const preview = item.raw_text || item.latest_review_summary || "No caption yet.";
       return `<a class="queue-card${active}" href="/?approvalRequestId=${encodeURIComponent(item.id)}">
         <div class="header-row">
-          <strong>${index === 0 ? "Up next" : `Queue ${index + 1}`}</strong>
+          <strong>${index === 0 ? "Up next" : `Then ${index + 1}`}</strong>
           ${renderStatusBadge(band.label, band.className === "tone-high" ? "alert" : band.className === "tone-mid" ? "review" : "good")}
         </div>
         <div class="badge-row" style="margin-top:8px;">
-          ${renderStatusBadge(formatLabel(item.content_type || "post"), "neutral")}
+          ${item.team_name ? renderStatusBadge(escapeHtml(item.team_name), "neutral") : renderStatusBadge(formatLabel(item.content_type || "post"), "neutral")}
           <span class="subtle">${escapeHtml(formatRelativeTime(item.created_at))}</span>
         </div>
-        <p style="margin-top:10px; line-height:1.45;">${escapeHtml(preview).slice(0, 140)}</p>
+        <p style="margin-top:10px; line-height:1.45;">${escapeHtml(preview).slice(0, 96)}</p>
       </a>`;
     })
     .join("");
@@ -646,7 +646,7 @@ function renderMediaStage(detail) {
           ${renderStatusBadge(formatLabel(detail.content_type), "neutral")}
         </div>
         <div class="media-placeholder">
-          This item is text-first. Review the submission copy, trust the AI recommendation if it matches the content, and use notes only when the submitter can fix the issue.
+          This one is text-only. Read the caption, make the call, and leave a note only if they need to fix something.
         </div>
       </div>
     </div>`;
@@ -669,12 +669,12 @@ function renderMediaStage(detail) {
       <div class="media-title">
         <div>
           <div class="section-label">Submission preview</div>
-          <h3>${escapeHtml(detail.media.length === 1 ? 'One attached asset' : `${detail.media.length} attached assets`)}</h3>
+          <h3>${escapeHtml(detail.media.length === 1 ? '1 attached asset' : `${detail.media.length} attached assets`)}</h3>
         </div>
         ${renderStatusBadge(formatLabel(detail.content_type), "neutral")}
       </div>
       <div class="media-placeholder">
-        Inline image/video rendering is the next step. For now, reviewers can still see the asset inventory, storage keys, and content copy in one place.
+        Media rendering is still basic here. Use the caption and recommendation for the quick call, and open more details only if you need the storage trail.
       </div>
       <div class="media-list">${mediaCards}</div>
     </div>
@@ -721,7 +721,7 @@ function renderDecisionDock(detail, queueIds, recommendation) {
     <div class="panel">
       <div class="section-label">Decision</div>
       <h3 class="decision-title">Make the call.</h3>
-      <p class="subtle" style="margin-top:8px;">Approve by default. Only add notes when the submitter needs to change something or the item should stop here.</p>
+      <p class="subtle" style="margin-top:8px;">If it looks fine, approve it. If it needs work, send it back with one clear reason.</p>
 
       <div class="dock-block" style="margin-top:14px;">
         <div class="header-row">
@@ -743,11 +743,6 @@ function renderDecisionDock(detail, queueIds, recommendation) {
             <span class="subtle">Use this when the item should stop here.</span>
           </button>
         </div>
-      </div>
-
-      <div class="dock-block" style="margin-top:12px;">
-        <label class="section-label" for="actedByEmail">Reviewer email</label>
-        <input id="actedByEmail" type="text" value="${escapeHtml(detail.approver_email)}" placeholder="Reviewer email" />
       </div>
 
       <div class="dock-block" style="margin-top:12px;">
@@ -773,6 +768,14 @@ function renderDecisionDock(detail, queueIds, recommendation) {
         </div>
         <p id="action-status" class="subtle"></p>
       </div>
+
+      <details class="disclosure" style="margin-top:14px;">
+        <summary>Reviewer settings</summary>
+        <div class="disclosure-body">
+          <label class="section-label" for="actedByEmail">Reviewer email</label>
+          <input id="actedByEmail" type="text" value="${escapeHtml(detail.approver_email)}" placeholder="Reviewer email" />
+        </div>
+      </details>
     </div>
   </aside>`;
 }
@@ -785,51 +788,38 @@ function renderCenterStage(detail, recommendation) {
         <div>
           <div class="section-label">Recommendation</div>
           <h2>${escapeHtml(recommendation.decision)}</h2>
-          <p class="stage-copy"><strong>${escapeHtml(recommendation.shortReason)}</strong> ${escapeHtml(recommendation.explainer)}</p>
+          <p class="stage-copy">${escapeHtml(recommendation.shortReason)}</p>
         </div>
         <div class="badge-row">
           ${renderStatusBadge(risk.label, risk.className === "tone-high" ? "alert" : risk.className === "tone-mid" ? "review" : "good")}
-          ${renderStatusBadge(formatLabel(detail.visibility_target), "info")}
         </div>
       </div>
 
-      <div class="moderation-grid">
-        <div>
-          ${renderMediaStage(detail)}
-          <div class="stage-card content-stage" style="margin-top:14px;">
-            <div class="section-label">What they submitted</div>
-            <p class="content-copy">${escapeHtml(detail.raw_text || "No caption or summary provided.")}</p>
-            <div class="content-meta" style="margin-top:14px;">
-              <span class="subtle">${escapeHtml(detail.submitter_name)}</span>
-              ${detail.team_name ? `<span class="subtle">${escapeHtml(detail.team_name)}</span>` : ""}
-              <span class="subtle">Submitted ${escapeHtml(formatRelativeTime(detail.created_at))}</span>
-            </div>
-          </div>
+      ${renderMediaStage(detail)}
+      <div class="stage-card content-stage" style="margin-top:14px;">
+        <div class="section-label">What they submitted</div>
+        <p class="content-copy">${escapeHtml(detail.raw_text || "No caption or summary provided.")}</p>
+        <div class="badge-row" style="margin-top:14px;">
+          <span class="subtle">${escapeHtml(detail.submitter_name)}</span>
+          ${detail.team_name ? `<span class="subtle">${escapeHtml(detail.team_name)}</span>` : ""}
+          <span class="subtle">Submitted ${escapeHtml(formatRelativeTime(detail.created_at))}</span>
         </div>
-        <div class="summary-stack">
-          <div class="summary-item">
-            <strong>Quick read</strong>
-            <p>${escapeHtml(recommendation.shortReason)}</p>
-          </div>
-          <div class="summary-item">
-            <strong>AI summary</strong>
-            <p>${escapeHtml(detail.review_runs[0]?.summary || detail.routing_decision?.rationale || "No summary recorded.")}</p>
-          </div>
-          <div class="summary-item">
-            <strong>Submitted by</strong>
-            <div class="badge-row" style="margin-top:8px;">
-              ${renderStatusBadge(formatLabel(detail.content_type), "neutral")}
-              ${renderStatusBadge(formatLabel(detail.submission_status), "review")}
-            </div>
-            <p style="margin-top:8px;">${escapeHtml(detail.submitter_name)}${detail.submitter_email ? ` • ${escapeHtml(detail.submitter_email)}` : ""}</p>
-          </div>
-        </div>
+      </div>
+
+      <div class="stage-card" style="margin-top:14px;">
+        <div class="section-label">Why this was suggested</div>
+        <p style="margin-top:8px; line-height:1.55;">${escapeHtml(detail.review_runs[0]?.summary || detail.routing_decision?.rationale || recommendation.explainer || "No summary recorded.")}</p>
       </div>
     </div>
 
     <details class="disclosure">
       <summary>More details</summary>
       <div class="disclosure-body">
+        <div class="badge-row" style="margin-bottom:12px;">
+          ${renderStatusBadge(formatLabel(detail.visibility_target), "info")}
+          ${renderStatusBadge(formatLabel(detail.content_type), "neutral")}
+          ${renderStatusBadge(formatLabel(detail.submission_status), "review")}
+        </div>
         <div class="signal-list">
           <div class="signal-card">
             <strong>Routing rationale</strong>
