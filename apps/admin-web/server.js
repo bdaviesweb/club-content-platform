@@ -309,12 +309,12 @@ function layout(content, title = "Club Content Ops") {
         display: flex;
         justify-content: space-between;
         gap: 14px;
-        align-items: center;
-        margin-bottom: 18px;
+        align-items: flex-start;
+        margin-bottom: 14px;
       }
       .quick-header h1 {
-        font-size: clamp(1.7rem, 5vw, 2.4rem);
-        line-height: 1;
+        font-size: clamp(1.9rem, 6vw, 2.8rem);
+        line-height: 0.96;
       }
       .quick-actions {
         display: flex;
@@ -323,7 +323,7 @@ function layout(content, title = "Club Content Ops") {
         align-items: center;
       }
       .quick-main {
-        max-width: 860px;
+        max-width: 760px;
         margin: 0 auto;
       }
       .quick-link {
@@ -447,8 +447,8 @@ function layout(content, title = "Club Content Ops") {
       .media-preview {
         display: block;
         width: 100%;
-        max-height: 420px;
-        object-fit: cover;
+        max-height: 560px;
+        object-fit: contain;
         background: rgba(255,255,255,0.9);
       }
       .media-thumb-grid {
@@ -544,7 +544,7 @@ function layout(content, title = "Club Content Ops") {
       .decision-option {
         border-radius: 18px;
         border: 1px solid var(--line);
-        padding: 14px;
+        padding: 18px;
         background: var(--surface-strong);
         cursor: pointer;
         text-align: left;
@@ -564,6 +564,13 @@ function layout(content, title = "Club Content Ops") {
         box-shadow: inset 0 0 0 2px rgba(139, 52, 46, 0.14);
       }
       .decision-option strong { display: block; margin-bottom: 6px; }
+      .quick-main .decision-option strong {
+        font-size: 1.06rem;
+      }
+      .quick-main .decision-option .subtle {
+        font-size: 0.98rem;
+        line-height: 1.45;
+      }
       input[type="text"],
       textarea {
         width: 100%;
@@ -645,6 +652,49 @@ function layout(content, title = "Club Content Ops") {
           grid-template-columns: 1fr;
         }
         .decision-dock { position: static; }
+      }
+      @media (max-width: 720px) {
+        main {
+          padding: 18px 12px 28px;
+        }
+        .quick-header {
+          gap: 10px;
+          margin-bottom: 12px;
+        }
+        .quick-actions {
+          gap: 8px;
+        }
+        .panel {
+          padding: 14px;
+          border-radius: 18px;
+        }
+        .stage-shell {
+          padding: 14px;
+        }
+        .stage-header h2 {
+          font-size: 2rem;
+        }
+        .content-copy {
+          font-size: 1.08rem;
+        }
+        .media-hero {
+          padding: 12px;
+          min-height: auto;
+        }
+        .media-preview {
+          max-height: 460px;
+        }
+        .decision-option {
+          padding: 16px;
+          border-radius: 16px;
+        }
+        .dock-actions {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        .dock-actions button {
+          width: 100%;
+        }
       }
     </style>
   </head>
@@ -1235,10 +1285,10 @@ async function renderQuickReviewHome(activeId) {
         <div>
           <div class="eyebrow">Quick review</div>
           <h1>Review one and keep moving.</h1>
-          <p class="subtle" style="margin-top:10px;">Focused mobile-first view for fast approvals.</p>
+          <p class="subtle" style="margin-top:8px;">Focused mobile-first view for fast approvals.</p>
         </div>
         <div class="quick-actions">
-          ${renderStatusBadge(`${queue.length} waiting`, queue.length ? "review" : "good")}
+          ${renderStatusBadge(`${queue.length} in queue`, queue.length ? "review" : "good")}
           <span class="subtle">${escapeHtml(`${remainingCount} after this`)}</span>
           <a class="quick-link" href="/">Open full workspace</a>
         </div>
