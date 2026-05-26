@@ -1099,7 +1099,7 @@ function renderDecisionDock(detail, queueIds, recommendation) {
             <strong>Ready to send</strong>
             <p id="note-preview-text"></p>
             <div class="note-preview-actions">
-              <span class="note-preview-badge">Default note loaded</span>
+              <span class="note-preview-badge" id="note-preview-badge-text">Default note loaded</span>
               <button class="inline-link" type="button" id="note-toggle" onclick="toggleNoteEditor()">Edit note</button>
             </div>
           </div>
@@ -1262,6 +1262,24 @@ async function renderHome(activeId) {
         updateNotePreview();
       }
 
+      function animateIn(element, offset = 12) {
+        if (!element || typeof element.animate !== 'function') {
+          return;
+        }
+
+        element.animate(
+          [
+            { opacity: 0, transform: 'translateY(' + offset + 'px) scale(0.985)' },
+            { opacity: 1, transform: 'translateY(0px) scale(1)' }
+          ],
+          {
+            duration: 190,
+            easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+            fill: 'both'
+          }
+        );
+      }
+
       function setNoteEditorVisible(visible) {
         const editor = document.getElementById('note-editor');
         const toggle = document.getElementById('note-toggle');
@@ -1285,14 +1303,22 @@ async function renderHome(activeId) {
         const input = document.getElementById('notes');
         const preview = document.getElementById('note-preview');
         const previewText = document.getElementById('note-preview-text');
+        const badge = document.getElementById('note-preview-badge-text');
 
         if (!input || !preview || !previewText) {
           return;
         }
 
         const value = input.value.trim();
+        const wasHidden = preview.classList.contains('hidden');
         preview.classList.toggle('hidden', !value);
         previewText.textContent = value || '';
+        if (badge) {
+          badge.textContent = value ? 'Reply ready' : 'Default note loaded';
+        }
+        if (value && wasHidden) {
+          animateIn(preview, 10);
+        }
       }
 
       function toggleNoteEditor(forceOpen) {
@@ -1309,6 +1335,9 @@ async function renderHome(activeId) {
         selectedReasonCode = code;
         document.querySelectorAll('[data-reason-code]').forEach((button) => {
           button.classList.toggle('active', button.dataset.reasonCode === code);
+          if (button.dataset.reasonCode === code) {
+            animateIn(button, 4);
+          }
         });
         const noteGuidance = document.getElementById('note-guidance');
         if (noteGuidance && helper) {
@@ -1348,6 +1377,7 @@ async function renderHome(activeId) {
           })
           .join('');
         chips.classList.remove('hidden');
+        animateIn(chips, 10);
 
         if (notes && !notes.value.trim()) {
           notes.value = reasons[0].text;
@@ -1401,6 +1431,7 @@ async function renderHome(activeId) {
           submit.className = 'button-warn';
           decisionCopy.textContent = 'This will return the item to the submitter. A clear note is required.';
           notesWrap.classList.remove('hidden');
+          animateIn(notesWrap, 14);
           noteGuidance.classList.remove('hidden');
           noteGuidance.textContent = 'Pick the closest fix path.';
           notes.placeholder = 'Tell the submitter exactly what needs to change.';
@@ -1410,6 +1441,7 @@ async function renderHome(activeId) {
           submit.className = 'button-danger';
           decisionCopy.textContent = 'This will stop the item here. Record a short reason for the audit trail.';
           notesWrap.classList.remove('hidden');
+          animateIn(notesWrap, 14);
           noteGuidance.classList.remove('hidden');
           noteGuidance.textContent = 'Pick the closest stop reason.';
           notes.placeholder = 'Explain why this should not move forward.';
