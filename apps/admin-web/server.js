@@ -988,6 +988,10 @@ function renderDecisionDock(detail, queueIds, recommendation) {
       <div class="dock-block" style="margin-top:12px;">
         <div class="section-label">Reason if needed</div>
         <p id="decision-copy" class="subtle decision-copy"></p>
+        <div id="reject-confirmation" class="action-feedback alert hidden" style="margin-top:10px;">
+          <strong>Confirm this rejection</strong>
+          <p style="margin-top:6px; line-height:1.45;">Quick review asks for one more tap before a rejection goes through. This helps avoid accidental rejects on phone.</p>
+        </div>
         <div id="notes-wrap" class="hidden" style="margin-top:10px;">
           <p id="note-guidance" class="subtle note-guidance hidden" style="margin-bottom:10px;"></p>
           <textarea id="notes" placeholder="Tell the submitter exactly what needs to change."></textarea>
@@ -1123,6 +1127,7 @@ async function renderHome(activeId) {
     <script>
       const queueIds = ${JSON.stringify(queueIds)};
       let selectedAction = ${JSON.stringify(detail ? recommendation.defaultAction : "approve")};
+      let rejectConfirmArmed = false;
 
       function setButtonsDisabled(disabled) {
         document.querySelectorAll('button').forEach((button) => {
@@ -1150,6 +1155,10 @@ async function renderHome(activeId) {
         const notes = document.getElementById('notes');
         const decisionCopy = document.getElementById('decision-copy');
         const noteGuidance = document.getElementById('note-guidance');
+        const rejectConfirmation = document.getElementById('reject-confirmation');
+
+        rejectConfirmArmed = false;
+        rejectConfirmation.classList.add('hidden');
 
         if (action === 'approve') {
           submit.textContent = 'Approve and next';
@@ -1375,6 +1384,9 @@ async function renderHome(activeId) {
         const actedByEmail = document.getElementById('actedByEmail').value.trim();
         const notes = document.getElementById('notes').value.trim();
         const status = document.getElementById('action-status');
+        const submit = document.getElementById('submit-action');
+        const rejectConfirmation = document.getElementById('reject-confirmation');
+        const isQuickReview = window.location.pathname === '/quick-review';
 
         if (!actedByEmail) {
           status.textContent = 'Reviewer email is required.';
@@ -1383,6 +1395,13 @@ async function renderHome(activeId) {
         if (['reject', 'request_changes'].includes(selectedAction) && !notes) {
           status.textContent = 'Add a clear reason before sending this back or rejecting it.';
           document.getElementById('notes').focus();
+          return;
+        }
+        if (isQuickReview && selectedAction === 'reject' && !rejectConfirmArmed) {
+          rejectConfirmArmed = true;
+          rejectConfirmation.classList.remove('hidden');
+          submit.textContent = 'Confirm rejection';
+          status.textContent = 'Reject requires one more tap on quick review.';
           return;
         }
 
