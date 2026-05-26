@@ -279,17 +279,22 @@ Failed worker events can now be inspected and retried without touching the datab
 
 The admin console also includes a workflow recovery panel for retrying failed events.
 
-### Dev server reviewer access
+### Reviewer access
 
-The VPS-hosted reviewer console listens on port `3002` and is intended to stay private.
+Primary public reviewer URL:
 
+- `https://review-clubcontent.davmn.net`
+
+If admin basic-auth credentials are configured on the VPS, your browser will prompt for them before loading the queue.
+
+For private-only access, the VPS-hosted reviewer console still listens on port `3002`.
 Use an SSH tunnel from your machine:
 
 ```bash
 ssh -L 43002:localhost:3002 hermes-dev-zt
 ```
 
-Then open `http://localhost:43002`. If admin basic-auth credentials are configured on the VPS, your browser will prompt for them before loading the queue.
+Then open `http://localhost:43002`. Keep the tunnel path as a fallback.
 
 ## Media Uploads
 

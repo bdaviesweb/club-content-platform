@@ -9,6 +9,7 @@ import {
   Image,
   ImageBackground,
   Modal,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -24,7 +25,7 @@ const defaultConfig = {
   clubSlug: process.env.EXPO_PUBLIC_CLUB_SLUG || "demo-soccer-club",
   teamSlug: process.env.EXPO_PUBLIC_TEAM_SLUG || "u14-girls",
   submitterEmail:
-    process.env.EXPO_PUBLIC_SUBMITTER_EMAIL || "clubhqpro@gmail.com",
+    process.env.EXPO_PUBLIC_SUBMITTER_EMAIL || "coach@demo-club.local",
   reviewerEmail:
     process.env.EXPO_PUBLIC_REVIEWER_EMAIL || "reviewer@demo-club.local"
 };
@@ -230,6 +231,130 @@ function resubmitShortcutsForReasonCode(reasonCode) {
     default:
       return [];
   }
+}
+
+const reviewQueuePreviewItems = [
+  {
+    id: "preview-review-1",
+    submission_id: "0831d781-00b5-4a5c-b81d-349f2ca466a6",
+    state: "pending",
+    created_at: "2026-05-26T14:43:42.879Z",
+    submission_status: "needs_human_review",
+    raw_text: "Fresh photo upload to verify the live reviewer preview.",
+    risk_score: "0.10",
+    approver_name: "Club Comms",
+    latest_review_summary: "Low-risk submission. Safe to route for standard internal approval.",
+    content_type: "photo",
+    team_name: "U14 Girls"
+  },
+  {
+    id: "preview-review-2",
+    submission_id: "95ee662c-6b8b-4276-b776-b492618a6124",
+    state: "pending",
+    created_at: "2026-05-26T15:42:58.018Z",
+    submission_status: "needs_human_review",
+    raw_text: "Mia scored twice in a 3-1 win over Lakeville North.",
+    risk_score: "0.10",
+    approver_name: "Club Comms",
+    latest_review_summary: "Low-risk submission. Safe to route for standard internal approval.",
+    content_type: "photo",
+    team_name: "U14 Girls"
+  }
+];
+
+const webReviewPreviewSubmissionIds = new Set(
+  reviewQueuePreviewItems.map((item) => item.submission_id)
+);
+
+function isWebReviewPreviewSubmission(submissionId) {
+  return Platform.OS === "web" && webReviewPreviewSubmissionIds.has(submissionId);
+}
+
+function createPreviewPosterDataUrl(title, subtitle, tone = "#9f8cff") {
+  const safeTitle = String(title || "Preview")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+  const safeSubtitle = String(subtitle || "Club Content")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1000" viewBox="0 0 1400 1000">
+      <defs>
+        <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#f7f4ff"/>
+          <stop offset="48%" stop-color="#dbeeff"/>
+          <stop offset="100%" stop-color="#d6cdfa"/>
+        </linearGradient>
+        <radialGradient id="glow" cx="20%" cy="20%" r="70%">
+          <stop offset="0%" stop-color="${tone}" stop-opacity="0.75"/>
+          <stop offset="100%" stop-color="${tone}" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <rect width="1400" height="1000" fill="url(#bg)"/>
+      <circle cx="1100" cy="220" r="210" fill="url(#glow)"/>
+      <circle cx="220" cy="760" r="250" fill="#fff3d9" fill-opacity="0.58"/>
+      <rect x="90" y="88" rx="34" ry="34" width="1220" height="824" fill="rgba(18,55,45,0.08)" stroke="rgba(255,255,255,0.72)" stroke-width="3"/>
+      <rect x="150" y="150" rx="28" ry="28" width="360" height="64" fill="rgba(255,255,255,0.56)"/>
+      <rect x="150" y="248" rx="30" ry="30" width="620" height="430" fill="rgba(255,255,255,0.74)"/>
+      <rect x="810" y="248" rx="30" ry="30" width="340" height="430" fill="rgba(255,255,255,0.56)"/>
+      <rect x="150" y="736" rx="24" ry="24" width="1000" height="70" fill="rgba(255,255,255,0.44)"/>
+      <text x="162" y="194" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="700" fill="#1d2a46">Club Content preview</text>
+      <text x="175" y="334" font-family="Inter, Arial, sans-serif" font-size="48" font-weight="800" fill="#1d2342">${safeTitle}</text>
+      <text x="175" y="392" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="500" fill="#4e5b79">${safeSubtitle}</text>
+      <text x="865" y="328" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700" fill="#1f2f56">Review ready</text>
+      <text x="865" y="374" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="500" fill="#5f6b87">Tap approve, send back, or reject.</text>
+      <text x="175" y="780" font-family="Inter, Arial, sans-serif" font-size="21" font-weight="700" fill="#31415f">Browser preview only</text>
+      <text x="175" y="812" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="500" fill="#5d6a83">The native build will show the real submission media here.</text>
+    </svg>
+  `;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg.trim())}`;
+}
+
+function buildWebReviewPreviewDetail(item) {
+  if (!item) return null;
+  const previewUrl = createPreviewPosterDataUrl(
+    item.raw_text || "Fresh review preview",
+    item.latest_review_summary || "Browser preview queue item."
+  );
+
+  return {
+    id: item.submission_id,
+    club_slug: "demo-soccer-club",
+    team_slug: "u14-girls",
+    content_type: item.content_type || "photo",
+    visibility_target: "internal",
+    raw_text: item.raw_text,
+    status: item.submission_status || "needs_human_review",
+    created_at: item.created_at,
+    risk_score: item.risk_score,
+    media: [
+      {
+        objectKey: `preview-${item.submission_id}`,
+        previewUrl,
+        mediaType: "image",
+        mimeType: "image/svg+xml"
+      }
+    ],
+    latestReviewRun: {
+      resultStatus: "needs_review",
+      agentName: "Browser preview",
+      summary: item.latest_review_summary || "Browser preview queue item."
+    },
+    latestApprovalRequest: {
+      id: item.id,
+      state: item.state || "pending",
+      approverName: item.approver_name || "Club Comms",
+      latestAction: null
+    }
+  };
+}
+
+function findWebReviewPreviewItem(submissionId) {
+  return reviewQueuePreviewItems.find((item) => item.submission_id === submissionId) || null;
 }
 
 const reviewReasonSets = {
@@ -467,6 +592,19 @@ export default function App() {
   }
 
   async function loadSubmissionDetail(submissionId) {
+    const previewItem = isWebReviewPreviewSubmission(submissionId)
+      ? findWebReviewPreviewItem(submissionId)
+      : null;
+    if (previewItem) {
+      const payload = buildWebReviewPreviewDetail(previewItem);
+      setSelectedSubmissionDetail(payload);
+      setSelectedSubmissionId(submissionId);
+      setResubmissionText(payload.raw_text || "");
+      setResubmissionAsset(null);
+      setStatus("Browser preview mode: showing a sample review item.");
+      return;
+    }
+
     setLoadingDetail(true);
     try {
       const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
@@ -672,6 +810,13 @@ export default function App() {
       setReviewQueue(items);
       return items;
     } catch (error) {
+      if (Platform.OS === "web") {
+        setReviewQueue(reviewQueuePreviewItems);
+        setReviewQueueError("");
+        setStatus("Browser preview mode: showing a sample review queue.");
+        return reviewQueuePreviewItems;
+      }
+
       setReviewQueueError(error.message || "Could not load review queue");
       setStatus(error.message || "Could not load review queue");
       return [];
@@ -724,6 +869,12 @@ export default function App() {
 
     if (reviewAction !== "approve" && !reviewActionNotes.trim()) {
       Alert.alert("Note required", "Add a short note before you send this back or reject it.");
+      return;
+    }
+
+    if (isWebReviewPreviewSubmission(selectedSubmissionDetail?.id)) {
+      setReviewActionStatus("Browser preview mode. Actions are disabled here.");
+      Alert.alert("Preview only", "This browser view is for layout inspection. Use the native app or TestFlight for real review actions.");
       return;
     }
 

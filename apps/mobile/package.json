@@ -13,12 +13,16 @@
   },
   "dependencies": {
     "expo": "~54.0.12",
+    "expo-blur": "~15.0.8",
     "expo-document-picker": "~14.0.7",
-    "expo-file-system": "~18.1.11",
+    "expo-file-system": "~19.0.22",
     "expo-image-picker": "~17.0.11",
+    "expo-linear-gradient": "~15.0.8",
     "expo-status-bar": "~3.0.8",
     "react": "19.1.0",
-    "react-native": "0.81.4"
+    "react-dom": "^19.1.0",
+    "react-native": "0.81.5",
+    "react-native-web": "^0.21.2"
   },
   "devDependencies": {
     "eas-cli": "^16.17.0"

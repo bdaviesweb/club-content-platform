@@ -5,7 +5,8 @@ const bundleIdentifier =
   process.env.EXPO_PUBLIC_IOS_BUNDLE_IDENTIFIER ||
   "com.hermes.clubcontent";
 const easProjectId =
-  process.env.EXPO_PUBLIC_EAS_PROJECT_ID || "83871f8c-a185-47d5-8f19-5e2749dc81d2";
+  process.env.EXPO_PUBLIC_EAS_PROJECT_ID ||
+  "83871f8c-a185-47d5-8f19-5e2749dc81d2";
 const expoOwner = process.env.EXPO_PUBLIC_EXPO_OWNER || "clubhqpro";
 
 module.exports = {
@@ -30,7 +31,7 @@ module.exports = {
         "com.hermes.clubcontent"
     },
     extra: {
-      eas: easProjectId ? { projectId: easProjectId } : undefined
+      eas: { projectId: easProjectId }
     }
   }
 };
