@@ -552,6 +552,108 @@ async function handleListSubmissions(res, query) {
   sendJson(res, 200, { items: result.rows });
 }
 
+async function handleResubmitSubmission(req, res, submissionId) {
+  const body = await readJson(req);
+  const submitterEmail = normalizeOptionalString(body.submitterEmail);
+  const rawText = normalizeOptionalString(body.rawText);
+  const visibilityTarget = normalizeOptionalString(body.visibilityTarget);
+
+  if (!submitterEmail) {
+    sendJson(res, 400, { error: "submitterEmail is required" });
+    return;
+  }
+
+  const result = await withTransaction(async (client) => {
+    const submissionResult = await client.query(
+      `
+      SELECT s.*, u.email AS submitter_email
+      FROM submissions s
+      JOIN users u ON u.id = s.submitted_by_user_id
+      WHERE s.id = $1
+      FOR UPDATE
+      `,
+      [submissionId]
+    );
+
+    if (!submissionResult.rowCount) {
+      return null;
+    }
+
+    const submission = submissionResult.rows[0];
+    if (submission.submitter_email !== submitterEmail) {
+      throw new Error("Only the original submitter can resubmit this item");
+    }
+
+    if (submission.status !== "needs_metadata") {
+      throw new Error("Only items sent back for changes can be resubmitted");
+    }
+
+    const userResult = await client.query(
+      `SELECT id FROM users WHERE email = $1`,
+      [submitterEmail]
+    );
+
+    if (!userResult.rowCount) {
+      throw new Error(`Unknown submitterEmail: ${submitterEmail}`);
+    }
+
+    await client.query(
+      `
+      UPDATE submissions
+      SET raw_text = COALESCE($2, raw_text),
+          visibility_target = COALESCE($3, visibility_target),
+          status = 'received',
+          risk_score = NULL,
+          routing_decision = NULL,
+          caption_draft = NULL,
+          updated_at = NOW()
+      WHERE id = $1
+      `,
+      [submissionId, rawText, visibilityTarget]
+    );
+
+    await client.query(
+      `
+      INSERT INTO submission_events (submission_id, event_name, payload)
+      VALUES ($1, $2, $3::jsonb)
+      `,
+      [
+        submissionId,
+        submissionEvents.created,
+        JSON.stringify({
+          resubmitted: true,
+          submitterEmail,
+          rawText: rawText || submission.raw_text || null
+        })
+      ]
+    );
+
+    await client.query(
+      `
+      INSERT INTO audit_logs (actor_user_id, entity_type, entity_id, action, metadata)
+      VALUES ($1, 'submission', $2, 'resubmitted', $3::jsonb)
+      `,
+      [
+        userResult.rows[0].id,
+        submissionId,
+        JSON.stringify({
+          visibilityTarget: visibilityTarget || submission.visibility_target,
+          rawText: rawText || submission.raw_text || null
+        })
+      ]
+    );
+
+    return { id: submissionId, status: "received" };
+  });
+
+  if (!result) {
+    sendNotFound(res);
+    return;
+  }
+
+  sendJson(res, 200, { submission: result });
+}
+
 async function handleApprovalQueue(res) {
   const result = await getPool().query(
     `
@@ -924,7 +1026,7 @@ async function handleRegisterPushToken(req, res) {
     );
 
     if (!userResult.rowCount) {
-      throw new Error(`Unknown userEmail: ${userEmail}`);
+      return null;
     }
 
     const userId = userResult.rows[0].id;
@@ -964,6 +1066,11 @@ async function handleRegisterPushToken(req, res) {
       tokenPreview: enabled ? maskPushToken(pushToken) : null
     };
   });
+
+  if (!result) {
+    sendNotFound(res);
+    return;
+  }
 
   sendJson(res, 200, { registration: result });
 }
@@ -1322,6 +1429,14 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && /^\/submissions\/[^/]+$/.test(url.pathname)) {
       await handleGetSubmission(res, url.pathname.split("/")[2]);
+      return;
+    }
+
+    if (
+      req.method === "POST" &&
+      /^\/submissions\/[^/]+\/resubmit$/.test(url.pathname)
+    ) {
+      await handleResubmitSubmission(req, res, url.pathname.split("/")[2]);
       return;
     }
 

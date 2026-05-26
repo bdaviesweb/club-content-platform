@@ -1,5 +1,6 @@
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
+import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -195,6 +196,10 @@ function isVideoAsset(selectedAsset) {
   );
 }
 
+function GlassLayer() {
+  return <View pointerEvents="none" style={styles.glassFillSoft} />;
+}
+
 export default function App() {
   const [apiBaseUrl, setApiBaseUrl] = useState(defaultConfig.apiBaseUrl);
   const [clubSlug, setClubSlug] = useState(defaultConfig.clubSlug);
@@ -214,6 +219,8 @@ export default function App() {
   const [selectedSubmissionId, setSelectedSubmissionId] = useState(null);
   const [selectedSubmissionDetail, setSelectedSubmissionDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [resubmissionText, setResubmissionText] = useState("");
+  const [resubmittingDetail, setResubmittingDetail] = useState(false);
   const [activeView, setActiveView] = useState("post");
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
@@ -301,6 +308,7 @@ export default function App() {
       const payload = await response.json();
       setSelectedSubmissionDetail(payload);
       setSelectedSubmissionId(submissionId);
+      setResubmissionText(payload.raw_text || "");
     } catch (error) {
       setStatus(error.message || "Could not load submission detail");
       Alert.alert("Detail unavailable", error.message || "Unknown error");
@@ -330,6 +338,39 @@ export default function App() {
 
   async function refreshStatusFeed() {
     await Promise.all([loadRecentSubmissions(), loadNotifications()]);
+  }
+
+  async function resubmitSelectedSubmission() {
+    if (!selectedSubmissionDetail) return;
+
+    setResubmittingDetail(true);
+    try {
+      const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
+      const response = await fetch(
+        `${baseUrl}/submissions/${selectedSubmissionDetail.id}/resubmit`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            submitterEmail: submitterEmail.trim(),
+            rawText: resubmissionText.trim(),
+            visibilityTarget: selectedSubmissionDetail.visibility_target
+          })
+        }
+      );
+
+      if (!response.ok) throw new Error(`Resubmit failed: ${response.status}`);
+
+      await loadSubmissionDetail(selectedSubmissionDetail.id);
+      await refreshStatusFeed();
+      setStatus("Resubmitted and back in review.");
+      Alert.alert("Back in review", "Your update was sent back into the review queue.");
+    } catch (error) {
+      setStatus(error.message || "Could not resubmit");
+      Alert.alert("Resubmit failed", error.message || "Unknown error");
+    } finally {
+      setResubmittingDetail(false);
+    }
   }
 
   useEffect(() => {
@@ -475,6 +516,16 @@ export default function App() {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
       <View style={styles.screen}>
+        <LinearGradient
+          colors={["#f4f0ff", "#ece8ff", "#eaf8ff"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.screenGradient}
+        />
+        <View style={styles.backgroundGlowA} />
+        <View style={styles.backgroundGlowB} />
+        <View style={styles.backgroundGlowC} />
+
         <View style={styles.chromeBar}>
           <View>
             <Text style={styles.appName}>Club Content</Text>
@@ -507,6 +558,7 @@ export default function App() {
             <>
               {!asset ? (
                 <View style={styles.captureStage}>
+                  <GlassLayer />
                   <View style={styles.captureGlowOne} />
                   <View style={styles.captureGlowTwo} />
                   <Text style={styles.captureKicker}>Capture first</Text>
@@ -531,48 +583,82 @@ export default function App() {
                 </View>
               ) : (
                 <View style={styles.previewStage}>
-                  <View style={styles.previewHeaderRow}>
-                    <View>
-                      <Text style={styles.captureKicker}>Preview</Text>
-                      <Text style={styles.previewTitle}>Looks good?</Text>
-                    </View>
-                    <Pressable style={styles.topGhostButton} onPress={clearDraft}>
-                      <Text style={styles.topGhostButtonText}>Start over</Text>
-                    </Pressable>
-                  </View>
-
                   {isVideoAsset(asset) ? (
                     <View style={styles.videoPreviewStage}>
-                      <View style={styles.previewMediaOverlay}>
-                        <View style={styles.previewChip}>
-                          <Text style={styles.previewChipText}>Video</Text>
+                      <LinearGradient
+                        colors={["rgba(171, 161, 247, 0.20)", "rgba(44, 34, 96, 0.92)"]}
+                        start={{ x: 0.18, y: 0 }}
+                        end={{ x: 0.82, y: 1 }}
+                        style={styles.previewImageShade}
+                      >
+                        <View style={styles.previewTopBar}>
+                          <View>
+                            <Text style={styles.previewEyebrow}>Preview</Text>
+                            <Text style={styles.previewHeroTitle}>Ready to post?</Text>
+                          </View>
+                          <Pressable style={styles.previewTopButton} onPress={clearDraft}>
+                            <Text style={styles.previewTopButtonText}>Start over</Text>
+                          </Pressable>
                         </View>
-                        <Text style={styles.videoPreviewName}>{asset.name}</Text>
-                        <Text style={styles.videoPreviewCopy}>
-                          Playback preview is the next upgrade. For now, this clip is selected and ready to submit.
-                        </Text>
-                      </View>
+
+                        <View style={styles.previewBottomStack}>
+                          <View style={styles.previewChipRow}>
+                            <View style={styles.previewChip}>
+                              <Text style={styles.previewChipText}>Video</Text>
+                            </View>
+                            <View style={styles.previewChip}>
+                              <Text style={styles.previewChipText}>{formatVisibilityLabel(visibilityTarget)}</Text>
+                            </View>
+                          </View>
+                          <View style={styles.previewMediaOverlay}>
+                            <Text style={styles.videoPreviewName}>{asset.name}</Text>
+                            <Text style={styles.videoPreviewCopy}>
+                              Playback preview is the next upgrade. For now, this clip is selected and ready to submit.
+                            </Text>
+                          </View>
+                        </View>
+                      </LinearGradient>
                     </View>
                   ) : (
                     <ImageBackground source={{ uri: asset.uri }} style={styles.previewImage} imageStyle={styles.previewImageMedia}>
-                      <View style={styles.previewImageShade}>
-                        <View style={styles.previewChipRow}>
-                          <View style={styles.previewChip}>
-                            <Text style={styles.previewChipText}>Photo</Text>
+                      <LinearGradient
+                        colors={["rgba(255,255,255,0.08)", "rgba(64, 54, 124, 0.14)", "rgba(26, 22, 58, 0.78)"]}
+                        locations={[0, 0.54, 1]}
+                        start={{ x: 0.5, y: 0 }}
+                        end={{ x: 0.5, y: 1 }}
+                        style={styles.previewImageShade}
+                      >
+                        <View style={styles.previewTopBar}>
+                          <View>
+                            <Text style={styles.previewEyebrow}>Preview</Text>
+                            <Text style={styles.previewHeroTitle}>Ready to post?</Text>
                           </View>
-                          <View style={styles.previewChip}>
-                            <Text style={styles.previewChipText}>{formatVisibilityLabel(visibilityTarget)}</Text>
+                          <Pressable style={styles.previewTopButton} onPress={clearDraft}>
+                            <Text style={styles.previewTopButtonText}>Start over</Text>
+                          </Pressable>
+                        </View>
+
+                        <View style={styles.previewBottomStack}>
+                          <View style={styles.previewChipRow}>
+                            <View style={styles.previewChip}>
+                              <Text style={styles.previewChipText}>Photo</Text>
+                            </View>
+                            <View style={styles.previewChip}>
+                              <Text style={styles.previewChipText}>{formatVisibilityLabel(visibilityTarget)}</Text>
+                            </View>
+                          </View>
+                          <View style={styles.previewMediaOverlay}>
+                            <Text style={styles.previewAssetName}>{asset.name}</Text>
+                            <Text style={styles.previewOverlayHint}>Check the shot, add a short note, and send it in.</Text>
                           </View>
                         </View>
-                        <View style={styles.previewMediaOverlay}>
-                          <Text style={styles.previewAssetName}>{asset.name}</Text>
-                          <Text style={styles.previewOverlayHint}>Check the shot, add a short note, and send it in.</Text>
-                        </View>
-                      </View>
+                      </LinearGradient>
                     </ImageBackground>
                   )}
 
                   <View style={styles.composerSheet}>
+                    <GlassLayer />
+                    <View style={styles.sheetHandle} />
                     <View style={styles.sheetTopRow}>
                       <View>
                         <Text style={styles.sheetLabel}>Almost there</Text>
@@ -638,6 +724,7 @@ export default function App() {
               )}
 
               <View style={styles.miniStatusCard}>
+                <GlassLayer />
                 <Text style={styles.miniStatusKicker}>Latest status</Text>
                 <Text style={styles.miniStatusTitle}>
                   {latestSubmission ? formatStatusLabel(latestSubmission.status) : "No posts yet"}
@@ -653,25 +740,24 @@ export default function App() {
           ) : (
             <>
               <View style={styles.statusHeroCard}>
+                <GlassLayer />
                 <Text style={styles.statusHeroKicker}>Your posts</Text>
                 <Text style={styles.statusHeroTitle}>Clear status, no digging.</Text>
                 <Text style={styles.statusHeroBody}>
-                  Check what is live, what needs attention, and what is still waiting on review without opening the admin side.
+                  The latest changes show up here so you can see what moved, what needs attention, and what already made it through.
                 </Text>
-                <View style={styles.statusCountRow}>
-                  <View style={styles.statusCountPillPrimary}>
-                    <Text style={styles.statusCountValuePrimary}>{submissionStats.inReview}</Text>
-                    <Text style={styles.statusCountLabelPrimary}>In review right now</Text>
+                <View style={styles.statusSummaryRow}>
+                  <View style={styles.statusSummaryPill}>
+                    <Text style={styles.statusSummaryValue}>{submissionStats.inReview}</Text>
+                    <Text style={styles.statusSummaryLabel}>In review</Text>
                   </View>
-                  <View style={styles.statusCountStack}>
-                    <View style={styles.statusCountPillSmall}>
-                      <Text style={styles.statusCountValueSmall}>{submissionStats.needsAttention}</Text>
-                      <Text style={styles.statusCountLabelSmall}>Needs attention</Text>
-                    </View>
-                    <View style={styles.statusCountPillSmall}>
-                      <Text style={styles.statusCountValueSmall}>{submissionStats.published}</Text>
-                      <Text style={styles.statusCountLabelSmall}>Posted</Text>
-                    </View>
+                  <View style={styles.statusSummaryPill}>
+                    <Text style={styles.statusSummaryValue}>{submissionStats.needsAttention}</Text>
+                    <Text style={styles.statusSummaryLabel}>Needs you</Text>
+                  </View>
+                  <View style={styles.statusSummaryPill}>
+                    <Text style={styles.statusSummaryValue}>{submissionStats.published}</Text>
+                    <Text style={styles.statusSummaryLabel}>Posted</Text>
                   </View>
                 </View>
               </View>
@@ -691,6 +777,7 @@ export default function App() {
 
                 {latestSubmission ? (
                   <View style={styles.latestPostCard}>
+                    <GlassLayer />
                     <View style={styles.statusBadgeRow}>
                       <View
                         style={[
@@ -756,7 +843,6 @@ export default function App() {
                     <View style={styles.metaChipRow}>
                       <View style={styles.metaChip}><Text style={styles.metaChipText}>{formatVisibilityLabel(latestSubmission.visibility_target)}</Text></View>
                       <View style={styles.metaChip}><Text style={styles.metaChipText}>{formatMediaCountLabel(latestSubmission.media_count)}</Text></View>
-                      <View style={styles.metaChip}><Text style={styles.metaChipText}>{formatRiskScoreLabel(latestSubmission.risk_score)}</Text></View>
                     </View>
                   </View>
                 ) : loadingRecent ? (
@@ -779,6 +865,7 @@ export default function App() {
                 {recentSubmissions.length ? (
                   recentSubmissions.map((item, index) => (
                     <Pressable key={item.id} style={[styles.feedCard, index === 0 && styles.feedCardFeatured]} onPress={() => loadSubmissionDetail(item.id)}>
+                      <GlassLayer />
                       <View style={styles.statusBadgeRow}>
                         <View
                           style={[
@@ -835,6 +922,7 @@ export default function App() {
                         if (!item.readAt) await markNotificationRead(item.id);
                       }}
                     >
+                      <GlassLayer />
                       <View style={styles.notificationHeaderRow}>
                         <View style={styles.notificationHeaderLeft}>
                           {!item.readAt ? <View style={styles.unreadDot} /> : null}
@@ -864,6 +952,7 @@ export default function App() {
       <Modal visible={settingsVisible} animationType="slide" transparent onRequestClose={() => setSettingsVisible(false)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
+            <GlassLayer />
             <View style={styles.sectionHeader}>
               <View>
                 <Text style={styles.sectionKicker}>Settings</Text>
@@ -875,6 +964,7 @@ export default function App() {
             </View>
 
             <View style={styles.settingsCard}>
+              <GlassLayer />
               <Text style={styles.settingsLabel}>Submitter email</Text>
               <TextInput
                 autoCapitalize="none"
@@ -886,12 +976,14 @@ export default function App() {
             </View>
 
             <View style={styles.settingsCard}>
+              <GlassLayer />
               <Text style={styles.settingsLabel}>Club</Text>
               <TextInput style={styles.input} value={clubSlug} onChangeText={setClubSlug} placeholder="Club slug" />
               <TextInput style={[styles.input, styles.settingsStackTop]} value={teamSlug} onChangeText={setTeamSlug} placeholder="Team slug" />
             </View>
 
             <View style={styles.settingsCard}>
+              <GlassLayer />
               <Text style={styles.settingsLabel}>Audience default</Text>
               <View style={styles.audienceRow}>
                 {[
@@ -1047,6 +1139,38 @@ export default function App() {
                   </>
                 ) : null}
 
+                {selectedSubmissionDetail.status === "needs_metadata" ? (
+                  <>
+                    <Text style={styles.detailHeading}>Fix and resend</Text>
+                    <Text style={styles.detailBody}>
+                      {selectedSubmissionDetail.latestApprovalRequest?.latestAction?.notes ||
+                        "Add the missing detail, then send this back into review."}
+                    </Text>
+                    <TextInput
+                      multiline
+                      style={styles.detailResubmitInput}
+                      value={resubmissionText}
+                      onChangeText={setResubmissionText}
+                      placeholder="Add the missing detail here."
+                      placeholderTextColor="#8f908c"
+                    />
+                    <Pressable
+                      disabled={resubmittingDetail || !resubmissionText.trim()}
+                      style={[
+                        styles.detailResubmitButton,
+                        (resubmittingDetail || !resubmissionText.trim()) && styles.buttonDisabled
+                      ]}
+                      onPress={resubmitSelectedSubmission}
+                    >
+                      {resubmittingDetail ? (
+                        <ActivityIndicator color="#fffdf8" />
+                      ) : (
+                        <Text style={styles.detailResubmitButtonText}>Fix and resubmit</Text>
+                      )}
+                    </Pressable>
+                  </>
+                ) : null}
+
                 {selectedSubmissionDetail.publishedPost ? (
                   <>
                     <Text style={styles.detailHeading}>Publishing</Text>
@@ -1066,10 +1190,51 @@ export default function App() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#f7f1e7"
+    backgroundColor: "#e8e6f6"
   },
   screen: {
-    flex: 1
+    flex: 1,
+    backgroundColor: "#ece9f9",
+    position: "relative"
+  },
+  screenGradient: {
+    ...StyleSheet.absoluteFillObject
+  },
+  glassFill: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 30
+  },
+  glassFillSoft: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 30,
+    backgroundColor: "rgba(255,255,255,0.16)"
+  },
+  backgroundGlowA: {
+    position: "absolute",
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: "rgba(111, 203, 255, 0.24)",
+    top: 84,
+    right: -48
+  },
+  backgroundGlowB: {
+    position: "absolute",
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: "rgba(246, 160, 255, 0.20)",
+    top: 180,
+    left: -54
+  },
+  backgroundGlowC: {
+    position: "absolute",
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: "rgba(255, 255, 255, 0.40)",
+    bottom: -70,
+    right: 18
   },
   chromeBar: {
     flexDirection: "row",
@@ -1082,21 +1247,23 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 24,
     lineHeight: 28,
-    color: "#11261f",
+    color: "#2b2451",
     fontWeight: "800"
   },
   appSubtitle: {
     fontSize: 13,
-    color: "#6c736d"
+    color: "#756fa0"
   },
   settingsButton: {
     paddingHorizontal: 16,
     paddingVertical: 11,
     borderRadius: 999,
-    backgroundColor: "rgba(16,38,30,0.06)"
+    backgroundColor: "rgba(255,255,255,0.42)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.54)"
   },
   settingsButtonText: {
-    color: "#11261f",
+    color: "#352c68",
     fontWeight: "800"
   },
   segmentRow: {
@@ -1109,17 +1276,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.72)"
+    backgroundColor: "rgba(255,255,255,0.40)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.55)"
   },
   segmentButtonActive: {
-    backgroundColor: "#12372d"
+    backgroundColor: "rgba(71, 62, 153, 0.86)",
+    borderColor: "rgba(255,255,255,0.16)"
   },
   segmentText: {
-    color: "#12372d",
+    color: "#43378e",
     fontWeight: "800"
   },
   segmentTextActive: {
-    color: "#fff8ef"
+    color: "#f8f7ff"
   },
   container: {
     paddingHorizontal: 20,
@@ -1128,10 +1298,18 @@ const styles = StyleSheet.create({
   },
   captureStage: {
     overflow: "hidden",
-    backgroundColor: "#12372d",
+    backgroundColor: "rgba(255,255,255,0.34)",
     borderRadius: 34,
     padding: 22,
     gap: 18,
+    position: "relative",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.52)",
+    shadowColor: "#8074c7",
+    shadowOpacity: 0.18,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 16 },
+    elevation: 8,
     position: "relative"
   },
   captureGlowOne: {
@@ -1139,7 +1317,7 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
     borderRadius: 110,
-    backgroundColor: "rgba(212, 153, 85, 0.16)",
+    backgroundColor: "rgba(111, 224, 255, 0.30)",
     top: -40,
     right: -20
   },
@@ -1148,7 +1326,7 @@ const styles = StyleSheet.create({
     width: 180,
     height: 180,
     borderRadius: 90,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(247, 173, 255, 0.28)",
     bottom: -60,
     left: -30
   },
@@ -1156,19 +1334,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 1.4,
     textTransform: "uppercase",
-    color: "#d9c2a5",
+    color: "#8178b2",
     fontWeight: "800"
   },
   captureTitle: {
     fontSize: 34,
     lineHeight: 37,
-    color: "#fbf7f0",
+    color: "#2a2451",
     fontWeight: "800"
   },
   captureBody: {
     fontSize: 16,
     lineHeight: 24,
-    color: "#d7e0db",
+    color: "#5d5a80",
     maxWidth: 300
   },
   captureActionStack: {
@@ -1176,24 +1354,28 @@ const styles = StyleSheet.create({
   },
   primaryCaptureButton: {
     borderRadius: 24,
-    backgroundColor: "#fff6ea",
+    backgroundColor: "rgba(255,255,255,0.70)",
     paddingVertical: 18,
-    alignItems: "center"
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.74)"
   },
   primaryCaptureButtonText: {
-    color: "#10261e",
+    color: "#342c68",
     fontSize: 17,
     fontWeight: "800"
   },
   secondaryCaptureButton: {
     borderRadius: 22,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255,255,255,0.22)",
     paddingVertical: 16,
     paddingHorizontal: 18,
-    alignItems: "center"
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.38)"
   },
   secondaryCaptureButtonText: {
-    color: "#f8f3eb",
+    color: "#40377f",
     fontWeight: "700"
   },
   captureHintRow: {
@@ -1202,44 +1384,44 @@ const styles = StyleSheet.create({
     gap: 10
   },
   captureHint: {
-    color: "#d1dad5",
-    fontSize: 13
-  },
-  previewStage: {
-    backgroundColor: "#fffaf3",
-    borderRadius: 34,
-    padding: 14,
-    gap: 0,
-    borderWidth: 1,
-    borderColor: "#e3d4bf",
+    color: "#615d83",
+    fontSize: 13,
+    backgroundColor: "rgba(255,255,255,0.32)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
     overflow: "hidden"
   },
-  previewHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 6,
-    paddingTop: 4
-  },
-  previewTitle: {
-    fontSize: 30,
-    lineHeight: 32,
-    color: "#11261f",
-    fontWeight: "800"
+  previewStage: {
+    backgroundColor: "rgba(255,255,255,0.30)",
+    borderRadius: 34,
+    padding: 0,
+    gap: 0,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.54)",
+    overflow: "hidden",
+    shadowColor: "#7e71bf",
+    shadowOpacity: 0.18,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 16 },
+    elevation: 8,
+    position: "relative"
   },
   topGhostButton: {
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 999,
-    backgroundColor: "rgba(16,38,30,0.06)"
+    backgroundColor: "rgba(255,255,255,0.42)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.54)"
   },
   topGhostButtonText: {
-    color: "#12372d",
+    color: "#43378e",
     fontWeight: "800"
   },
   previewImage: {
     width: "100%",
-    height: 470,
+    height: 560,
     justifyContent: "flex-end",
     backgroundColor: "#d6ddd7"
   },
@@ -1249,22 +1431,57 @@ const styles = StyleSheet.create({
   previewImageShade: {
     flex: 1,
     justifyContent: "space-between",
-    padding: 16,
-    backgroundColor: "rgba(11, 24, 18, 0.18)"
+    padding: 18
   },
   videoPreviewStage: {
-    minHeight: 420,
-    borderRadius: 28,
-    backgroundColor: "#18382f",
-    padding: 18,
+    minHeight: 520,
+    borderRadius: 34,
+    backgroundColor: "#8d86c7",
     justifyContent: "flex-end",
     overflow: "hidden"
   },
+  previewTopBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12
+  },
+  previewEyebrow: {
+    fontSize: 12,
+    letterSpacing: 1.3,
+    textTransform: "uppercase",
+    color: "#d9d4ff",
+    fontWeight: "800"
+  },
+  previewHeroTitle: {
+    marginTop: 4,
+    fontSize: 30,
+    lineHeight: 32,
+    color: "#f7f6ff",
+    fontWeight: "800"
+  },
+  previewTopButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.26)"
+  },
+  previewTopButtonText: {
+    color: "#fcfbff",
+    fontWeight: "800"
+  },
+  previewBottomStack: {
+    gap: 12
+  },
   previewMediaOverlay: {
-    backgroundColor: "rgba(10, 23, 18, 0.58)",
+    backgroundColor: "rgba(255,255,255,0.16)",
     borderRadius: 24,
     padding: 16,
-    gap: 8
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.26)"
   },
   previewChipRow: {
     flexDirection: "row",
@@ -1275,42 +1492,55 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: "rgba(255, 247, 236, 0.88)"
+    backgroundColor: "rgba(255,255,255,0.44)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.48)"
   },
   previewChipText: {
-    color: "#3f3a34",
+    color: "#f8f7ff",
     fontWeight: "800",
     fontSize: 12
   },
   previewAssetName: {
-    color: "#fff8ef",
+    color: "#f8f7ff",
     fontSize: 24,
     lineHeight: 27,
     fontWeight: "800"
   },
   previewOverlayHint: {
-    color: "#e0e7e2",
+    color: "#efeefe",
     lineHeight: 20
   },
   videoPreviewName: {
-    color: "#fcf8ef",
+    color: "#fcfbff",
     fontSize: 26,
     lineHeight: 30,
     fontWeight: "800"
   },
   videoPreviewCopy: {
-    color: "#d1dbd6",
+    color: "#eeeafe",
     lineHeight: 22
   },
   composerSheet: {
     borderRadius: 30,
-    backgroundColor: "#f7efe2",
+    backgroundColor: "rgba(255,255,255,0.56)",
     padding: 18,
     gap: 12,
-    marginTop: -22,
-    marginHorizontal: 8,
+    marginTop: -34,
+    marginHorizontal: 12,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: "rgba(227, 212, 191, 0.9)"
+    borderColor: "rgba(255,255,255,0.68)",
+    position: "relative",
+    overflow: "hidden"
+  },
+  sheetHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(118, 110, 176, 0.38)",
+    alignSelf: "center",
+    marginBottom: 2
   },
   sheetTopRow: {
     flexDirection: "row",
@@ -1319,7 +1549,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-start"
   },
   sheetLabel: {
-    color: "#7f715f",
+    color: "#8278b0",
     fontSize: 12,
     fontWeight: "800",
     textTransform: "uppercase",
@@ -1327,7 +1557,7 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     marginTop: 4,
-    color: "#11261f",
+    color: "#2a2451",
     fontSize: 20,
     lineHeight: 23,
     fontWeight: "800",
@@ -1337,10 +1567,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: "#efe1cf"
+    backgroundColor: "rgba(255,255,255,0.48)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.58)"
   },
   inlineMetaPillText: {
-    color: "#6e5f4b",
+    color: "#5e5895",
     fontWeight: "800",
     fontSize: 12
   },
@@ -1352,27 +1584,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 999,
-    backgroundColor: "#f0e4d2"
+    backgroundColor: "rgba(255,255,255,0.42)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.58)"
   },
   audiencePillActive: {
-    backgroundColor: "#12372d"
+    backgroundColor: "rgba(82, 71, 173, 0.88)",
+    borderColor: "rgba(255,255,255,0.16)"
   },
   audiencePillText: {
-    color: "#6f614f",
+    color: "#60578f",
     fontWeight: "800"
   },
   audiencePillTextActive: {
-    color: "#fff8ef"
+    color: "#f8f7ff"
   },
   captionInput: {
     minHeight: 108,
     borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 16,
-    backgroundColor: "#ffffff",
+    backgroundColor: "rgba(255,255,255,0.58)",
     borderWidth: 1,
-    borderColor: "#e3d4bf",
-    color: "#11261f",
+    borderColor: "rgba(255,255,255,0.66)",
+    color: "#2a2451",
     textAlignVertical: "top",
     fontSize: 16,
     lineHeight: 22
@@ -1385,22 +1620,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderRadius: 22,
-    backgroundColor: "#eadccc"
+    backgroundColor: "rgba(255,255,255,0.44)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.58)"
   },
   inlineButtonText: {
-    color: "#5f5142",
+    color: "#5e5894",
     fontWeight: "800"
   },
   submitButton: {
     flex: 1,
     borderRadius: 22,
-    backgroundColor: "#12372d",
+    backgroundColor: "#6d63cf",
     paddingVertical: 16,
     alignItems: "center",
     justifyContent: "center"
   },
   submitButtonText: {
-    color: "#fffaf4",
+    color: "#f8f7ff",
     fontSize: 16,
     fontWeight: "800"
   },
@@ -1408,28 +1645,30 @@ const styles = StyleSheet.create({
     opacity: 0.45
   },
   miniStatusCard: {
-    backgroundColor: "#fffaf3",
+    backgroundColor: "rgba(255,255,255,0.38)",
     borderRadius: 26,
     padding: 18,
     borderWidth: 1,
-    borderColor: "#e3d4bf",
-    gap: 8
+    borderColor: "rgba(255,255,255,0.56)",
+    gap: 8,
+    position: "relative",
+    overflow: "hidden"
   },
   miniStatusKicker: {
     fontSize: 12,
     letterSpacing: 1.3,
     textTransform: "uppercase",
-    color: "#8b765b",
+    color: "#8178b1",
     fontWeight: "800"
   },
   miniStatusTitle: {
     fontSize: 22,
     lineHeight: 25,
-    color: "#11261f",
+    color: "#2a2451",
     fontWeight: "800"
   },
   miniStatusBody: {
-    color: "#5e6762",
+    color: "#666286",
     lineHeight: 21
   },
   inlineStatusLink: {
@@ -1437,74 +1676,63 @@ const styles = StyleSheet.create({
     marginTop: 4
   },
   inlineStatusLinkText: {
-    color: "#176744",
+    color: "#5b52ba",
     fontWeight: "800"
   },
   statusHeroCard: {
-    backgroundColor: "#12372d",
+    backgroundColor: "rgba(255,255,255,0.32)",
     borderRadius: 30,
     padding: 20,
-    gap: 12
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.54)",
+    shadowColor: "#8074c7",
+    shadowOpacity: 0.16,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 16 },
+    elevation: 8,
+    position: "relative",
+    overflow: "hidden"
   },
   statusHeroKicker: {
     fontSize: 12,
     letterSpacing: 1.4,
     textTransform: "uppercase",
-    color: "#d9c2a5",
+    color: "#7f77ae",
     fontWeight: "800"
   },
   statusHeroTitle: {
     fontSize: 30,
     lineHeight: 33,
-    color: "#fdf8ef",
+    color: "#2a2451",
     fontWeight: "800"
   },
   statusHeroBody: {
-    color: "#d6e0db",
+    color: "#5d5a82",
     lineHeight: 22
   },
-  statusCountRow: {
+  statusSummaryRow: {
     flexDirection: "row",
     gap: 10,
-    alignItems: "stretch"
+    flexWrap: "wrap"
   },
-  statusCountPillPrimary: {
-    flex: 1.15,
-    borderRadius: 22,
-    padding: 16,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    justifyContent: "space-between"
-  },
-  statusCountValuePrimary: {
-    color: "#fff8ef",
-    fontSize: 34,
-    lineHeight: 36,
-    fontWeight: "800"
-  },
-  statusCountLabelPrimary: {
-    color: "#d5dfda",
-    fontSize: 12,
-    textTransform: "uppercase",
-    letterSpacing: 1.2
-  },
-  statusCountStack: {
-    flex: 1,
-    gap: 10
-  },
-  statusCountPillSmall: {
-    flex: 1,
+  statusSummaryPill: {
+    minWidth: 94,
     borderRadius: 18,
-    padding: 14,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: "rgba(255,255,255,0.36)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.54)",
     justifyContent: "center"
   },
-  statusCountValueSmall: {
-    color: "#fff8ef",
+  statusSummaryValue: {
+    color: "#2c2452",
     fontSize: 22,
     fontWeight: "800"
   },
-  statusCountLabelSmall: {
-    color: "#d5dfda",
+  statusSummaryLabel: {
+    color: "#7168a2",
     fontSize: 11,
     textTransform: "uppercase",
     letterSpacing: 1.1,
@@ -1523,31 +1751,33 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 1.3,
     textTransform: "uppercase",
-    color: "#8d7659",
+    color: "#8078af",
     fontWeight: "800"
   },
   sectionTitle: {
     fontSize: 26,
     lineHeight: 28,
-    color: "#11261f",
+    color: "#2a2451",
     fontWeight: "800"
   },
   unreadBadge: {
-    color: "#176744",
+    color: "#5b52ba",
     fontWeight: "800"
   },
   latestPostCard: {
-    backgroundColor: "#fffaf3",
+    backgroundColor: "rgba(255,255,255,0.44)",
     borderRadius: 30,
     padding: 18,
     borderWidth: 1,
-    borderColor: "#e3d4bf",
+    borderColor: "rgba(255,255,255,0.58)",
     gap: 12,
-    shadowColor: "#10261e",
-    shadowOpacity: 0.06,
+    shadowColor: "#776db8",
+    shadowOpacity: 0.14,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 12 },
-    elevation: 4
+    elevation: 4,
+    position: "relative",
+    overflow: "hidden"
   },
   statusBadgeRow: {
     flexDirection: "row",
@@ -1559,21 +1789,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: "rgba(102,117,109,0.12)"
+    backgroundColor: "rgba(255,255,255,0.36)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.48)"
   },
-  statusBadgeSuccess: { backgroundColor: "#dff0e7" },
-  statusBadgeAttention: { backgroundColor: "#f6dfdc" },
-  statusBadgeInfo: { backgroundColor: "#dce9f1" },
+  statusBadgeSuccess: { backgroundColor: "rgba(204, 255, 228, 0.64)" },
+  statusBadgeAttention: { backgroundColor: "rgba(255, 214, 225, 0.72)" },
+  statusBadgeInfo: { backgroundColor: "rgba(211, 234, 255, 0.72)" },
   statusBadgeText: {
-    color: "#67766d",
+    color: "#5d5889",
     fontWeight: "800",
     fontSize: 12
   },
-  statusBadgeTextSuccess: { color: "#176744" },
-  statusBadgeTextAttention: { color: "#8b342e" },
-  statusBadgeTextInfo: { color: "#305e7a" },
+  statusBadgeTextSuccess: { color: "#226d56" },
+  statusBadgeTextAttention: { color: "#9f4764" },
+  statusBadgeTextInfo: { color: "#3b5ea3" },
   feedTime: {
-    color: "#7b807a",
+    color: "#7b76a3",
     fontSize: 12,
     flexShrink: 1,
     textAlign: "right"
@@ -1581,11 +1813,11 @@ const styles = StyleSheet.create({
   feedHeadline: {
     fontSize: 20,
     lineHeight: 24,
-    color: "#11261f",
+    color: "#2a2451",
     fontWeight: "800"
   },
   feedSupport: {
-    color: "#5f6862",
+    color: "#656185",
     lineHeight: 21
   },
   progressTrack: {
@@ -1609,24 +1841,24 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: "#ece4d5",
+    backgroundColor: "rgba(255,255,255,0.42)",
     alignItems: "center",
     justifyContent: "center"
   },
-  progressDotComplete: { backgroundColor: "#176744" },
-  progressDotCurrent: { backgroundColor: "#c58d49" },
+  progressDotComplete: { backgroundColor: "#6d63cf" },
+  progressDotCurrent: { backgroundColor: "#ff8ccf" },
   progressDotText: {
-    color: "#84755f",
+    color: "#7c75a7",
     fontWeight: "800",
     fontSize: 12
   },
-  progressDotTextActive: { color: "#fff9ef" },
+  progressDotTextActive: { color: "#f8f7ff" },
   progressLabel: {
-    color: "#8b847b",
+    color: "#8983b0",
     fontSize: 11,
     fontWeight: "700"
   },
-  progressLabelActive: { color: "#11261f" },
+  progressLabelActive: { color: "#2a2451" },
   metaChipRow: {
     flexDirection: "row",
     gap: 8,
@@ -1636,35 +1868,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: "#f1e6d6"
+    backgroundColor: "rgba(255,255,255,0.38)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.5)"
   },
   metaChipText: {
-    color: "#6d604f",
+    color: "#625a92",
     fontWeight: "800",
     fontSize: 12
   },
   feedCard: {
-    backgroundColor: "#fffaf3",
+    backgroundColor: "rgba(255,255,255,0.40)",
     borderRadius: 24,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#e3d4bf",
-    gap: 10
+    borderColor: "rgba(255,255,255,0.56)",
+    gap: 10,
+    position: "relative",
+    overflow: "hidden"
   },
   feedCardFeatured: {
-    backgroundColor: "#fffdf8"
+    backgroundColor: "rgba(255,255,255,0.52)"
   },
   notificationCard: {
-    backgroundColor: "#fffaf3",
+    backgroundColor: "rgba(255,255,255,0.40)",
     borderRadius: 24,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#e3d4bf",
-    gap: 10
+    borderColor: "rgba(255,255,255,0.56)",
+    gap: 10,
+    position: "relative",
+    overflow: "hidden"
   },
   notificationCardUnread: {
-    borderColor: "#176744",
-    backgroundColor: "#f4fbf7"
+    borderColor: "rgba(100, 90, 214, 0.58)",
+    backgroundColor: "rgba(255,255,255,0.56)"
   },
   notificationHeaderRow: {
     flexDirection: "row",
@@ -1682,57 +1920,63 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#176744"
+    backgroundColor: "#6d63cf"
   },
   notificationTitle: {
-    color: "#11261f",
+    color: "#2a2451",
     fontWeight: "800",
     flexShrink: 1
   },
   notificationBody: {
-    color: "#49534d",
+    color: "#625f83",
     lineHeight: 21
   },
   notificationMeta: {
-    color: "#7a7f7a",
+    color: "#7d79a2",
     fontSize: 12
   },
   emptyStateText: {
-    color: "#6b736d",
+    color: "#666186",
     lineHeight: 21
   },
   errorStateText: {
-    color: "#8b342e",
+    color: "#9f4764",
     lineHeight: 21
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(10,24,19,0.42)",
+    backgroundColor: "rgba(42,36,81,0.28)",
     justifyContent: "flex-end"
   },
   modalCard: {
     maxHeight: "88%",
-    backgroundColor: "#fffaf3",
+    backgroundColor: "rgba(248,247,255,0.94)",
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     padding: 20,
-    gap: 12
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.72)",
+    overflow: "hidden",
+    position: "relative"
   },
   closeButtonText: {
-    color: "#176744",
+    color: "#5b52ba",
     fontWeight: "800",
     fontSize: 16
   },
   settingsCard: {
-    backgroundColor: "#f7efe2",
+    backgroundColor: "rgba(255,255,255,0.48)",
     borderRadius: 22,
     padding: 14,
     gap: 10,
     borderWidth: 1,
-    borderColor: "#eadfcd"
+    borderColor: "rgba(255,255,255,0.62)",
+    overflow: "hidden",
+    position: "relative"
   },
   settingsLabel: {
-    color: "#6d5e4d",
+    color: "#7369a2",
     fontWeight: "800",
     fontSize: 12,
     textTransform: "uppercase",
@@ -1741,19 +1985,21 @@ const styles = StyleSheet.create({
   advancedToggle: {
     borderRadius: 22,
     padding: 14,
-    backgroundColor: "rgba(16,38,30,0.05)"
+    backgroundColor: "rgba(255,255,255,0.40)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.56)"
   },
   advancedToggleTitle: {
-    color: "#11261f",
+    color: "#2a2451",
     fontWeight: "800"
   },
   advancedToggleCopy: {
-    color: "#66726c",
+    color: "#676287",
     marginTop: 6,
     lineHeight: 20
   },
   advancedHelpText: {
-    color: "#6a736d",
+    color: "#6a6686",
     lineHeight: 20
   },
   settingsStackTop: {
@@ -1762,11 +2008,11 @@ const styles = StyleSheet.create({
   input: {
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#e3d4bf",
-    backgroundColor: "#ffffff",
+    borderColor: "rgba(255,255,255,0.62)",
+    backgroundColor: "rgba(255,255,255,0.58)",
     paddingHorizontal: 14,
     paddingVertical: 14,
-    color: "#11261f"
+    color: "#2a2451"
   },
   detailHero: {
     backgroundColor: "#f1e8da",
@@ -1803,5 +2049,33 @@ const styles = StyleSheet.create({
     color: "#4d5651",
     lineHeight: 21,
     marginTop: 6
+  },
+  detailResubmitInput: {
+    minHeight: 108,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(170, 179, 198, 0.38)",
+    color: "#213040",
+    textAlignVertical: "top",
+    marginTop: 10
+  },
+  detailResubmitButton: {
+    marginTop: 12,
+    alignSelf: "flex-start",
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderRadius: 999,
+    backgroundColor: "#2037a5",
+    minWidth: 160,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  detailResubmitButtonText: {
+    color: "#fffdf8",
+    fontSize: 15,
+    fontWeight: "700"
   }
 });
