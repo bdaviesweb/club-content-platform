@@ -1128,18 +1128,19 @@ async function renderHome(activeId) {
       const queueIds = ${JSON.stringify(queueIds)};
       let selectedAction = ${JSON.stringify(detail ? recommendation.defaultAction : "approve")};
       let rejectConfirmArmed = false;
+      let selectedReasonCode = null;
       const quickReasonSets = {
         request_changes: [
-          'Please add more context so families know what happened.',
-          'Looks good, but the caption needs one clear detail added.',
-          'Please confirm the event, opponent, or score before we post this.',
-          'Please tighten the caption so it is club-ready.'
+          { code: 'missing_context', text: 'Please add more context so families know what happened.' },
+          { code: 'caption_detail', text: 'Looks good, but the caption needs one clear detail added.' },
+          { code: 'score_details', text: 'Please confirm the event, opponent, or score before we post this.' },
+          { code: 'caption_tighten', text: 'Please tighten the caption so it is club-ready.' }
         ],
         reject: [
-          'This does not fit club posting guidelines.',
-          'We cannot publish this without a clearer privacy-safe version.',
-          'This should not move forward in its current form.',
-          'Please do not repost this item without admin review.'
+          { code: 'club_guidelines', text: 'This does not fit club posting guidelines.' },
+          { code: 'privacy_safe_retake', text: 'We cannot publish this without a clearer privacy-safe version.' },
+          { code: 'stop_current_form', text: 'This should not move forward in its current form.' },
+          { code: 'admin_review_required', text: 'Please do not repost this item without admin review.' }
         ]
       };
 
@@ -1155,6 +1156,11 @@ async function renderHome(activeId) {
         const input = document.getElementById('notes');
         input.value = note;
         input.focus();
+      }
+
+      function applyReasonPreset(code, note) {
+        selectedReasonCode = code;
+        applyNote(note);
       }
 
       function renderReasonChips(action) {
@@ -1174,19 +1180,20 @@ async function renderHome(activeId) {
 
         chips.innerHTML = reasons
           .map((reason) => {
-            const escapedText = reason.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-            const escapedAttr = reason
+            const escapedText = reason.text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+            const escapedAttr = reason.text
               .replaceAll('&', '&amp;')
               .replaceAll('"', '&quot;')
               .replaceAll('<', '&lt;')
               .replaceAll('>', '&gt;');
-            return '<button class="chip" type="button" data-note="' + escapedAttr + '" onclick="applyNote(this.dataset.note)">' + escapedText + '</button>';
+            return '<button class="chip" type="button" data-note="' + escapedAttr + '" onclick="applyReasonPreset(' + JSON.stringify(reason.code) + ', this.dataset.note)">' + escapedText + '</button>';
           })
           .join('');
         chips.classList.remove('hidden');
 
         if (notes && !notes.value.trim()) {
-          notes.value = reasons[0];
+          notes.value = reasons[0].text;
+          selectedReasonCode = reasons[0].code;
         }
       }
 
@@ -1205,6 +1212,7 @@ async function renderHome(activeId) {
         const rejectConfirmation = document.getElementById('reject-confirmation');
 
         rejectConfirmArmed = false;
+        selectedReasonCode = null;
         rejectConfirmation.classList.add('hidden');
 
         if (action === 'approve') {
@@ -1459,7 +1467,7 @@ async function renderHome(activeId) {
         const response = await fetch('/ui/actions/' + approvalRequestId, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ action: selectedAction, actedByEmail, notes })
+          body: JSON.stringify({ action: selectedAction, actedByEmail, notes, reasonCode: selectedReasonCode })
         });
         const payload = await response.json();
         if (!response.ok) {

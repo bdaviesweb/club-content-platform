@@ -145,6 +145,51 @@ function buildNotificationMeta(item) {
   return meta.join(" · ");
 }
 
+function fixPromptForReasonCode(reasonCode) {
+  switch (String(reasonCode || "").toLowerCase()) {
+    case "score_details":
+      return {
+        title: "Add the score details",
+        body: "This one mostly needs the missing game detail. Add the score, opponent, or event context, then send it back in."
+      };
+    case "caption_detail":
+      return {
+        title: "Add one missing detail",
+        body: "The photo is probably fine. Tighten the caption with one more useful detail so families understand the moment."
+      };
+    case "caption_tighten":
+      return {
+        title: "Tighten the caption",
+        body: "Keep it short and club-ready. A cleaner caption should be enough here."
+      };
+    case "missing_context":
+      return {
+        title: "Add more context",
+        body: "This needs a little more who/what/when so it makes sense once it is posted."
+      };
+    case "privacy_safe_retake":
+      return {
+        title: "Replace the photo",
+        body: "This one likely needs a safer or cleaner image. Retake or swap the media before you resubmit."
+      };
+    case "club_guidelines":
+      return {
+        title: "This post does not fit yet",
+        body: "Use the reviewer note to decide whether a rewrite or a replacement image gives this a better chance on the next pass."
+      };
+    case "admin_review_required":
+      return {
+        title: "Needs admin follow-up",
+        body: "This should probably not be resubmitted without a stronger change. Use the reviewer note carefully before sending it back in."
+      };
+    default:
+      return {
+        title: "Fix and resend",
+        body: "Add the missing detail, then send this back into review."
+      };
+  }
+}
+
 function countStatuses(items) {
   return items.reduce(
     (accumulator, item) => {
@@ -243,6 +288,11 @@ export default function App() {
   const latestStatusSummary = latestSubmission
     ? summarizeSubmissionProgress(latestSubmission)
     : "Your first post will show review and publish status here.";
+  const resubmitPrompt = useMemo(() => {
+    return fixPromptForReasonCode(
+      selectedSubmissionDetail?.latestApprovalRequest?.latestAction?.reasonCode
+    );
+  }, [selectedSubmissionDetail]);
 
   async function loadRecentSubmissions() {
     if (!canLoadRecent) {
@@ -1270,11 +1320,12 @@ export default function App() {
 
                 {selectedSubmissionDetail.status === "needs_metadata" ? (
                   <>
-                    <Text style={styles.detailHeading}>Fix and resend</Text>
+                    <Text style={styles.detailHeading}>{resubmitPrompt.title}</Text>
                     <Text style={styles.detailBody}>
                       {selectedSubmissionDetail.latestApprovalRequest?.latestAction?.notes ||
-                        "Add the missing detail, then send this back into review."}
+                        resubmitPrompt.body}
                     </Text>
+                    <Text style={styles.detailSupportCallout}>{resubmitPrompt.body}</Text>
                     <View style={styles.detailMediaActionRow}>
                       <Pressable style={styles.detailMediaActionButton} onPress={captureReplacementWithCamera}>
                         <Text style={styles.detailMediaActionText}>Retake media</Text>
@@ -2230,6 +2281,15 @@ const styles = StyleSheet.create({
     color: "#4d5651",
     lineHeight: 21,
     marginTop: 6
+  },
+  detailSupportCallout: {
+    marginTop: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 18,
+    backgroundColor: "rgba(88, 99, 185, 0.10)",
+    color: "#4d4f87",
+    lineHeight: 20
   },
   detailResubmitInput: {
     minHeight: 108,

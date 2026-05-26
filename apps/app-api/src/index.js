@@ -452,7 +452,17 @@ async function handleGetSubmission(res, submissionId) {
             'action', aa.action,
             'notes', aa.notes,
             'createdAt', aa.created_at,
-            'actedByName', au.full_name
+            'actedByName', au.full_name,
+            'reasonCode',
+            (
+              SELECT al.metadata->>'reasonCode'
+              FROM audit_logs al
+              WHERE al.entity_type = 'approval_request'
+                AND al.entity_id = ar.id
+                AND al.action = aa.action
+              ORDER BY al.created_at DESC
+              LIMIT 1
+            )
           )
           FROM approval_actions aa
           JOIN users au ON au.id = aa.acted_by_user_id
@@ -784,7 +794,17 @@ async function handleApprovalRequestDetail(res, approvalRequestId) {
               'action', aa.action,
               'notes', aa.notes,
               'createdAt', aa.created_at,
-              'actedByName', u.full_name
+              'actedByName', u.full_name,
+              'reasonCode',
+              (
+                SELECT al.metadata->>'reasonCode'
+                FROM audit_logs al
+                WHERE al.entity_type = 'approval_request'
+                  AND al.entity_id = ar.id
+                  AND al.action = aa.action
+                ORDER BY al.created_at DESC
+                LIMIT 1
+              )
             )
             ORDER BY aa.created_at DESC
           )
@@ -817,7 +837,7 @@ async function handleApprovalRequestDetail(res, approvalRequestId) {
 
 async function handleApprovalAction(req, res, approvalRequestId) {
   const body = await readJson(req);
-  const { action, actedByEmail, notes } = body;
+  const { action, actedByEmail, notes, reasonCode } = body;
 
   if (!action || !actedByEmail) {
     sendJson(res, 400, { error: "action and actedByEmail are required" });
@@ -921,7 +941,7 @@ async function handleApprovalAction(req, res, approvalRequestId) {
         actor.rows[0].id,
         approvalRequestId,
         normalizedAction,
-        JSON.stringify({ notes: notes || null })
+        JSON.stringify({ notes: notes || null, reasonCode: reasonCode || null })
       ]
     );
 
@@ -936,7 +956,8 @@ async function handleApprovalAction(req, res, approvalRequestId) {
           submissionId: approvalRequest.rows[0].submission_id,
           approvalRequestId,
           action: normalizedAction,
-          notes: notes || null
+          notes: notes || null,
+          reasonCode: reasonCode || null
         },
         actorUserId: actor.rows[0].id
       });
