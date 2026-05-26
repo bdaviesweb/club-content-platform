@@ -269,14 +269,13 @@ function layout(content, title = "Club Content Ops") {
       }
       .workspace {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 320px;
-        gap: 18px;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 16px;
         align-items: start;
       }
       .panel { padding: 18px; }
       .decision-dock {
-        position: sticky;
-        top: 18px;
+        position: static;
       }
       .queue-toggle {
         margin-bottom: 18px;
@@ -730,8 +729,7 @@ function renderActionHistory(detail) {
 }
 
 function renderDecisionDock(detail, queueIds, recommendation) {
-  return `<aside class="decision-dock">
-    <div class="panel">
+  return `<div class="panel decision-dock" style="margin-top:14px;">
       <div class="section-label">Decision</div>
       <h3 class="decision-title">Make the call.</h3>
       <p class="subtle" style="margin-top:8px;">If it looks fine, approve it. If it needs work, send it back with one clear reason.</p>
@@ -789,11 +787,10 @@ function renderDecisionDock(detail, queueIds, recommendation) {
           <input id="actedByEmail" type="text" value="${escapeHtml(detail.approver_email)}" placeholder="Reviewer email" />
         </div>
       </details>
-    </div>
-  </aside>`;
+  </div>`;
 }
 
-function renderCenterStage(detail, recommendation) {
+function renderCenterStage(detail, recommendation, queueIds) {
   const risk = riskBand(detail.risk_score);
   return `<section class="center-stage">
     <div class="panel stage-shell">
@@ -823,6 +820,8 @@ function renderCenterStage(detail, recommendation) {
         <div class="section-label">Why this was suggested</div>
         <p style="margin-top:8px; line-height:1.55;">${escapeHtml(detail.review_runs[0]?.summary || detail.routing_decision?.rationale || recommendation.explainer || "No summary recorded.")}</p>
       </div>
+
+      ${renderDecisionDock(detail, queueIds, recommendation)}
     </div>
 
     <details class="disclosure">
@@ -884,8 +883,7 @@ async function renderHome(activeId) {
     </details>
 
     <section class="workspace">
-      ${detail ? renderCenterStage(detail, recommendation) : `<div class="panel"><h2>No item selected</h2><p class="subtle" style="margin-top:8px;">Pick a queued item to review it.</p></div>`}
-      ${detail ? renderDecisionDock(detail, queueIds, recommendation) : `<div class="panel decision-dock"><p class="subtle">Decision dock will appear when a review is selected.</p></div>`}
+      ${detail ? renderCenterStage(detail, recommendation, queueIds) : `<div class="panel"><h2>No item selected</h2><p class="subtle" style="margin-top:8px;">Pick a queued item to review it.</p></div>`}
     </section>
 
     <script>
