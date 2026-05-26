@@ -675,18 +675,25 @@ function layout(content, title = "Club Content Ops") {
         text-align: left;
         display: grid;
         gap: 0;
+        transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease, background 140ms ease;
+      }
+      .reason-chip:hover {
+        transform: translateY(-1px);
       }
       .reason-chip.active {
         border-color: var(--green);
-        box-shadow: inset 0 0 0 2px rgba(23, 103, 68, 0.14);
+        box-shadow: inset 0 0 0 2px rgba(23, 103, 68, 0.14), 0 10px 24px rgba(27, 33, 51, 0.08);
+        transform: translateY(-1px);
       }
       .reason-chip.revise.active {
         border-color: var(--amber);
-        box-shadow: inset 0 0 0 2px rgba(155, 97, 27, 0.14);
+        background: rgba(255, 247, 235, 0.96);
+        box-shadow: inset 0 0 0 2px rgba(155, 97, 27, 0.14), 0 10px 24px rgba(155, 97, 27, 0.12);
       }
       .reason-chip.reject.active {
         border-color: var(--red);
-        box-shadow: inset 0 0 0 2px rgba(139, 52, 46, 0.14);
+        background: rgba(255, 241, 239, 0.96);
+        box-shadow: inset 0 0 0 2px rgba(139, 52, 46, 0.14), 0 10px 24px rgba(139, 52, 46, 0.12);
       }
       .reason-chip strong {
         display: block;
@@ -710,10 +717,11 @@ function layout(content, title = "Club Content Ops") {
       }
       .note-preview {
         margin-top: 10px;
-        padding: 12px 14px;
-        border-radius: 16px;
-        border: 1px solid var(--line);
-        background: rgba(255,255,255,0.78);
+        padding: 14px 14px 12px;
+        border-radius: 18px;
+        border: 1px solid rgba(23,103,68,0.14);
+        background: linear-gradient(180deg, rgba(244,251,247,0.96), rgba(255,255,255,0.9));
+        box-shadow: 0 12px 28px rgba(27, 33, 51, 0.06);
       }
       .note-preview strong {
         display: block;
@@ -725,6 +733,28 @@ function layout(content, title = "Club Content Ops") {
       .note-preview p {
         margin-top: 6px;
         line-height: 1.45;
+      }
+      .note-preview-actions {
+        margin-top: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .note-preview-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.82rem;
+        color: var(--green);
+        font-weight: 600;
+      }
+      .note-preview-badge::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: currentColor;
       }
       .inline-link {
         background: transparent;
@@ -1066,9 +1096,12 @@ function renderDecisionDock(detail, queueIds, recommendation) {
             .join("")}
           </div>
           <div id="note-preview" class="note-preview hidden">
-            <strong>Reply note</strong>
+            <strong>Ready to send</strong>
             <p id="note-preview-text"></p>
-            <button class="inline-link" type="button" id="note-toggle" onclick="toggleNoteEditor()">Edit note</button>
+            <div class="note-preview-actions">
+              <span class="note-preview-badge">Default note loaded</span>
+              <button class="inline-link" type="button" id="note-toggle" onclick="toggleNoteEditor()">Edit note</button>
+            </div>
           </div>
           <div id="note-editor" class="note-editor hidden">
             <textarea id="notes" placeholder="Tell the submitter exactly what needs to change." oninput="updateNotePreview()"></textarea>
