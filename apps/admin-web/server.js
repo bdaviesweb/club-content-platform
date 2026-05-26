@@ -409,11 +409,6 @@ function layout(content, title = "Club Content Ops") {
         color: var(--muted);
         line-height: 1.45;
       }
-      .media-list {
-        display: grid;
-        gap: 10px;
-        margin-top: 14px;
-      }
       .media-canvas {
         overflow: hidden;
         border-radius: 18px;
@@ -735,18 +730,6 @@ function renderMediaStage(detail) {
     return `<img ${common} alt="${escapeHtml(item.mediaType || "submission media")}" loading="lazy" />`;
   };
 
-  const mediaCards = detail.media
-    .map(
-      (item, index) => `<div class="media-item">
-        <div class="header-row">
-          <strong>${escapeHtml(item.mediaType || `Asset ${index + 1}`)}</strong>
-          ${item.previewUrl ? renderStatusBadge('preview ready', 'good') : renderStatusBadge('stored asset', 'info')}
-        </div>
-        <p class="subtle" style="margin-top:8px; line-height:1.45;">${escapeHtml(item.objectKey || 'No object key recorded.')}</p>
-      </div>`
-    )
-    .join("");
-
   const secondaryThumbs = detail.media.length > 1
     ? `<div class="media-thumb-grid">
         ${detail.media
@@ -771,7 +754,6 @@ function renderMediaStage(detail) {
         ${primaryAsset.previewUrl ? renderAssetTag(primaryAsset, "preview") : `<div class="media-placeholder">Preview not available for this asset yet.</div>`}
       </div>
       ${secondaryThumbs}
-      <div class="media-list">${mediaCards}</div>
     </div>
   </div>`;
 }
@@ -927,7 +909,7 @@ function renderCenterStage(detail, recommendation, queueIds) {
           </div>
           <div class="signal-card">
             <strong>Media metadata</strong>
-            <pre>${escapeHtml(detail.media.length ? detail.media.map((item) => `${item.mediaType}: ${item.objectKey}`).join("\n") : "No media metadata attached.")}</pre>
+            <pre>${escapeHtml(detail.media.length ? detail.media.map((item) => `${item.mediaType}: ${item.objectKey}${item.previewUrl ? `\npreview: ${item.previewUrl}` : ""}`).join("\n\n") : "No media metadata attached.")}</pre>
           </div>
           <div class="signal-card">
             <strong>Review signals</strong>
