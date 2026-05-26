@@ -564,24 +564,24 @@ function renderQueue(queue, activeId) {
     .map((item, index) => {
       const active = item.id === activeId ? " active" : "";
       const band = riskBand(item.risk_score);
-      const preview = item.latest_review_summary || item.raw_text || "No reviewer summary yet.";
+      const preview = item.raw_text || item.latest_review_summary || "No caption yet.";
       return `<a class="queue-card${active}" href="/?approvalRequestId=${encodeURIComponent(item.id)}">
         <div class="header-row">
           <strong>${index === 0 ? "Up next" : `Queue ${index + 1}`}</strong>
           ${renderStatusBadge(band.label, band.className === "tone-high" ? "alert" : band.className === "tone-mid" ? "review" : "good")}
         </div>
         <div class="badge-row" style="margin-top:8px;">
-          ${renderStatusBadge(formatLabel(item.submission_status), "review")}
+          ${renderStatusBadge(formatLabel(item.content_type || "post"), "neutral")}
           <span class="subtle">${escapeHtml(formatRelativeTime(item.created_at))}</span>
         </div>
-        <p style="margin-top:10px; line-height:1.45;">${escapeHtml(preview)}</p>
+        <p style="margin-top:10px; line-height:1.45;">${escapeHtml(preview).slice(0, 140)}</p>
       </a>`;
     })
     .join("");
 
   return `<div class="panel queue-panel">
     <h2>Review Queue</h2>
-    <p class="subtle" style="margin-top:8px;">Work top to bottom. Decide quickly when the item is routine, and slow down only when risk is real.</p>
+    <p class="subtle" style="margin-top:8px;">Pick one item, make the call, move on.</p>
     <div class="queue-list" style="margin-top:14px;">${cards}</div>
   </div>`;
 }
@@ -719,9 +719,9 @@ function renderActionHistory(detail) {
 function renderDecisionDock(detail, queueIds, recommendation) {
   return `<aside class="decision-dock">
     <div class="panel">
-      <div class="section-label">Decision dock</div>
-      <h3 class="decision-title">Make the call and keep moving.</h3>
-      <p class="subtle" style="margin-top:8px;">Use notes only when the submitter can fix the item or when the audit trail needs a clear reason.</p>
+      <div class="section-label">Decision</div>
+      <h3 class="decision-title">Make the call.</h3>
+      <p class="subtle" style="margin-top:8px;">Approve by default. Only add notes when the submitter needs to change something or the item should stop here.</p>
 
       <div class="dock-block" style="margin-top:14px;">
         <div class="header-row">
@@ -746,12 +746,12 @@ function renderDecisionDock(detail, queueIds, recommendation) {
       </div>
 
       <div class="dock-block" style="margin-top:12px;">
-        <label class="section-label" for="actedByEmail">Reviewer identity</label>
+        <label class="section-label" for="actedByEmail">Reviewer email</label>
         <input id="actedByEmail" type="text" value="${escapeHtml(detail.approver_email)}" placeholder="Reviewer email" />
       </div>
 
       <div class="dock-block" style="margin-top:12px;">
-        <div class="section-label">Decision note</div>
+        <div class="section-label">Reason if needed</div>
         <p id="decision-copy" class="subtle decision-copy"></p>
         <div id="notes-wrap" class="hidden" style="margin-top:10px;">
           <p id="note-guidance" class="subtle note-guidance hidden" style="margin-bottom:10px;"></p>
@@ -783,14 +783,13 @@ function renderCenterStage(detail, recommendation) {
     <div class="panel stage-shell">
       <div class="stage-header">
         <div>
-          <div class="section-label">Recommended action</div>
+          <div class="section-label">Recommendation</div>
           <h2>${escapeHtml(recommendation.decision)}</h2>
           <p class="stage-copy"><strong>${escapeHtml(recommendation.shortReason)}</strong> ${escapeHtml(recommendation.explainer)}</p>
         </div>
         <div class="badge-row">
           ${renderStatusBadge(risk.label, risk.className === "tone-high" ? "alert" : risk.className === "tone-mid" ? "review" : "good")}
           ${renderStatusBadge(formatLabel(detail.visibility_target), "info")}
-          ${renderStatusBadge(formatLabel(detail.submission_status), "review")}
         </div>
       </div>
 
@@ -798,38 +797,38 @@ function renderCenterStage(detail, recommendation) {
         <div>
           ${renderMediaStage(detail)}
           <div class="stage-card content-stage" style="margin-top:14px;">
-            <div class="section-label">Submitter's words</div>
+            <div class="section-label">What they submitted</div>
             <p class="content-copy">${escapeHtml(detail.raw_text || "No caption or summary provided.")}</p>
             <div class="content-meta" style="margin-top:14px;">
               <span class="subtle">${escapeHtml(detail.submitter_name)}</span>
-              <span class="subtle">${escapeHtml(detail.submitter_email)}</span>
+              ${detail.team_name ? `<span class="subtle">${escapeHtml(detail.team_name)}</span>` : ""}
               <span class="subtle">Submitted ${escapeHtml(formatRelativeTime(detail.created_at))}</span>
             </div>
           </div>
         </div>
         <div class="summary-stack">
           <div class="summary-item">
-            <strong>Decision framing</strong>
-            <p>${escapeHtml(recommendation.explainer)}</p>
+            <strong>Quick read</strong>
+            <p>${escapeHtml(recommendation.shortReason)}</p>
           </div>
           <div class="summary-item">
-            <strong>Caption draft</strong>
-            <p>${escapeHtml(detail.caption_draft || "No caption draft generated.")}</p>
+            <strong>AI summary</strong>
+            <p>${escapeHtml(detail.review_runs[0]?.summary || detail.routing_decision?.rationale || "No summary recorded.")}</p>
           </div>
           <div class="summary-item">
-            <strong>Approver and queue state</strong>
+            <strong>Submitted by</strong>
             <div class="badge-row" style="margin-top:8px;">
-              ${renderStatusBadge(formatLabel(detail.state), "neutral")}
               ${renderStatusBadge(formatLabel(detail.content_type), "neutral")}
+              ${renderStatusBadge(formatLabel(detail.submission_status), "review")}
             </div>
-            <p style="margin-top:8px;">${escapeHtml(detail.approver_name)} (${escapeHtml(detail.approver_role)})</p>
+            <p style="margin-top:8px;">${escapeHtml(detail.submitter_name)}${detail.submitter_email ? ` • ${escapeHtml(detail.submitter_email)}` : ""}</p>
           </div>
         </div>
       </div>
     </div>
 
     <details class="disclosure">
-      <summary>Decision context and system details</summary>
+      <summary>More details</summary>
       <div class="disclosure-body">
         <div class="signal-list">
           <div class="signal-card">
@@ -840,21 +839,15 @@ function renderCenterStage(detail, recommendation) {
             <strong>Media metadata</strong>
             <pre>${escapeHtml(detail.media.length ? detail.media.map((item) => `${item.mediaType}: ${item.objectKey}`).join("\n") : "No media metadata attached.")}</pre>
           </div>
+          <div class="signal-card">
+            <strong>Review signals</strong>
+            <div class="signal-list" style="margin-top:10px;">${renderReviewSignals(detail)}</div>
+          </div>
+          <div class="signal-card">
+            <strong>Action history</strong>
+            <div class="history-list" style="margin-top:10px;">${renderActionHistory(detail)}</div>
+          </div>
         </div>
-      </div>
-    </details>
-
-    <details class="disclosure">
-      <summary>Review signals and model context</summary>
-      <div class="disclosure-body">
-        <div class="signal-list">${renderReviewSignals(detail)}</div>
-      </div>
-    </details>
-
-    <details class="disclosure">
-      <summary>Action history</summary>
-      <div class="disclosure-body">
-        <div class="history-list">${renderActionHistory(detail)}</div>
       </div>
     </details>
   </section>`;
@@ -866,44 +859,16 @@ async function renderHome(activeId) {
   const queueIds = queue.map((item) => item.id);
   const selectedId = activeId || queueIds[0] || null;
   const detail = selectedId ? await fetchJson(`/approval-requests/${selectedId}`) : null;
-  const feedResponse = await fetchJson("/feed/internal");
-  const feed = feedResponse.items || [];
-  const failedEventsResponse = await fetchJson("/workflow-events?status=failed");
-  const failedEvents = failedEventsResponse.items || [];
-  const highConcern = queue.filter((item) => Number(item.risk_score || 0) >= 0.75).length;
   const recommendation = detail ? recommendationFor(detail) : null;
 
   return layout(`
     <section class="hero">
       <div>
         <div class="eyebrow">Reviewer workspace</div>
-        <h1>See the content, make the call, move on.</h1>
-        <p class="subtle" style="margin-top:10px; max-width:780px;">This view is built for fast moderation. The queue stays compact, the content is front and center, and the decision dock stays available without making you read the whole record first.</p>
+        <h1>See it. Decide it. Move on.</h1>
+        <p class="subtle" style="margin-top:10px; max-width:780px;">The default view is intentionally short: content, recommendation, action. Open more details only when you actually need them.</p>
       </div>
       ${renderStatusBadge(`${queue.length} waiting`, queue.length ? "review" : "good")}
-    </section>
-
-    <section class="topline">
-      <div class="metric">
-        <div class="metric-label">Queue size</div>
-        <strong>${escapeHtml(String(queue.length))}</strong>
-        <span class="subtle">Pending decisions right now</span>
-      </div>
-      <div class="metric">
-        <div class="metric-label">High concern</div>
-        <strong>${escapeHtml(String(highConcern))}</strong>
-        <span class="subtle">Needs slower review</span>
-      </div>
-      <div class="metric">
-        <div class="metric-label">Oldest item</div>
-        <strong>${escapeHtml(queue[0] ? formatRelativeTime(queue[0].created_at) : "None")}</strong>
-        <span class="subtle">How long the top item has waited</span>
-      </div>
-      <div class="metric">
-        <div class="metric-label">Reviewer mode</div>
-        <strong>Approve and move</strong>
-        <span class="subtle">Use notes only when the submitter needs help</span>
-      </div>
     </section>
 
     <section class="workspace">
@@ -911,8 +876,6 @@ async function renderHome(activeId) {
       ${detail ? renderCenterStage(detail, recommendation) : `<div class="panel"><h2>No item selected</h2><p class="subtle" style="margin-top:8px;">Pick a queued item to review it.</p></div>`}
       ${detail ? renderDecisionDock(detail, queueIds, recommendation) : `<div class="panel decision-dock"><p class="subtle">Decision dock will appear when a review is selected.</p></div>`}
     </section>
-
-    ${renderFooterPanels(feed, failedEvents)}
 
     <script>
       const queueIds = ${JSON.stringify(queueIds)};
