@@ -220,6 +220,7 @@ export default function App() {
   const [selectedSubmissionDetail, setSelectedSubmissionDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [resubmissionText, setResubmissionText] = useState("");
+  const [resubmissionAsset, setResubmissionAsset] = useState(null);
   const [resubmittingDetail, setResubmittingDetail] = useState(false);
   const [activeView, setActiveView] = useState("post");
   const [settingsVisible, setSettingsVisible] = useState(false);
@@ -309,6 +310,7 @@ export default function App() {
       setSelectedSubmissionDetail(payload);
       setSelectedSubmissionId(submissionId);
       setResubmissionText(payload.raw_text || "");
+      setResubmissionAsset(null);
     } catch (error) {
       setStatus(error.message || "Could not load submission detail");
       Alert.alert("Detail unavailable", error.message || "Unknown error");
@@ -346,6 +348,40 @@ export default function App() {
     setResubmittingDetail(true);
     try {
       const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
+      let resubmissionMedia = null;
+
+      if (resubmissionAsset) {
+        const contentType = isVideoAsset(resubmissionAsset) ? "video" : "photo";
+        const signResponse = await fetch(`${baseUrl}/uploads/sign`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            clubSlug: selectedSubmissionDetail.club_slug,
+            files: [
+              {
+                filename: resubmissionAsset.name,
+                mimeType: resubmissionAsset.mimeType || "application/octet-stream",
+                mediaType: contentType === "video" ? "video" : "image"
+              }
+            ]
+          })
+        });
+
+        if (!signResponse.ok) throw new Error(`Replacement upload signing failed: ${signResponse.status}`);
+        const signPayload = await signResponse.json();
+        const uploadPlan = signPayload.uploads?.[0];
+        if (!uploadPlan) throw new Error("Replacement signing returned no upload plan");
+
+        await uploadSelectedAsset(uploadPlan, resubmissionAsset);
+        resubmissionMedia = [
+          {
+            objectKey: uploadPlan.objectKey,
+            mediaType: contentType,
+            mimeType: resubmissionAsset.mimeType || "application/octet-stream"
+          }
+        ];
+      }
+
       const response = await fetch(
         `${baseUrl}/submissions/${selectedSubmissionDetail.id}/resubmit`,
         {
@@ -354,7 +390,8 @@ export default function App() {
           body: JSON.stringify({
             submitterEmail: submitterEmail.trim(),
             rawText: resubmissionText.trim(),
-            visibilityTarget: selectedSubmissionDetail.visibility_target
+            visibilityTarget: selectedSubmissionDetail.visibility_target,
+            media: resubmissionMedia
           })
         }
       );
@@ -363,6 +400,7 @@ export default function App() {
 
       await loadSubmissionDetail(selectedSubmissionDetail.id);
       await refreshStatusFeed();
+      setResubmissionAsset(null);
       setStatus("Resubmitted and back in review.");
       Alert.alert("Back in review", "Your update was sent back into the review queue.");
     } catch (error) {
@@ -371,6 +409,42 @@ export default function App() {
     } finally {
       setResubmittingDetail(false);
     }
+  }
+
+  async function pickReplacementFromLibrary() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Allow photo library access to replace this post.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images", "videos"],
+      allowsEditing: false,
+      quality: 0.9,
+      videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium
+    });
+
+    if (result.canceled || !result.assets?.length) return;
+    setResubmissionAsset(normalizePickedAsset(result.assets[0]));
+  }
+
+  async function captureReplacementWithCamera() {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Allow camera access to retake this post.");
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images", "videos"],
+      allowsEditing: false,
+      quality: 0.9,
+      videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium
+    });
+
+    if (result.canceled || !result.assets?.length) return;
+    setResubmissionAsset(normalizePickedAsset(result.assets[0]));
   }
 
   useEffect(() => {
@@ -1073,10 +1147,15 @@ export default function App() {
                   <Text style={styles.detailMeta}>{formatSubmittedAt(selectedSubmissionDetail.created_at)}</Text>
                 </View>
 
-                {selectedSubmissionDetail.media?.length ? (
+                {selectedSubmissionDetail.media?.length || resubmissionAsset ? (
                   <View style={styles.detailMediaCard}>
-                    {selectedSubmissionDetail.media[0]?.previewUrl &&
-                    !String(selectedSubmissionDetail.media[0]?.mimeType || "").startsWith("video/") ? (
+                    {resubmissionAsset && !isVideoAsset(resubmissionAsset) ? (
+                      <Image
+                        source={{ uri: resubmissionAsset.uri }}
+                        style={styles.detailMediaPreview}
+                      />
+                    ) : selectedSubmissionDetail.media[0]?.previewUrl &&
+                      !String(selectedSubmissionDetail.media[0]?.mimeType || "").startsWith("video/") ? (
                       <Image
                         source={{ uri: selectedSubmissionDetail.media[0].previewUrl }}
                         style={styles.detailMediaPreview}
@@ -1084,24 +1163,41 @@ export default function App() {
                     ) : (
                       <View style={styles.detailMediaFallback}>
                         <Text style={styles.detailMediaFallbackLabel}>
-                          {formatContentTypeLabel(selectedSubmissionDetail.content_type)}
+                          {resubmissionAsset
+                            ? formatContentTypeLabel(
+                                isVideoAsset(resubmissionAsset) ? "video" : "photo"
+                              )
+                            : formatContentTypeLabel(selectedSubmissionDetail.content_type)}
                         </Text>
                         <Text style={styles.detailMediaFallbackBody}>
-                          Preview is limited for this asset, but this is the media currently attached to the post you are editing.
+                          {resubmissionAsset
+                            ? "Replacement media selected. This will replace the current attachment when you resubmit."
+                            : "Preview is limited for this asset, but this is the media currently attached to the post you are editing."}
                         </Text>
                       </View>
                     )}
                     <View style={styles.detailMediaMetaRow}>
                       <View style={styles.metaChip}>
                         <Text style={styles.metaChipText}>
-                          {formatMediaCountLabel(selectedSubmissionDetail.media?.length)}
+                          {formatMediaCountLabel(
+                            resubmissionAsset ? 1 : selectedSubmissionDetail.media?.length
+                          )}
                         </Text>
                       </View>
                       <View style={styles.metaChip}>
                         <Text style={styles.metaChipText}>
-                          {formatContentTypeLabel(selectedSubmissionDetail.content_type)}
+                          {resubmissionAsset
+                            ? formatContentTypeLabel(
+                                isVideoAsset(resubmissionAsset) ? "video" : "photo"
+                              )
+                            : formatContentTypeLabel(selectedSubmissionDetail.content_type)}
                         </Text>
                       </View>
+                      {resubmissionAsset ? (
+                        <View style={styles.metaChip}>
+                          <Text style={styles.metaChipText}>Replacement ready</Text>
+                        </View>
+                      ) : null}
                     </View>
                   </View>
                 ) : null}
@@ -1179,6 +1275,19 @@ export default function App() {
                       {selectedSubmissionDetail.latestApprovalRequest?.latestAction?.notes ||
                         "Add the missing detail, then send this back into review."}
                     </Text>
+                    <View style={styles.detailMediaActionRow}>
+                      <Pressable style={styles.detailMediaActionButton} onPress={captureReplacementWithCamera}>
+                        <Text style={styles.detailMediaActionText}>Retake media</Text>
+                      </Pressable>
+                      <Pressable style={styles.detailMediaActionButton} onPress={pickReplacementFromLibrary}>
+                        <Text style={styles.detailMediaActionText}>Choose another</Text>
+                      </Pressable>
+                    </View>
+                    {resubmissionAsset ? (
+                      <Text style={styles.detailBody}>
+                        Replacement selected: {resubmissionAsset.name}
+                      </Text>
+                    ) : null}
                     <TextInput
                       multiline
                       style={styles.detailResubmitInput}
@@ -2133,6 +2242,24 @@ const styles = StyleSheet.create({
     color: "#213040",
     textAlignVertical: "top",
     marginTop: 10
+  },
+  detailMediaActionRow: {
+    flexDirection: "row",
+    gap: 10,
+    flexWrap: "wrap",
+    marginTop: 10
+  },
+  detailMediaActionButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 999,
+    backgroundColor: "rgba(91, 82, 186, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(91, 82, 186, 0.20)"
+  },
+  detailMediaActionText: {
+    color: "#4f46a6",
+    fontWeight: "700"
   },
   detailResubmitButton: {
     marginTop: 12,

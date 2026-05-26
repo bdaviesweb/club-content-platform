@@ -557,6 +557,7 @@ async function handleResubmitSubmission(req, res, submissionId) {
   const submitterEmail = normalizeOptionalString(body.submitterEmail);
   const rawText = normalizeOptionalString(body.rawText);
   const visibilityTarget = normalizeOptionalString(body.visibilityTarget);
+  const media = Array.isArray(body.media) ? body.media : null;
 
   if (!submitterEmail) {
     sendJson(res, 400, { error: "submitterEmail is required" });
@@ -612,6 +613,44 @@ async function handleResubmitSubmission(req, res, submissionId) {
       [submissionId, rawText, visibilityTarget]
     );
 
+    if (media) {
+      await client.query(
+        `
+        DELETE FROM submission_media
+        WHERE submission_id = $1
+        `,
+        [submissionId]
+      );
+
+      for (const item of media) {
+        await client.query(
+          `
+          INSERT INTO submission_media (
+            submission_id,
+            object_key,
+            media_type,
+            mime_type,
+            width,
+            height,
+            duration_seconds,
+            checksum_sha256
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          `,
+          [
+            submissionId,
+            item.objectKey,
+            item.mediaType,
+            item.mimeType,
+            item.width || null,
+            item.height || null,
+            item.durationSeconds || null,
+            item.checksumSha256 || null
+          ]
+        );
+      }
+    }
+
     await client.query(
       `
       INSERT INTO submission_events (submission_id, event_name, payload)
@@ -623,7 +662,8 @@ async function handleResubmitSubmission(req, res, submissionId) {
         JSON.stringify({
           resubmitted: true,
           submitterEmail,
-          rawText: rawText || submission.raw_text || null
+          rawText: rawText || submission.raw_text || null,
+          mediaCount: media ? media.length : undefined
         })
       ]
     );
