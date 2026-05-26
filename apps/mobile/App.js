@@ -24,7 +24,9 @@ const defaultConfig = {
   clubSlug: process.env.EXPO_PUBLIC_CLUB_SLUG || "demo-soccer-club",
   teamSlug: process.env.EXPO_PUBLIC_TEAM_SLUG || "u14-girls",
   submitterEmail:
-    process.env.EXPO_PUBLIC_SUBMITTER_EMAIL || "clubhqpro@gmail.com"
+    process.env.EXPO_PUBLIC_SUBMITTER_EMAIL || "clubhqpro@gmail.com",
+  reviewerEmail:
+    process.env.EXPO_PUBLIC_REVIEWER_EMAIL || "reviewer@demo-club.local"
 };
 
 const progressStages = [
@@ -230,6 +232,61 @@ function resubmitShortcutsForReasonCode(reasonCode) {
   }
 }
 
+const reviewReasonSets = {
+  request_changes: [
+    {
+      code: "missing_context",
+      label: "More context",
+      helper: "Ask for who, what, or when.",
+      text: "Please add more context so families know what happened."
+    },
+    {
+      code: "caption_detail",
+      label: "One more detail",
+      helper: "Ask for one clear missing point.",
+      text: "Looks good, but the caption needs one clear detail added."
+    },
+    {
+      code: "score_details",
+      label: "Score details",
+      helper: "Ask for the score, opponent, or event.",
+      text: "Please confirm the event, opponent, or score before we post this."
+    },
+    {
+      code: "caption_tighten",
+      label: "Tighten caption",
+      helper: "Ask for a cleaner club-ready caption.",
+      text: "Please tighten the caption so it is club-ready."
+    }
+  ],
+  reject: [
+    {
+      code: "club_guidelines",
+      label: "Off guidelines",
+      helper: "Use when the post does not fit club standards.",
+      text: "This does not fit club posting guidelines."
+    },
+    {
+      code: "privacy_safe_retake",
+      label: "Safer retake",
+      helper: "Use when the media needs a privacy-safe replacement.",
+      text: "We cannot publish this without a clearer privacy-safe version."
+    },
+    {
+      code: "stop_current_form",
+      label: "Stop this version",
+      helper: "Use when this exact post should not move forward.",
+      text: "This should not move forward in its current form."
+    },
+    {
+      code: "admin_review_required",
+      label: "Admin follow-up",
+      helper: "Use when this needs a stronger admin conversation.",
+      text: "Please do not repost this item without admin review."
+    }
+  ]
+};
+
 function countStatuses(items) {
   return items.reduce(
     (accumulator, item) => {
@@ -290,6 +347,7 @@ export default function App() {
   const [clubSlug, setClubSlug] = useState(defaultConfig.clubSlug);
   const [teamSlug, setTeamSlug] = useState(defaultConfig.teamSlug);
   const [submitterEmail, setSubmitterEmail] = useState(defaultConfig.submitterEmail);
+  const [reviewerEmail, setReviewerEmail] = useState(defaultConfig.reviewerEmail);
   const [caption, setCaption] = useState("");
   const [visibilityTarget, setVisibilityTarget] = useState("internal");
   const [asset, setAsset] = useState(null);
@@ -310,6 +368,15 @@ export default function App() {
   const [activeView, setActiveView] = useState("post");
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+  const [reviewQueue, setReviewQueue] = useState([]);
+  const [loadingReviewQueue, setLoadingReviewQueue] = useState(false);
+  const [reviewQueueError, setReviewQueueError] = useState("");
+  const [reviewAction, setReviewAction] = useState("approve");
+  const [reviewActionReasonCode, setReviewActionReasonCode] = useState(null);
+  const [reviewActionNotes, setReviewActionNotes] = useState("");
+  const [reviewActionEditorVisible, setReviewActionEditorVisible] = useState(false);
+  const [reviewActionInProgress, setReviewActionInProgress] = useState(false);
+  const [reviewActionStatus, setReviewActionStatus] = useState("Pick a review item to get started.");
 
   const canSubmit = useMemo(() => {
     return Boolean(asset && apiBaseUrl.trim() && clubSlug.trim() && submitterEmail.trim());
@@ -318,6 +385,10 @@ export default function App() {
   const canLoadRecent = useMemo(() => {
     return Boolean(apiBaseUrl.trim() && clubSlug.trim() && submitterEmail.trim());
   }, [apiBaseUrl, clubSlug, submitterEmail]);
+
+  const canReview = useMemo(() => {
+    return Boolean(apiBaseUrl.trim() && reviewerEmail.trim());
+  }, [apiBaseUrl, reviewerEmail]);
 
   const unreadNotificationCount = useMemo(() => {
     return notifications.filter((item) => !item.readAt).length;
@@ -573,6 +644,142 @@ export default function App() {
     return () => clearInterval(intervalId);
   }, [canLoadRecent, apiBaseUrl, clubSlug, teamSlug, submitterEmail]);
 
+  useEffect(() => {
+    if (!canReview) return;
+    loadReviewQueue();
+    if (activeView !== "review") return;
+    const intervalId = setInterval(() => {
+      loadReviewQueue();
+    }, 20000);
+    return () => clearInterval(intervalId);
+  }, [canReview, apiBaseUrl, reviewerEmail, activeView]);
+
+  async function loadReviewQueue() {
+    if (!canReview) {
+      setReviewQueue([]);
+      return [];
+    }
+
+    setLoadingReviewQueue(true);
+    setReviewQueueError("");
+
+    try {
+      const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
+      const response = await fetch(baseUrl + "/approvals/queue");
+      if (!response.ok) throw new Error("Review queue failed: " + response.status);
+      const payload = await response.json();
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      setReviewQueue(items);
+      return items;
+    } catch (error) {
+      setReviewQueueError(error.message || "Could not load review queue");
+      setStatus(error.message || "Could not load review queue");
+      return [];
+    } finally {
+      setLoadingReviewQueue(false);
+    }
+  }
+
+  function resetReviewActionState() {
+    setReviewAction("approve");
+    setReviewActionReasonCode(null);
+    setReviewActionNotes("");
+    setReviewActionEditorVisible(false);
+    setReviewActionStatus("Pick a review item to get started.");
+  }
+
+  function selectReviewAction(action) {
+    setReviewAction(action);
+    setReviewActionStatus("");
+
+    if (action === "approve") {
+      setReviewActionReasonCode(null);
+      setReviewActionNotes("");
+      setReviewActionEditorVisible(false);
+      return;
+    }
+
+    const reasons = reviewReasonSets[action] || [];
+    const first = reasons[0] || null;
+    setReviewActionReasonCode(first?.code || null);
+    setReviewActionNotes(first?.text || "");
+    setReviewActionEditorVisible(true);
+  }
+
+  function applyReviewReasonPreset(code, note) {
+    setReviewActionReasonCode(code);
+    setReviewActionNotes(note);
+    setReviewActionEditorVisible(true);
+  }
+
+  async function openReviewItem(submissionId) {
+    setActiveView("review");
+    await loadSubmissionDetail(submissionId);
+    resetReviewActionState();
+  }
+
+  async function submitReviewAction() {
+    const approvalRequestId = selectedSubmissionDetail?.latestApprovalRequest?.id;
+    if (!approvalRequestId) return;
+
+    if (reviewAction !== "approve" && !reviewActionNotes.trim()) {
+      Alert.alert("Note required", "Add a short note before you send this back or reject it.");
+      return;
+    }
+
+    setReviewActionInProgress(true);
+    try {
+      const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
+      const actionLabel =
+        reviewAction === "approve"
+          ? "Approved"
+          : reviewAction === "request_changes"
+            ? "Sent back for changes"
+            : "Rejected";
+
+      const response = await fetch(baseUrl + "/approval-requests/" + approvalRequestId + "/actions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: reviewAction,
+          actedByEmail: reviewerEmail.trim(),
+          notes: reviewAction === "approve" ? null : reviewActionNotes.trim(),
+          reasonCode: reviewActionReasonCode
+        })
+      });
+
+      if (!response.ok) throw new Error("Review action failed: " + response.status);
+
+      setReviewActionStatus(actionLabel + ". Loading the next item...");
+      await refreshStatusFeed();
+      const items = await loadReviewQueue();
+      const nextItem = items.find((item) => item.submission_id !== selectedSubmissionDetail.id) || items[0] || null;
+
+      if (nextItem?.submission_id) {
+        await loadSubmissionDetail(nextItem.submission_id);
+        resetReviewActionState();
+      } else {
+        setReviewActionStatus(actionLabel + ". Queue is clear.");
+        setSelectedSubmissionId(null);
+        setSelectedSubmissionDetail(null);
+      }
+
+      Alert.alert(
+        actionLabel,
+        reviewAction === "approve"
+          ? "It is moving forward."
+          : reviewAction === "request_changes"
+            ? "The submitter will see your note."
+            : "The submitter will be notified."
+      );
+    } catch (error) {
+      setStatus(error.message || "Could not save review action");
+      Alert.alert("Review failed", error.message || "Unknown error");
+    } finally {
+      setReviewActionInProgress(false);
+    }
+  }
+
   async function pickFromLibrary() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
@@ -733,6 +940,14 @@ export default function App() {
             onPress={() => setActiveView("post")}
           >
             <Text style={[styles.segmentText, activeView === "post" && styles.segmentTextActive]}>Post</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.segmentButton, activeView === "review" && styles.segmentButtonActive]}
+            onPress={() => setActiveView("review")}
+          >
+            <Text style={[styles.segmentText, activeView === "review" && styles.segmentTextActive]}>
+              Review{reviewQueue.length ? ` (${reviewQueue.length})` : ""}
+            </Text>
           </Pressable>
           <Pressable
             style={[styles.segmentButton, activeView === "status" && styles.segmentButtonActive]}
@@ -927,6 +1142,109 @@ export default function App() {
                   </Pressable>
                 ) : null}
               </View>
+            </>
+          ) : activeView === "review" ? (
+            <>
+              <View style={styles.statusHeroCard}>
+                <GlassLayer />
+                <Text style={styles.statusHeroKicker}>Reviewer</Text>
+                <Text style={styles.statusHeroTitle}>One item at a time.</Text>
+                <Text style={styles.statusHeroBody}>
+                  Tap a queue item to open the post, see the recommendation, and make the call without digging through extra detail.
+                </Text>
+                <View style={styles.statusSummaryRow}>
+                  <View style={styles.statusSummaryPill}>
+                    <Text style={styles.statusSummaryValue}>{reviewQueue.length}</Text>
+                    <Text style={styles.statusSummaryLabel}>Waiting</Text>
+                  </View>
+                  <View style={styles.statusSummaryPill}>
+                    <Text style={styles.statusSummaryValue}>
+                      {selectedSubmissionDetail?.latestApprovalRequest?.state === "pending" ? 1 : 0}
+                    </Text>
+                    <Text style={styles.statusSummaryLabel}>Open</Text>
+                  </View>
+                  <View style={styles.statusSummaryPill}>
+                    <Text style={styles.statusSummaryValue}>
+                      {reviewAction === "approve" ? "A" : reviewAction === "request_changes" ? "C" : "R"}
+                    </Text>
+                    <Text style={styles.statusSummaryLabel}>Mode</Text>
+                  </View>
+                </View>
+                <Text style={styles.reviewQueueHint}>
+                  {reviewerEmail.trim() ? `Signed in as ${reviewerEmail.trim()}.` : "Add your reviewer email in Settings to use this view."}
+                </Text>
+              </View>
+
+              <View style={styles.sectionBlock}>
+                <View style={styles.sectionHeader}>
+                  <View>
+                    <Text style={styles.sectionKicker}>Queue</Text>
+                    <Text style={styles.sectionTitle}>Pending reviews</Text>
+                  </View>
+                  <Pressable style={styles.topGhostButton} onPress={loadReviewQueue}>
+                    <Text style={styles.topGhostButtonText}>
+                      {loadingReviewQueue ? "Loading" : "Refresh"}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {reviewQueue.length ? (
+                  reviewQueue.map((item, index) => (
+                    <Pressable
+                      key={item.id}
+                      style={[styles.feedCard, index === 0 && styles.feedCardFeatured]}
+                      onPress={() => openReviewItem(item.submission_id || item.submissionId)}
+                    >
+                      <GlassLayer />
+                      <View style={styles.statusBadgeRow}>
+                        <View style={styles.statusBadge}>
+                          <Text style={styles.statusBadgeText}>{index === 0 ? "Up next" : `Then ${index + 1}`}</Text>
+                        </View>
+                        <Text style={styles.feedTime}>{formatSubmittedAt(item.created_at)}</Text>
+                      </View>
+                      <Text style={styles.feedHeadline}>{item.raw_text?.trim() || "No caption provided"}</Text>
+                      <Text style={styles.feedSupport}>
+                        {item.latest_review_summary || summarizeSubmissionProgress({ status: "needs_human_review" })}
+                      </Text>
+                      <View style={styles.metaChipRow}>
+                        <View style={styles.metaChip}>
+                          <Text style={styles.metaChipText}>
+                            {item.team_name || formatContentTypeLabel(item.content_type)}
+                          </Text>
+                        </View>
+                        <View style={styles.metaChip}>
+                          <Text style={styles.metaChipText}>
+                            {formatRiskScoreLabel(item.risk_score)}
+                          </Text>
+                        </View>
+                      </View>
+                    </Pressable>
+                  ))
+                ) : loadingReviewQueue ? (
+                  <Text style={styles.emptyStateText}>Loading reviews…</Text>
+                ) : reviewQueueError ? (
+                  <Text style={styles.errorStateText}>{reviewQueueError}</Text>
+                ) : (
+                  <Text style={styles.emptyStateText}>No pending reviews right now.</Text>
+                )}
+              </View>
+
+              {selectedSubmissionDetail ? (
+                <View style={styles.sectionBlock}>
+                  <View style={styles.sectionHeader}>
+                    <View>
+                      <Text style={styles.sectionKicker}>Current item</Text>
+                      <Text style={styles.sectionTitle}>Open the detail sheet</Text>
+                    </View>
+                    <Pressable style={styles.topGhostButton} onPress={() => setSelectedSubmissionId(selectedSubmissionDetail.id)}>
+                      <Text style={styles.topGhostButtonText}>Open</Text>
+                    </Pressable>
+                  </View>
+                  <Text style={styles.emptyStateText}>
+                    The selected post is ready in the detail sheet. Open it to review the media and send back or approve.
+                  </Text>
+                </View>
+              ) : null}
             </>
           ) : (
             <>
@@ -1168,6 +1486,21 @@ export default function App() {
 
             <View style={styles.settingsCard}>
               <GlassLayer />
+              <Text style={styles.settingsLabel}>Reviewer email</Text>
+              <TextInput
+                autoCapitalize="none"
+                style={styles.input}
+                value={reviewerEmail}
+                onChangeText={setReviewerEmail}
+                placeholder="Reviewer email"
+              />
+              <Text style={styles.advancedHelpText}>
+                Used when you open the review tab on this device.
+              </Text>
+            </View>
+
+            <View style={styles.settingsCard}>
+              <GlassLayer />
               <Text style={styles.settingsLabel}>Club</Text>
               <TextInput style={styles.input} value={clubSlug} onChangeText={setClubSlug} placeholder="Club slug" />
               <TextInput style={[styles.input, styles.settingsStackTop]} value={teamSlug} onChangeText={setTeamSlug} placeholder="Team slug" />
@@ -1383,6 +1716,113 @@ export default function App() {
                       </Text>
                     ) : null}
                   </>
+                ) : null}
+
+                {activeView === "review" && selectedSubmissionDetail.latestApprovalRequest?.state === "pending" ? (
+                  <View style={styles.reviewActionPanel}>
+                    <Text style={styles.detailHeading}>Quick review</Text>
+                    <Text style={styles.reviewActionTitle}>Pick the action, then keep moving.</Text>
+                    <View style={styles.detailMediaActionRow}>
+                      {[
+                        { action: "approve", label: "Approve" },
+                        { action: "request_changes", label: "Send back" },
+                        { action: "reject", label: "Reject" }
+                      ].map((option) => (
+                        <Pressable
+                          key={option.action}
+                          style={[
+                            styles.detailMediaActionButton,
+                            reviewAction === option.action && styles.reviewActionButtonActive,
+                            option.action === "approve" && styles.reviewActionButtonApprove,
+                            option.action === "request_changes" && styles.reviewActionButtonChanges,
+                            option.action === "reject" && styles.reviewActionButtonReject
+                          ]}
+                          onPress={() => selectReviewAction(option.action)}
+                        >
+                          <Text
+                            style={[
+                              styles.detailMediaActionText,
+                              reviewAction === option.action && styles.reviewActionButtonTextActive,
+                              option.action === "approve" && styles.reviewActionButtonTextApprove,
+                              option.action === "request_changes" && styles.reviewActionButtonTextChanges,
+                              option.action === "reject" && styles.reviewActionButtonTextReject
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+
+                    {reviewAction !== "approve" ? (
+                      <View style={styles.reviewReasonSection}>
+                        <Text style={styles.reviewActionLabel}>Pick the closest fix path.</Text>
+                        <View style={styles.detailShortcutRow}>
+                          {(reviewReasonSets[reviewAction] || []).map((reason) => (
+                            <Pressable
+                              key={reason.code}
+                              style={[
+                                styles.detailShortcutButton,
+                                reviewActionReasonCode === reason.code && styles.reviewShortcutActive
+                              ]}
+                              onPress={() => applyReviewReasonPreset(reason.code, reason.text)}
+                            >
+                              <Text style={styles.detailShortcutText}>{reason.label}</Text>
+                            </Pressable>
+                          ))}
+                        </View>
+
+                        <View style={styles.reviewNoteCard}>
+                          <Text style={styles.reviewNoteTitle}>Ready to send</Text>
+                          <Text style={styles.reviewNoteBody}>
+                            {reviewActionNotes.trim() || "Pick a reason and the note will be filled in."}
+                          </Text>
+                          <Pressable onPress={() => setReviewActionEditorVisible((current) => !current)}>
+                            <Text style={styles.inlineStatusLinkText}>
+                              {reviewActionEditorVisible ? "Hide editor" : "Edit note"}
+                            </Text>
+                          </Pressable>
+                        </View>
+
+                        {reviewActionEditorVisible ? (
+                          <TextInput
+                            multiline
+                            style={styles.detailResubmitInput}
+                            value={reviewActionNotes}
+                            onChangeText={setReviewActionNotes}
+                            placeholder="Add a short note."
+                            placeholderTextColor="#8f908c"
+                          />
+                        ) : null}
+                      </View>
+                    ) : null}
+
+                    <Pressable
+                      disabled={reviewActionInProgress || (reviewAction !== "approve" && !reviewActionNotes.trim())}
+                      style={[
+                        styles.detailResubmitButton,
+                        reviewAction === "approve" && styles.reviewActionApproveButton,
+                        reviewAction === "request_changes" && styles.reviewActionChangesButton,
+                        reviewAction === "reject" && styles.reviewActionRejectButton,
+                        (reviewActionInProgress || (reviewAction !== "approve" && !reviewActionNotes.trim())) && styles.buttonDisabled
+                      ]}
+                      onPress={submitReviewAction}
+                    >
+                      {reviewActionInProgress ? (
+                        <ActivityIndicator color="#fffdf8" />
+                      ) : (
+                        <Text style={styles.detailResubmitButtonText}>
+                          {reviewAction === "approve"
+                            ? "Approve and next"
+                            : reviewAction === "request_changes"
+                              ? "Send back"
+                              : "Reject submission"}
+                        </Text>
+                      )}
+                    </Pressable>
+
+                    {reviewActionStatus ? <Text style={styles.reviewActionStatus}>{reviewActionStatus}</Text> : null}
+                  </View>
                 ) : null}
 
                 {selectedSubmissionDetail.status === "needs_metadata" ? (
@@ -2011,6 +2451,11 @@ const styles = StyleSheet.create({
     letterSpacing: 1.1,
     marginTop: 4
   },
+  reviewQueueHint: {
+    color: "#5d5a80",
+    lineHeight: 20,
+    marginTop: 2
+  },
   sectionBlock: {
     gap: 12
   },
@@ -2418,6 +2863,95 @@ const styles = StyleSheet.create({
   detailMediaActionText: {
     color: "#4f46a6",
     fontWeight: "700"
+  },
+  reviewActionPanel: {
+    backgroundColor: "rgba(255,255,255,0.60)",
+    borderRadius: 22,
+    padding: 14,
+    marginTop: 10,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.74)"
+  },
+  reviewActionTitle: {
+    color: "#2a2451",
+    fontWeight: "800",
+    fontSize: 18,
+    lineHeight: 22
+  },
+  reviewReasonSection: {
+    gap: 10
+  },
+  reviewActionLabel: {
+    color: "#675f90",
+    fontWeight: "700"
+  },
+  reviewShortcutActive: {
+    backgroundColor: "rgba(91, 82, 186, 0.16)",
+    borderColor: "rgba(91, 82, 186, 0.26)"
+  },
+  reviewNoteCard: {
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.76)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.80)",
+    padding: 14,
+    gap: 8
+  },
+  reviewNoteTitle: {
+    color: "#2a2451",
+    fontWeight: "800",
+    fontSize: 15
+  },
+  reviewNoteBody: {
+    color: "#5f5b81",
+    lineHeight: 20
+  },
+  reviewActionButtonActive: {
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
+    transform: [{ translateY: -1 }]
+  },
+  reviewActionButtonApprove: {
+    backgroundColor: "rgba(205, 246, 224, 0.80)",
+    borderColor: "rgba(112, 204, 160, 0.36)"
+  },
+  reviewActionButtonChanges: {
+    backgroundColor: "rgba(255, 230, 195, 0.84)",
+    borderColor: "rgba(214, 154, 58, 0.34)"
+  },
+  reviewActionButtonReject: {
+    backgroundColor: "rgba(255, 210, 219, 0.82)",
+    borderColor: "rgba(196, 94, 122, 0.36)"
+  },
+  reviewActionButtonTextActive: {
+    color: "#213040"
+  },
+  reviewActionButtonTextApprove: {
+    color: "#176744"
+  },
+  reviewActionButtonTextChanges: {
+    color: "#8c5a16"
+  },
+  reviewActionButtonTextReject: {
+    color: "#9f4764"
+  },
+  reviewActionApproveButton: {
+    backgroundColor: "#176744"
+  },
+  reviewActionChangesButton: {
+    backgroundColor: "#8c5a16"
+  },
+  reviewActionRejectButton: {
+    backgroundColor: "#9f4764"
+  },
+  reviewActionStatus: {
+    color: "#5f5b81",
+    lineHeight: 20,
+    marginTop: 2
   },
   detailResubmitButton: {
     marginTop: 12,
