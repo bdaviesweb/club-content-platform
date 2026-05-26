@@ -674,7 +674,7 @@ function layout(content, title = "Club Content Ops") {
         padding: 12px 14px;
         text-align: left;
         display: grid;
-        gap: 4px;
+        gap: 0;
       }
       .reason-chip.active {
         border-color: var(--green);
@@ -694,8 +694,13 @@ function layout(content, title = "Club Content Ops") {
         color: var(--ink);
       }
       .reason-chip .subtle {
-        font-size: 0.9rem;
+        display: none;
+        font-size: 0.88rem;
         line-height: 1.35;
+        margin-top: 6px;
+      }
+      .reason-chip.active .subtle {
+        display: block;
       }
       .chip-row { margin-top: 10px; }
       .decision-copy,
@@ -1161,16 +1166,16 @@ async function renderHome(activeId) {
       let selectedReasonCode = null;
       const quickReasonSets = {
         request_changes: [
-          { code: 'missing_context', label: 'Add context', helper: 'Use when the post needs more who, what, or when.', text: 'Please add more context so families know what happened.' },
-          { code: 'caption_detail', label: 'Add one detail', helper: 'Use when the post is close but missing one useful point.', text: 'Looks good, but the caption needs one clear detail added.' },
-          { code: 'score_details', label: 'Add score details', helper: 'Use when a match recap is missing score, opponent, or event detail.', text: 'Please confirm the event, opponent, or score before we post this.' },
-          { code: 'caption_tighten', label: 'Tighten caption', helper: 'Use when the tone or wording needs a cleaner club-ready pass.', text: 'Please tighten the caption so it is club-ready.' }
+          { code: 'missing_context', label: 'More context', helper: 'Ask for who, what, or when.', text: 'Please add more context so families know what happened.' },
+          { code: 'caption_detail', label: 'One more detail', helper: 'Ask for one clear missing point.', text: 'Looks good, but the caption needs one clear detail added.' },
+          { code: 'score_details', label: 'Score details', helper: 'Ask for the score, opponent, or event.', text: 'Please confirm the event, opponent, or score before we post this.' },
+          { code: 'caption_tighten', label: 'Tighten caption', helper: 'Ask for a cleaner club-ready caption.', text: 'Please tighten the caption so it is club-ready.' }
         ],
         reject: [
-          { code: 'club_guidelines', label: 'Does not fit guidelines', helper: 'Use when the post does not match club standards or purpose.', text: 'This does not fit club posting guidelines.' },
-          { code: 'privacy_safe_retake', label: 'Needs safer retake', helper: 'Use when the media itself needs a privacy-safe replacement.', text: 'We cannot publish this without a clearer privacy-safe version.' },
-          { code: 'stop_current_form', label: 'Stop this version', helper: 'Use when this specific post should not move forward as submitted.', text: 'This should not move forward in its current form.' },
-          { code: 'admin_review_required', label: 'Needs admin follow-up', helper: 'Use when this should not come back without a stronger admin conversation.', text: 'Please do not repost this item without admin review.' }
+          { code: 'club_guidelines', label: 'Off guidelines', helper: 'Use when the post does not fit club standards.', text: 'This does not fit club posting guidelines.' },
+          { code: 'privacy_safe_retake', label: 'Safer retake', helper: 'Use when the media needs a privacy-safe replacement.', text: 'We cannot publish this without a clearer privacy-safe version.' },
+          { code: 'stop_current_form', label: 'Stop this version', helper: 'Use when this exact post should not move forward.', text: 'This should not move forward in its current form.' },
+          { code: 'admin_review_required', label: 'Admin follow-up', helper: 'Use when this needs a stronger admin conversation.', text: 'Please do not repost this item without admin review.' }
         ]
       };
 
@@ -1188,11 +1193,16 @@ async function renderHome(activeId) {
         input.focus();
       }
 
-      function applyReasonPreset(code, note) {
+      function applyReasonPreset(code, note, helper) {
         selectedReasonCode = code;
         document.querySelectorAll('[data-reason-code]').forEach((button) => {
           button.classList.toggle('active', button.dataset.reasonCode === code);
         });
+        const noteGuidance = document.getElementById('note-guidance');
+        if (noteGuidance && helper) {
+          noteGuidance.textContent = helper;
+          noteGuidance.classList.remove('hidden');
+        }
         applyNote(note);
       }
 
@@ -1221,7 +1231,7 @@ async function renderHome(activeId) {
               .replaceAll('"', '&quot;')
               .replaceAll('<', '&lt;')
               .replaceAll('>', '&gt;');
-            return '<button class="reason-chip ' + (action === 'reject' ? 'reject' : 'revise') + '" type="button" data-reason-code="' + reason.code + '" data-note="' + escapedAttr + '" onclick="applyReasonPreset(' + JSON.stringify(reason.code) + ', this.dataset.note)"><strong>' + escapedLabel + '</strong><span class="subtle">' + escapedHelper + '</span></button>';
+            return '<button class="reason-chip ' + (action === 'reject' ? 'reject' : 'revise') + '" type="button" data-reason-code="' + reason.code + '" data-note="' + escapedAttr + '" onclick="applyReasonPreset(' + JSON.stringify(reason.code) + ', this.dataset.note, ' + JSON.stringify(reason.helper) + ')"><strong>' + escapedLabel + '</strong><span class="subtle">' + escapedHelper + '</span></button>';
           })
           .join('');
         chips.classList.remove('hidden');
@@ -1232,6 +1242,11 @@ async function renderHome(activeId) {
           document.querySelectorAll('[data-reason-code]').forEach((button) => {
             button.classList.toggle('active', button.dataset.reasonCode === reasons[0].code);
           });
+          const noteGuidance = document.getElementById('note-guidance');
+          if (noteGuidance) {
+            noteGuidance.textContent = reasons[0].helper;
+            noteGuidance.classList.remove('hidden');
+          }
         }
       }
 
@@ -1269,7 +1284,7 @@ async function renderHome(activeId) {
           decisionCopy.textContent = 'This will return the item to the submitter. A clear note is required.';
           notesWrap.classList.remove('hidden');
           noteGuidance.classList.remove('hidden');
-          noteGuidance.textContent = 'Pick a quick reason or edit it so the submitter knows exactly what to fix.';
+          noteGuidance.textContent = 'Pick the closest fix path.';
           notes.placeholder = 'Tell the submitter exactly what needs to change.';
           renderReasonChips('request_changes');
         } else {
@@ -1278,7 +1293,7 @@ async function renderHome(activeId) {
           decisionCopy.textContent = 'This will stop the item here. Record a short reason for the audit trail.';
           notesWrap.classList.remove('hidden');
           noteGuidance.classList.remove('hidden');
-          noteGuidance.textContent = 'Pick the closest reject reason, then tighten it if needed before confirming.';
+          noteGuidance.textContent = 'Pick the closest stop reason.';
           notes.placeholder = 'Explain why this should not move forward.';
           renderReasonChips('reject');
         }
