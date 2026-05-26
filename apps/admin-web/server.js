@@ -429,10 +429,17 @@ function layout(content, title = "Club Content Ops") {
         margin-top: 12px;
       }
       .media-thumb {
+        appearance: none;
+        width: 100%;
         border-radius: 14px;
         border: 1px solid rgba(201, 181, 146, 0.6);
         background: rgba(255,255,255,0.78);
         padding: 8px;
+        cursor: pointer;
+      }
+      .media-thumb.active {
+        border-color: var(--green);
+        box-shadow: inset 0 0 0 2px rgba(23, 103, 68, 0.14);
       }
       .media-thumb img,
       .media-thumb video {
@@ -721,7 +728,8 @@ function renderMediaStage(detail) {
       return "";
     }
 
-    const common = `src="${escapeHtml(item.previewUrl)}"`;
+    const className = mode === "preview" ? "media-preview" : "";
+    const common = `src="${escapeHtml(item.previewUrl)}"${className ? ` class="${className}"` : ""}`;
     if (String(item.mimeType || "").startsWith("video/")) {
       const controls = mode === "preview" ? "controls playsinline preload=\"metadata\"" : "muted playsinline preload=\"metadata\"";
       return `<video ${common} ${controls}></video>`;
@@ -733,10 +741,19 @@ function renderMediaStage(detail) {
   const secondaryThumbs = detail.media.length > 1
     ? `<div class="media-thumb-grid">
         ${detail.media
-          .slice(1, 5)
-          .map((item, index) => `<div class="media-thumb">
-            ${item.previewUrl ? renderAssetTag(item, "thumb") : `<div class="subtle" style="min-height:84px; display:grid; place-items:center;">Asset ${index + 2}</div>`}
-          </div>`)
+          .slice(0, 5)
+          .map((item, index) => `<button
+              class="media-thumb ${index === 0 ? "active" : ""}"
+              type="button"
+              data-media-thumb
+              data-preview-url="${escapeHtml(item.previewUrl || "")}"
+              data-mime-type="${escapeHtml(item.mimeType || "")}"
+              data-media-type="${escapeHtml(item.mediaType || `Asset ${index + 1}`)}"
+              aria-label="Show ${escapeHtml(item.mediaType || `asset ${index + 1}`)}"
+              onclick="switchMediaPreview(this)"
+            >
+            ${item.previewUrl ? renderAssetTag(item, "thumb") : `<div class="subtle" style="min-height:84px; display:grid; place-items:center;">Asset ${index + 1}</div>`}
+          </button>`)
           .join("")}
       </div>`
     : "";
@@ -751,7 +768,9 @@ function renderMediaStage(detail) {
         ${renderStatusBadge(formatLabel(detail.content_type), "neutral")}
       </div>
       <div class="media-canvas">
-        ${primaryAsset.previewUrl ? renderAssetTag(primaryAsset, "preview") : `<div class="media-placeholder">Preview not available for this asset yet.</div>`}
+        <div id="media-preview-frame">
+          ${primaryAsset.previewUrl ? renderAssetTag(primaryAsset, "preview") : `<div class="media-placeholder">Preview not available for this asset yet.</div>`}
+        </div>
       </div>
       ${secondaryThumbs}
     </div>
@@ -1021,6 +1040,29 @@ async function renderHome(activeId) {
         const index = queueIds.indexOf(currentId);
         if (index === -1) return '/';
         return queueIds[index + 1] ? '/?approvalRequestId=' + encodeURIComponent(queueIds[index + 1]) : '/';
+      }
+
+      function switchMediaPreview(button) {
+        const frame = document.getElementById('media-preview-frame');
+        if (!frame || !button) {
+          return;
+        }
+
+        const previewUrl = button.dataset.previewUrl;
+        const mimeType = button.dataset.mimeType || '';
+        const mediaType = button.dataset.mediaType || 'submission media';
+
+        if (!previewUrl) {
+          frame.innerHTML = '<div class="media-placeholder">Preview not available for this asset yet.</div>';
+        } else if (mimeType.startsWith('video/')) {
+          frame.innerHTML = '<video class="media-preview" src="' + previewUrl + '" controls playsinline preload="metadata"></video>';
+        } else {
+          frame.innerHTML = '<img class="media-preview" src="' + previewUrl + '" alt="' + mediaType + '" loading="lazy" />';
+        }
+
+        document.querySelectorAll('[data-media-thumb]').forEach((thumb) => {
+          thumb.classList.toggle('active', thumb === button);
+        });
       }
 
       function showActionFeedback(action) {
