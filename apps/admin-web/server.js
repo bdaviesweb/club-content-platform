@@ -535,6 +535,28 @@ function layout(content, title = "Club Content Ops") {
         font-size: 0.96rem;
         line-height: 1.45;
       }
+      .action-feedback {
+        margin-top: 12px;
+        padding: 12px 14px;
+        border-radius: 16px;
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,0.82);
+      }
+      .action-feedback.good {
+        background: var(--green-soft);
+        border-color: rgba(23, 103, 68, 0.24);
+        color: var(--green);
+      }
+      .action-feedback.review {
+        background: var(--amber-soft);
+        border-color: rgba(155, 97, 27, 0.24);
+        color: var(--amber);
+      }
+      .action-feedback.alert {
+        background: var(--red-soft);
+        border-color: rgba(139, 52, 46, 0.24);
+        color: var(--red);
+      }
       .hidden { display: none; }
       .footer-panels {
         display: grid;
@@ -780,6 +802,11 @@ function renderDecisionDock(detail, queueIds, recommendation) {
         <p id="action-status" class="subtle"></p>
       </div>
 
+      <div id="action-feedback" class="action-feedback hidden">
+        <strong id="action-feedback-title"></strong>
+        <p id="action-feedback-copy" style="margin-top:6px; line-height:1.45;"></p>
+      </div>
+
       <details class="disclosure" style="margin-top:14px;">
         <summary>Reviewer settings</summary>
         <div class="disclosure-body">
@@ -953,6 +980,30 @@ async function renderHome(activeId) {
         return queueIds[index + 1] ? '/?approvalRequestId=' + encodeURIComponent(queueIds[index + 1]) : '/';
       }
 
+      function showActionFeedback(action) {
+        const feedback = document.getElementById('action-feedback');
+        const title = document.getElementById('action-feedback-title');
+        const copy = document.getElementById('action-feedback-copy');
+
+        feedback.className = 'action-feedback';
+
+        if (action === 'approve') {
+          feedback.classList.add('good');
+          title.textContent = 'Approved.';
+          copy.textContent = 'Sending this to the internal feed and loading the next item.';
+        } else if (action === 'request_changes') {
+          feedback.classList.add('review');
+          title.textContent = 'Sent back for changes.';
+          copy.textContent = 'The submitter will get your note and this item will wait for an updated version.';
+        } else {
+          feedback.classList.add('alert');
+          title.textContent = 'Rejected.';
+          copy.textContent = 'This item stops here and the submitter will be notified with your reason.';
+        }
+
+        feedback.classList.remove('hidden');
+      }
+
       async function submitDecision(approvalRequestId) {
         const actedByEmail = document.getElementById('actedByEmail').value.trim();
         const notes = document.getElementById('notes').value.trim();
@@ -983,8 +1034,16 @@ async function renderHome(activeId) {
           return;
         }
 
-        status.textContent = 'Saved. Loading the next item...';
-        window.location.href = nextQueueTarget(approvalRequestId);
+        showActionFeedback(selectedAction);
+        status.textContent = selectedAction === 'approve'
+          ? 'Approved. Moving to the next item...'
+          : selectedAction === 'request_changes'
+            ? 'Sent back. Moving to the next item...'
+            : 'Rejected. Moving to the next item...';
+
+        window.setTimeout(() => {
+          window.location.href = nextQueueTarget(approvalRequestId);
+        }, 1100);
       }
 
       async function retryEvent(eventId) {
