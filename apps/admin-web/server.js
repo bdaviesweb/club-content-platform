@@ -305,6 +305,35 @@ function layout(content, title = "Club Content Ops") {
         border-top: 0;
         box-shadow: var(--shadow);
       }
+      .quick-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        align-items: center;
+        margin-bottom: 18px;
+      }
+      .quick-header h1 {
+        font-size: clamp(1.7rem, 5vw, 2.4rem);
+        line-height: 1;
+      }
+      .quick-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+      .quick-main {
+        max-width: 860px;
+        margin: 0 auto;
+      }
+      .quick-link {
+        color: var(--green);
+        text-decoration: none;
+        font-weight: 700;
+      }
+      .quick-link:hover {
+        text-decoration: underline;
+      }
       .queue-list,
       .signal-list,
       .history-list,
@@ -1172,6 +1201,54 @@ async function renderHome(activeId) {
     </script>
   `);
 }
+
+async function renderQuickReviewHome(activeId) {
+  const queueResponse = await fetchJson("/approvals/queue");
+  const queue = queueResponse.items || [];
+  const queueIds = queue.map((item) => item.id);
+  const selectedId = activeId || queueIds[0] || null;
+  const detail = selectedId ? await fetchJson(`/approval-requests/${selectedId}`) : null;
+  const recommendation = detail ? recommendationFor(detail) : null;
+  const currentIndex = selectedId ? queueIds.indexOf(selectedId) : -1;
+  const remainingCount = currentIndex === -1 ? queue.length : Math.max(queue.length - currentIndex - 1, 0);
+
+  if (!detail) {
+    return layout(`
+      <section class="quick-main">
+        <div class="quick-header">
+          <div>
+            <div class="eyebrow">Quick review</div>
+            <h1>No items waiting</h1>
+            <p class="subtle" style="margin-top:10px;">The review queue is clear right now.</p>
+          </div>
+          <div class="quick-actions">
+            <a class="quick-link" href="/">Open full workspace</a>
+          </div>
+        </div>
+      </section>
+    `, "Club Content Quick Review");
+  }
+
+  return layout(`
+    <section class="quick-main">
+      <div class="quick-header">
+        <div>
+          <div class="eyebrow">Quick review</div>
+          <h1>Review one and keep moving.</h1>
+          <p class="subtle" style="margin-top:10px;">Focused mobile-first view for fast approvals.</p>
+        </div>
+        <div class="quick-actions">
+          ${renderStatusBadge(`${queue.length} waiting`, queue.length ? "review" : "good")}
+          <span class="subtle">${escapeHtml(`${remainingCount} after this`)}</span>
+          <a class="quick-link" href="/">Open full workspace</a>
+        </div>
+      </div>
+
+      ${renderCenterStage(detail, recommendation, queueIds)}
+    </section>
+  `, "Club Content Quick Review");
+}
+
 function readJson(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -1199,6 +1276,13 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/") {
       const html = await renderHome(url.searchParams.get("approvalRequestId"));
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(html);
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/quick-review") {
+      const html = await renderQuickReviewHome(url.searchParams.get("approvalRequestId"));
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       res.end(html);
       return;
