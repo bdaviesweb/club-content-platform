@@ -269,15 +269,42 @@ function layout(content, title = "Club Content Ops") {
       }
       .workspace {
         display: grid;
-        grid-template-columns: 300px minmax(0, 1fr) 320px;
+        grid-template-columns: minmax(0, 1fr) 320px;
         gap: 18px;
         align-items: start;
       }
       .panel { padding: 18px; }
-      .queue-panel,
       .decision-dock {
         position: sticky;
         top: 18px;
+      }
+      .queue-toggle {
+        margin-bottom: 18px;
+      }
+      .queue-toggle summary {
+        list-style: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px 18px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        box-shadow: var(--shadow);
+        font-weight: 700;
+      }
+      .queue-toggle summary::-webkit-details-marker { display: none; }
+      .queue-toggle[open] summary {
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+      }
+      .queue-toggle .queue-panel {
+        border-top-left-radius: 0;
+        border-top-right-radius: 0;
+        border-top: 0;
+        box-shadow: var(--shadow);
       }
       .queue-list,
       .signal-list,
@@ -346,12 +373,6 @@ function layout(content, title = "Club Content Ops") {
         font-size: 1.02rem;
         line-height: 1.5;
         margin-top: 10px;
-      }
-      .moderation-grid {
-        display: grid;
-        grid-template-columns: minmax(0, 1.25fr) minmax(260px, 0.75fr);
-        gap: 16px;
-        margin-top: 18px;
       }
       .media-stage,
       .summary-stack,
@@ -537,15 +558,7 @@ function layout(content, title = "Club Content Ops") {
         .workspace {
           grid-template-columns: 1fr;
         }
-        .queue-panel,
         .decision-dock { position: static; }
-      }
-      @media (max-width: 980px) {
-        .topline,
-        .moderation-grid,
-        .footer-panels {
-          grid-template-columns: 1fr;
-        }
       }
     </style>
   </head>
@@ -850,6 +863,7 @@ async function renderHome(activeId) {
   const selectedId = activeId || queueIds[0] || null;
   const detail = selectedId ? await fetchJson(`/approval-requests/${selectedId}`) : null;
   const recommendation = detail ? recommendationFor(detail) : null;
+  const queuePreview = renderQueue(queue, selectedId);
 
   return layout(`
     <section class="hero">
@@ -861,8 +875,15 @@ async function renderHome(activeId) {
       ${renderStatusBadge(`${queue.length} waiting`, queue.length ? "review" : "good")}
     </section>
 
+    <details class="queue-toggle">
+      <summary>
+        <span>Review queue</span>
+        <span class="subtle">${escapeHtml(queue.length ? `${queue.length} waiting` : "Empty")}</span>
+      </summary>
+      ${queuePreview}
+    </details>
+
     <section class="workspace">
-      ${renderQueue(queue, selectedId)}
       ${detail ? renderCenterStage(detail, recommendation) : `<div class="panel"><h2>No item selected</h2><p class="subtle" style="margin-top:8px;">Pick a queued item to review it.</p></div>`}
       ${detail ? renderDecisionDock(detail, queueIds, recommendation) : `<div class="panel decision-dock"><p class="subtle">Decision dock will appear when a review is selected.</p></div>`}
     </section>
