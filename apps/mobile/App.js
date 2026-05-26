@@ -190,6 +190,46 @@ function fixPromptForReasonCode(reasonCode) {
   }
 }
 
+function resubmitShortcutsForReasonCode(reasonCode) {
+  switch (String(reasonCode || "").toLowerCase()) {
+    case "score_details":
+      return [
+        { label: "Add score", text: "Final score: " },
+        { label: "Add opponent", text: "Opponent: " },
+        { label: "Add scorer", text: "Scorers: " }
+      ];
+    case "caption_detail":
+      return [
+        { label: "Add event", text: "Event: " },
+        { label: "Add who", text: "Players involved: " },
+        { label: "Add when", text: "Happened during: " }
+      ];
+    case "caption_tighten":
+      return [
+        { label: "Shorten it", text: "Quick version: " },
+        { label: "Club tone", text: "Team update: " }
+      ];
+    case "missing_context":
+      return [
+        { label: "Add who", text: "Who: " },
+        { label: "Add what", text: "What happened: " },
+        { label: "Add when", text: "When: " }
+      ];
+    case "privacy_safe_retake":
+      return [
+        { label: "Retake media", mediaAction: "camera" },
+        { label: "Choose another", mediaAction: "library" }
+      ];
+    case "club_guidelines":
+      return [
+        { label: "Rewrite caption", text: "Rewritten caption: " },
+        { label: "Swap media", mediaAction: "library" }
+      ];
+    default:
+      return [];
+  }
+}
+
 function countStatuses(items) {
   return items.reduce(
     (accumulator, item) => {
@@ -290,6 +330,11 @@ export default function App() {
     : "Your first post will show review and publish status here.";
   const resubmitPrompt = useMemo(() => {
     return fixPromptForReasonCode(
+      selectedSubmissionDetail?.latestApprovalRequest?.latestAction?.reasonCode
+    );
+  }, [selectedSubmissionDetail]);
+  const resubmitShortcuts = useMemo(() => {
+    return resubmitShortcutsForReasonCode(
       selectedSubmissionDetail?.latestApprovalRequest?.latestAction?.reasonCode
     );
   }, [selectedSubmissionDetail]);
@@ -495,6 +540,28 @@ export default function App() {
 
     if (result.canceled || !result.assets?.length) return;
     setResubmissionAsset(normalizePickedAsset(result.assets[0]));
+  }
+
+  async function applyResubmitShortcut(shortcut) {
+    if (!shortcut) return;
+
+    if (shortcut.mediaAction === "camera") {
+      await captureReplacementWithCamera();
+      return;
+    }
+
+    if (shortcut.mediaAction === "library") {
+      await pickReplacementFromLibrary();
+      return;
+    }
+
+    if (shortcut.text) {
+      setResubmissionText((current) => {
+        if (!current.trim()) return shortcut.text;
+        if (current.includes(shortcut.text)) return current;
+        return `${current.trim()}\n${shortcut.text}`;
+      });
+    }
   }
 
   useEffect(() => {
@@ -1326,6 +1393,19 @@ export default function App() {
                         resubmitPrompt.body}
                     </Text>
                     <Text style={styles.detailSupportCallout}>{resubmitPrompt.body}</Text>
+                    {resubmitShortcuts.length ? (
+                      <View style={styles.detailShortcutRow}>
+                        {resubmitShortcuts.map((shortcut) => (
+                          <Pressable
+                            key={shortcut.label}
+                            style={styles.detailShortcutButton}
+                            onPress={() => applyResubmitShortcut(shortcut)}
+                          >
+                            <Text style={styles.detailShortcutText}>{shortcut.label}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    ) : null}
                     <View style={styles.detailMediaActionRow}>
                       <Pressable style={styles.detailMediaActionButton} onPress={captureReplacementWithCamera}>
                         <Text style={styles.detailMediaActionText}>Retake media</Text>
@@ -2290,6 +2370,24 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(88, 99, 185, 0.10)",
     color: "#4d4f87",
     lineHeight: 20
+  },
+  detailShortcutRow: {
+    flexDirection: "row",
+    gap: 10,
+    flexWrap: "wrap",
+    marginTop: 10
+  },
+  detailShortcutButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.85)",
+    borderWidth: 1,
+    borderColor: "rgba(88, 99, 185, 0.16)"
+  },
+  detailShortcutText: {
+    color: "#4f46a6",
+    fontWeight: "700"
   },
   detailResubmitInput: {
     minHeight: 108,
