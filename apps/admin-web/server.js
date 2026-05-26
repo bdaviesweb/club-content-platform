@@ -1128,6 +1128,20 @@ async function renderHome(activeId) {
       const queueIds = ${JSON.stringify(queueIds)};
       let selectedAction = ${JSON.stringify(detail ? recommendation.defaultAction : "approve")};
       let rejectConfirmArmed = false;
+      const quickReasonSets = {
+        request_changes: [
+          'Please add more context so families know what happened.',
+          'Looks good, but the caption needs one clear detail added.',
+          'Please confirm the event, opponent, or score before we post this.',
+          'Please tighten the caption so it is club-ready.'
+        ],
+        reject: [
+          'This does not fit club posting guidelines.',
+          'We cannot publish this without a clearer privacy-safe version.',
+          'This should not move forward in its current form.',
+          'Please do not repost this item without admin review.'
+        ]
+      };
 
       function setButtonsDisabled(disabled) {
         document.querySelectorAll('button').forEach((button) => {
@@ -1141,6 +1155,39 @@ async function renderHome(activeId) {
         const input = document.getElementById('notes');
         input.value = note;
         input.focus();
+      }
+
+      function renderReasonChips(action) {
+        const chips = document.getElementById('reason-chips');
+        const notes = document.getElementById('notes');
+        const reasons = quickReasonSets[action] || [];
+
+        if (!chips) {
+          return;
+        }
+
+        if (!reasons.length) {
+          chips.innerHTML = '';
+          chips.classList.add('hidden');
+          return;
+        }
+
+        chips.innerHTML = reasons
+          .map((reason) => {
+            const escapedText = reason.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+            const escapedAttr = reason
+              .replaceAll('&', '&amp;')
+              .replaceAll('"', '&quot;')
+              .replaceAll('<', '&lt;')
+              .replaceAll('>', '&gt;');
+            return '<button class="chip" type="button" data-note="' + escapedAttr + '" onclick="applyNote(this.dataset.note)">' + escapedText + '</button>';
+          })
+          .join('');
+        chips.classList.remove('hidden');
+
+        if (notes && !notes.value.trim()) {
+          notes.value = reasons[0];
+        }
       }
 
       function selectAction(action) {
@@ -1166,6 +1213,7 @@ async function renderHome(activeId) {
           decisionCopy.textContent = 'This will publish the item and move straight to the next queued review.';
           notesWrap.classList.add('hidden');
           chips.classList.add('hidden');
+          chips.innerHTML = '';
           noteGuidance.classList.add('hidden');
           noteGuidance.textContent = '';
           notes.value = '';
@@ -1174,19 +1222,19 @@ async function renderHome(activeId) {
           submit.className = 'button-warn';
           decisionCopy.textContent = 'This will return the item to the submitter. A clear note is required.';
           notesWrap.classList.remove('hidden');
-          chips.classList.remove('hidden');
           noteGuidance.classList.remove('hidden');
-          noteGuidance.textContent = 'Tell the submitter exactly what to fix so the item can come straight back into review.';
+          noteGuidance.textContent = 'Pick a quick reason or edit it so the submitter knows exactly what to fix.';
           notes.placeholder = 'Tell the submitter exactly what needs to change.';
+          renderReasonChips('request_changes');
         } else {
           submit.textContent = 'Reject submission';
           submit.className = 'button-danger';
           decisionCopy.textContent = 'This will stop the item here. Record a short reason for the audit trail.';
           notesWrap.classList.remove('hidden');
-          chips.classList.remove('hidden');
           noteGuidance.classList.remove('hidden');
-          noteGuidance.textContent = 'State the policy or club-fit reason clearly enough that another reviewer could defend the decision.';
+          noteGuidance.textContent = 'Pick the closest reject reason, then tighten it if needed before confirming.';
           notes.placeholder = 'Explain why this should not move forward.';
+          renderReasonChips('reject');
         }
       }
 
