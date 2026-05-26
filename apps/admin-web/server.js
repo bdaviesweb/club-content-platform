@@ -326,6 +326,25 @@ function layout(content, title = "Club Content Ops") {
         max-width: 760px;
         margin: 0 auto;
       }
+      .swipe-hint {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+      .swipe-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .swipe-pill {
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.76);
+        border: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.9rem;
+        font-weight: 700;
+      }
       .quick-link {
         color: var(--green);
         text-decoration: none;
@@ -1168,6 +1187,70 @@ async function renderHome(activeId) {
         feedback.classList.remove('hidden');
       }
 
+      function initQuickReviewGestures() {
+        if (window.location.pathname !== '/quick-review') {
+          return;
+        }
+
+        const shell = document.querySelector('.stage-shell');
+        const status = document.getElementById('action-status');
+        if (!shell) {
+          return;
+        }
+
+        let startX = 0;
+        let currentX = 0;
+        let dragging = false;
+
+        const resetShell = () => {
+          shell.style.transition = 'transform 180ms ease';
+          shell.style.transform = 'translateX(0px)';
+          window.setTimeout(() => {
+            shell.style.transition = '';
+          }, 180);
+        };
+
+        shell.addEventListener('touchstart', (event) => {
+          if (!event.touches || event.touches.length !== 1) {
+            return;
+          }
+          dragging = true;
+          startX = event.touches[0].clientX;
+          currentX = startX;
+          shell.style.transition = '';
+        }, { passive: true });
+
+        shell.addEventListener('touchmove', (event) => {
+          if (!dragging || !event.touches || event.touches.length !== 1) {
+            return;
+          }
+          currentX = event.touches[0].clientX;
+          const delta = Math.max(-160, Math.min(160, currentX - startX));
+          shell.style.transform = 'translateX(' + delta + 'px)';
+        }, { passive: true });
+
+        shell.addEventListener('touchend', () => {
+          if (!dragging) {
+            return;
+          }
+          dragging = false;
+          const delta = currentX - startX;
+
+          if (delta >= 100) {
+            selectAction('approve');
+            if (status) status.textContent = 'Approve selected. Tap Approve and next to confirm.';
+          } else if (delta <= -170) {
+            selectAction('reject');
+            if (status) status.textContent = 'Reject selected. Tap Reject submission to confirm.';
+          } else if (delta <= -90) {
+            selectAction('request_changes');
+            if (status) status.textContent = 'Send back selected. Tap Send back with note to confirm.';
+          }
+
+          resetShell();
+        });
+      }
+
       async function submitDecision(approvalRequestId) {
         const actedByEmail = document.getElementById('actedByEmail').value.trim();
         const notes = document.getElementById('notes').value.trim();
@@ -1248,6 +1331,7 @@ async function renderHome(activeId) {
       });
 
       selectAction(selectedAction);
+      initQuickReviewGestures();
     </script>
   `);
 }
@@ -1291,6 +1375,15 @@ async function renderQuickReviewHome(activeId) {
           ${renderStatusBadge(`${queue.length} in queue`, queue.length ? "review" : "good")}
           <span class="subtle">${escapeHtml(`${remainingCount} after this`)}</span>
           <a class="quick-link" href="/">Open full workspace</a>
+        </div>
+      </div>
+
+      <div class="swipe-hint">
+        <p class="subtle">Swipe right to preselect approve. Swipe left to preselect changes. Swipe farther left to preselect reject.</p>
+        <div class="swipe-pills">
+          <span class="swipe-pill">Right = approve</span>
+          <span class="swipe-pill">Left = changes</span>
+          <span class="swipe-pill">Far left = reject</span>
         </div>
       </div>
 
