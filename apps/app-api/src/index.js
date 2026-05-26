@@ -1458,6 +1458,17 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = parseUrl(req);
 
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, {
+        "access-control-allow-origin": "*",
+        "access-control-allow-methods": "GET,POST,OPTIONS",
+        "access-control-allow-headers": "content-type, authorization, svix-id, svix-timestamp, svix-signature",
+        vary: "Origin"
+      });
+      res.end();
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/health") {
       sendJson(res, 200, { service: "app-api", status: "ok" });
       return;

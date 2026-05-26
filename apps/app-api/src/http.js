@@ -18,8 +18,20 @@ export async function readJson(req) {
   return JSON.parse(raw);
 }
 
+function corsHeaders() {
+  return {
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "GET,POST,OPTIONS",
+    "access-control-allow-headers": "content-type, authorization, svix-id, svix-timestamp, svix-signature",
+    vary: "Origin"
+  };
+}
+
 export function sendJson(res, statusCode, payload) {
-  res.writeHead(statusCode, { "content-type": "application/json" });
+  res.writeHead(statusCode, {
+    "content-type": "application/json",
+    ...corsHeaders()
+  });
   res.end(JSON.stringify(payload));
 }
 
