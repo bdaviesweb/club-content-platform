@@ -1,7 +1,11 @@
 import http from "node:http";
+import { timingSafeEqual } from "node:crypto";
 
 const port = 3001;
 const apiBase = process.env.API_BASE_URL || "http://app-api:4000";
+const authUser = process.env.ADMIN_BASIC_AUTH_USER || "";
+const authPassword = process.env.ADMIN_BASIC_AUTH_PASSWORD || "";
+const basicAuthEnabled = Boolean(authUser && authPassword);
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -116,6 +120,56 @@ function recommendationFor(detail) {
 
 function renderStatusBadge(label, tone = "neutral") {
   return `<span class="badge badge-${tone}">${escapeHtml(label)}</span>`;
+}
+
+function safeEqual(left, right) {
+  const leftBuffer = Buffer.from(String(left || ""), "utf8");
+  const rightBuffer = Buffer.from(String(right || ""), "utf8");
+  if (leftBuffer.length !== rightBuffer.length) {
+    return false;
+  }
+  return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function parseBasicAuth(headerValue) {
+  if (!headerValue || !headerValue.startsWith("Basic ")) {
+    return null;
+  }
+
+  try {
+    const raw = Buffer.from(headerValue.slice(6), "base64").toString("utf8");
+    const separator = raw.indexOf(":");
+    if (separator === -1) {
+      return null;
+    }
+    return {
+      username: raw.slice(0, separator),
+      password: raw.slice(separator + 1)
+    };
+  } catch {
+    return null;
+  }
+}
+
+function isAuthorized(req) {
+  if (!basicAuthEnabled) {
+    return true;
+  }
+
+  const credentials = parseBasicAuth(req.headers.authorization);
+  if (!credentials) {
+    return false;
+  }
+
+  return safeEqual(credentials.username, authUser) && safeEqual(credentials.password, authPassword);
+}
+
+function requestAuth(res) {
+  res.writeHead(401, {
+    "content-type": "text/plain; charset=utf-8",
+    "www-authenticate": 'Basic realm="Club Content Review"'
+  });
+  res.end("Authentication required");
 }
 
 function layout(content, title = "Club Content Ops") {
@@ -1020,6 +1074,11 @@ function readJson(req) {
 
 const server = http.createServer(async (req, res) => {
   try {
+    if (!isAuthorized(req)) {
+      requestAuth(res);
+      return;
+    }
+
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
 
     if (req.method === "GET" && url.pathname === "/") {

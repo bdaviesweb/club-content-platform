@@ -178,6 +178,9 @@ Readback example:
 GET /push-tokens?userEmail=coach@demo-club.local
 ```
 
+The readback response exposes the active registration metadata plus `pushToken` and a masked
+`tokenPreview` so later delivery work can consume the real token without another storage layer.
+
 Verification endpoints:
 
 - `GET /notification-delivery/status`
@@ -214,48 +217,6 @@ VPS enablement steps:
 
 Incoming webhook events are written to `audit_logs` and surfaced on `GET /notifications` as
 `deliveryStatus`, `deliveryProviderId`, and `deliveryUpdatedAt`.
-
-## Push Notification Groundwork
-
-The API now supports lightweight push-token registration without a schema migration by using
-`audit_logs` as the source of truth for current device registrations.
-
-Environment variables:
-
-- `PUSH_NOTIFICATIONS_ENABLED`
-- `PUSH_PROVIDER` (default `expo`)
-- `PUSH_PROJECT_ID`
-
-Endpoints:
-
-- `POST /push-tokens`
-- `GET /push-tokens?userEmail=...`
-
-Registration payload shape:
-
-```json
-{
-  "userEmail": "coach@demo-club.local",
-  "installationId": "iphone-15-demo",
-  "pushToken": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]",
-  "platform": "ios",
-  "provider": "expo",
-  "appId": "com.hermes.clubcontent",
-  "environment": "development",
-  "deviceLabel": "Robert iPhone",
-  "enabled": true
-}
-```
-
-Revocation uses the same endpoint with `enabled: false` and the same `installationId`.
-The current list endpoint only returns active registrations and masks the token as `tokenPreview`
-for operator-facing reads.
-
-Push registrations are also written to `audit_logs` as `push_token.upserted` and
-`push_token.revoked`. The latest event per `installationId` is treated as the active token
-state. Future delivery work should resolve those active registrations for the target user
-and add a push send alongside the existing `createAndDeliverNotification(...)` in-app and
-email behavior.
 
 `app-api` bootstrap treats the demo submitter and reviewer as env-driven identities for the
 seeded demo club/team. On startup it will:
@@ -300,6 +261,7 @@ seeded demo club/team. On startup it will:
 6. Approve with `POST /approval-requests/:id/actions`.
 7. Read the submission again to confirm it reaches `published`.
 8. Open `http://localhost:3001` to use the admin review console.
+9. If `ADMIN_BASIC_AUTH_USER` and `ADMIN_BASIC_AUTH_PASSWORD` are set, the review console requires HTTP Basic Auth.
 
 If `OPENAI_API_KEY` is set, the worker uses:
 
@@ -316,6 +278,18 @@ Failed worker events can now be inspected and retried without touching the datab
 - `POST /workflow-events/:id/retry`
 
 The admin console also includes a workflow recovery panel for retrying failed events.
+
+### Dev server reviewer access
+
+The VPS-hosted reviewer console listens on port `3002` and is intended to stay private.
+
+Use an SSH tunnel from your machine:
+
+```bash
+ssh -L 43002:localhost:3002 hermes-dev-zt
+```
+
+Then open `http://localhost:43002`. If admin basic-auth credentials are configured on the VPS, your browser will prompt for them before loading the queue.
 
 ## Media Uploads
 
