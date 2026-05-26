@@ -708,6 +708,35 @@ function layout(content, title = "Club Content Ops") {
         font-size: 0.96rem;
         line-height: 1.45;
       }
+      .note-preview {
+        margin-top: 10px;
+        padding: 12px 14px;
+        border-radius: 16px;
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,0.78);
+      }
+      .note-preview strong {
+        display: block;
+        font-size: 0.82rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--ink-soft);
+      }
+      .note-preview p {
+        margin-top: 6px;
+        line-height: 1.45;
+      }
+      .inline-link {
+        background: transparent;
+        border: 0;
+        padding: 0;
+        color: var(--green);
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .note-editor.hidden {
+        display: none;
+      }
       .action-feedback {
         margin-top: 12px;
         padding: 12px 14px;
@@ -1029,14 +1058,21 @@ function renderDecisionDock(detail, queueIds, recommendation) {
         </div>
         <div id="notes-wrap" class="hidden" style="margin-top:10px;">
           <p id="note-guidance" class="subtle note-guidance hidden" style="margin-bottom:10px;"></p>
-          <textarea id="notes" placeholder="Tell the submitter exactly what needs to change."></textarea>
-        </div>
-        <div class="chip-row hidden" id="reason-chips">
+          <div class="chip-row hidden" id="reason-chips">
           ${recommendation.reasonChips
             .map(
               (chip) => `<button class="chip" type="button" onclick="applyNote('${escapeHtml(chip)}')">${escapeHtml(chip)}</button>`
             )
             .join("")}
+          </div>
+          <div id="note-preview" class="note-preview hidden">
+            <strong>Reply note</strong>
+            <p id="note-preview-text"></p>
+            <button class="inline-link" type="button" id="note-toggle" onclick="toggleNoteEditor()">Edit note</button>
+          </div>
+          <div id="note-editor" class="note-editor hidden">
+            <textarea id="notes" placeholder="Tell the submitter exactly what needs to change." oninput="updateNotePreview()"></textarea>
+          </div>
         </div>
       </div>
 
@@ -1190,7 +1226,50 @@ async function renderHome(activeId) {
       function applyNote(note) {
         const input = document.getElementById('notes');
         input.value = note;
-        input.focus();
+        updateNotePreview();
+      }
+
+      function setNoteEditorVisible(visible) {
+        const editor = document.getElementById('note-editor');
+        const toggle = document.getElementById('note-toggle');
+        if (!editor || !toggle) {
+          return;
+        }
+
+        editor.classList.toggle('hidden', !visible);
+        toggle.textContent = visible ? 'Hide editor' : 'Edit note';
+
+        if (visible) {
+          const input = document.getElementById('notes');
+          if (input) {
+            input.focus();
+            input.setSelectionRange(input.value.length, input.value.length);
+          }
+        }
+      }
+
+      function updateNotePreview() {
+        const input = document.getElementById('notes');
+        const preview = document.getElementById('note-preview');
+        const previewText = document.getElementById('note-preview-text');
+
+        if (!input || !preview || !previewText) {
+          return;
+        }
+
+        const value = input.value.trim();
+        preview.classList.toggle('hidden', !value);
+        previewText.textContent = value || '';
+      }
+
+      function toggleNoteEditor(forceOpen) {
+        const editor = document.getElementById('note-editor');
+        if (!editor) {
+          return;
+        }
+
+        const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : editor.classList.contains('hidden');
+        setNoteEditorVisible(shouldOpen);
       }
 
       function applyReasonPreset(code, note, helper) {
@@ -1218,6 +1297,7 @@ async function renderHome(activeId) {
         if (!reasons.length) {
           chips.innerHTML = '';
           chips.classList.add('hidden');
+          updateNotePreview();
           return;
         }
 
@@ -1248,6 +1328,9 @@ async function renderHome(activeId) {
             noteGuidance.classList.remove('hidden');
           }
         }
+
+        updateNotePreview();
+        setNoteEditorVisible(false);
       }
 
       function selectAction(action) {
@@ -1278,6 +1361,8 @@ async function renderHome(activeId) {
           noteGuidance.classList.add('hidden');
           noteGuidance.textContent = '';
           notes.value = '';
+          updateNotePreview();
+          setNoteEditorVisible(false);
         } else if (action === 'request_changes') {
           submit.textContent = 'Send back with note';
           submit.className = 'button-warn';
