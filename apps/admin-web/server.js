@@ -433,6 +433,24 @@ function layout(content, title = "Club Content Ops") {
         border-color: rgba(139, 52, 46, 0.68);
         box-shadow: 0 28px 54px rgba(139, 52, 46, 0.18);
       }
+      .stage-shell.action-flash {
+        transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease, opacity 180ms ease;
+      }
+      .stage-shell.action-flash-good {
+        border-color: rgba(23, 103, 68, 0.72);
+        box-shadow: 0 30px 60px rgba(23, 103, 68, 0.18);
+        background: linear-gradient(180deg, rgba(232, 248, 238, 0.98), rgba(248, 255, 251, 0.99));
+      }
+      .stage-shell.action-flash-review {
+        border-color: rgba(155, 97, 27, 0.68);
+        box-shadow: 0 30px 60px rgba(155, 97, 27, 0.16);
+        background: linear-gradient(180deg, rgba(252, 242, 221, 0.99), rgba(255, 252, 246, 0.99));
+      }
+      .stage-shell.action-flash-alert {
+        border-color: rgba(139, 52, 46, 0.68);
+        box-shadow: 0 30px 60px rgba(139, 52, 46, 0.16);
+        background: linear-gradient(180deg, rgba(251, 233, 231, 0.99), rgba(255, 250, 249, 0.99));
+      }
       .stage-header {
         display: flex;
         justify-content: space-between;
@@ -1196,24 +1214,38 @@ async function renderHome(activeId) {
         const feedback = document.getElementById('action-feedback');
         const title = document.getElementById('action-feedback-title');
         const copy = document.getElementById('action-feedback-copy');
+        const shell = document.querySelector('.stage-shell');
 
         feedback.className = 'action-feedback';
+        if (shell) {
+          shell.classList.remove('action-flash-good', 'action-flash-review', 'action-flash-alert');
+          shell.classList.add('action-flash');
+        }
 
         if (action === 'approve') {
           feedback.classList.add('good');
           title.textContent = 'Approved.';
           copy.textContent = 'Sending this to the internal feed and loading the next item.';
+          if (shell) shell.classList.add('action-flash-good');
         } else if (action === 'request_changes') {
           feedback.classList.add('review');
           title.textContent = 'Sent back for changes.';
           copy.textContent = 'The submitter will get your note and this item will wait for an updated version.';
+          if (shell) shell.classList.add('action-flash-review');
         } else {
           feedback.classList.add('alert');
           title.textContent = 'Rejected.';
           copy.textContent = 'This item stops here and the submitter will be notified with your reason.';
+          if (shell) shell.classList.add('action-flash-alert');
         }
 
         feedback.classList.remove('hidden');
+
+        if (shell) {
+          window.setTimeout(() => {
+            shell.classList.remove('action-flash-good', 'action-flash-review', 'action-flash-alert');
+          }, 760);
+        }
       }
 
       function initQuickReviewGestures() {
@@ -1378,7 +1410,7 @@ async function renderHome(activeId) {
 
         window.setTimeout(() => {
           window.location.href = nextQueueTarget(approvalRequestId);
-        }, 1100);
+        }, 1250);
       }
 
       async function retryEvent(eventId) {
