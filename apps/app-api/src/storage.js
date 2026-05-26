@@ -92,3 +92,17 @@ export async function createUploadPlan({
     }
   };
 }
+
+export function buildPublicObjectUrl(objectKey) {
+  if (!publicEndpoint || !objectKey) {
+    return null;
+  }
+
+  const base = String(publicEndpoint).replace(/\/+$/, "");
+  const encodedKey = String(objectKey)
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+
+  return `${base}/${encodeURIComponent(bucketName)}/${encodedKey}`;
+}

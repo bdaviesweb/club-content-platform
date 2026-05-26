@@ -13,7 +13,7 @@ import {
   createAndDeliverNotification,
   submissionEvents
 } from "../../../packages/shared/src/index.js";
-import { createUploadPlan } from "./storage.js";
+import { buildPublicObjectUrl, createUploadPlan } from "./storage.js";
 
 const port = Number(process.env.API_PORT || 4000);
 const publicAppName = process.env.PUBLIC_PRODUCT_NAME || "Club Content";
@@ -76,6 +76,25 @@ function maskPushToken(pushToken) {
   }
 
   return `${pushToken.slice(0, 6)}...${pushToken.slice(-6)}`;
+}
+
+function enrichMediaAsset(item) {
+  if (!item) {
+    return item;
+  }
+
+  return {
+    ...item,
+    previewUrl: buildPublicObjectUrl(item.objectKey)
+  };
+}
+
+function enrichMediaCollection(items) {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return items.map(enrichMediaAsset);
 }
 
 function renderPublicPage({ title, eyebrow, body }) {
@@ -398,6 +417,8 @@ async function handleGetSubmission(res, submissionId) {
     return;
   }
 
+  result.rows[0].media = enrichMediaCollection(result.rows[0].media);
+
   const [latestReviewRun, latestApprovalRequest, publishedPost] = await Promise.all([
     pool.query(
       `
@@ -646,6 +667,8 @@ async function handleApprovalRequestDetail(res, approvalRequestId) {
     sendNotFound(res);
     return;
   }
+
+  result.rows[0].media = enrichMediaCollection(result.rows[0].media);
 
   sendJson(res, 200, result.rows[0]);
 }

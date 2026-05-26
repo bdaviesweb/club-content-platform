@@ -414,6 +414,40 @@ function layout(content, title = "Club Content Ops") {
         gap: 10px;
         margin-top: 14px;
       }
+      .media-canvas {
+        overflow: hidden;
+        border-radius: 18px;
+        border: 1px solid rgba(201, 181, 146, 0.6);
+        background: rgba(255,255,255,0.82);
+      }
+      .media-preview {
+        display: block;
+        width: 100%;
+        max-height: 420px;
+        object-fit: cover;
+        background: rgba(255,255,255,0.9);
+      }
+      .media-thumb-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(86px, 1fr));
+        gap: 10px;
+        margin-top: 12px;
+      }
+      .media-thumb {
+        border-radius: 14px;
+        border: 1px solid rgba(201, 181, 146, 0.6);
+        background: rgba(255,255,255,0.78);
+        padding: 8px;
+      }
+      .media-thumb img,
+      .media-thumb video {
+        display: block;
+        width: 100%;
+        height: 84px;
+        object-fit: cover;
+        border-radius: 10px;
+        background: rgba(240, 236, 226, 0.7);
+      }
       .media-item {
         background: rgba(255,255,255,0.7);
         border: 1px solid rgba(201, 181, 146, 0.6);
@@ -686,17 +720,43 @@ function renderMediaStage(detail) {
     </div>`;
   }
 
+  const primaryAsset = detail.media[0];
+  const renderAssetTag = (item, mode = "preview") => {
+    if (!item?.previewUrl) {
+      return "";
+    }
+
+    const common = `src="${escapeHtml(item.previewUrl)}"`;
+    if (String(item.mimeType || "").startsWith("video/")) {
+      const controls = mode === "preview" ? "controls playsinline preload=\"metadata\"" : "muted playsinline preload=\"metadata\"";
+      return `<video ${common} ${controls}></video>`;
+    }
+
+    return `<img ${common} alt="${escapeHtml(item.mediaType || "submission media")}" loading="lazy" />`;
+  };
+
   const mediaCards = detail.media
     .map(
       (item, index) => `<div class="media-item">
         <div class="header-row">
           <strong>${escapeHtml(item.mediaType || `Asset ${index + 1}`)}</strong>
-          ${renderStatusBadge(item.storageBucket ? `bucket ${item.storageBucket}` : 'stored asset', 'info')}
+          ${item.previewUrl ? renderStatusBadge('preview ready', 'good') : renderStatusBadge('stored asset', 'info')}
         </div>
         <p class="subtle" style="margin-top:8px; line-height:1.45;">${escapeHtml(item.objectKey || 'No object key recorded.')}</p>
       </div>`
     )
     .join("");
+
+  const secondaryThumbs = detail.media.length > 1
+    ? `<div class="media-thumb-grid">
+        ${detail.media
+          .slice(1, 5)
+          .map((item, index) => `<div class="media-thumb">
+            ${item.previewUrl ? renderAssetTag(item, "thumb") : `<div class="subtle" style="min-height:84px; display:grid; place-items:center;">Asset ${index + 2}</div>`}
+          </div>`)
+          .join("")}
+      </div>`
+    : "";
 
   return `<div class="media-stage">
     <div class="media-hero">
@@ -707,9 +767,10 @@ function renderMediaStage(detail) {
         </div>
         ${renderStatusBadge(formatLabel(detail.content_type), "neutral")}
       </div>
-      <div class="media-placeholder">
-        Media rendering is still basic here. Use the caption and recommendation for the quick call, and open more details only if you need the storage trail.
+      <div class="media-canvas">
+        ${primaryAsset.previewUrl ? renderAssetTag(primaryAsset, "preview") : `<div class="media-placeholder">Preview not available for this asset yet.</div>`}
       </div>
+      ${secondaryThumbs}
       <div class="media-list">${mediaCards}</div>
     </div>
   </div>`;
