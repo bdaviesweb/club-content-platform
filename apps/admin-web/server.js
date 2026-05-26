@@ -411,15 +411,27 @@ function layout(content, title = "Club Content Ops") {
         box-shadow: 0 24px 42px rgba(23, 103, 68, 0.12);
         background: linear-gradient(180deg, rgba(238, 250, 243, 0.95), rgba(255, 251, 245, 0.98));
       }
+      .stage-shell.swiping-approve.swipe-locked {
+        border-color: rgba(23, 103, 68, 0.72);
+        box-shadow: 0 28px 54px rgba(23, 103, 68, 0.2);
+      }
       .stage-shell.swiping-changes {
         border-color: rgba(155, 97, 27, 0.45);
         box-shadow: 0 24px 42px rgba(155, 97, 27, 0.12);
         background: linear-gradient(180deg, rgba(252, 245, 230, 0.96), rgba(255, 251, 245, 0.98));
       }
+      .stage-shell.swiping-changes.swipe-locked {
+        border-color: rgba(155, 97, 27, 0.68);
+        box-shadow: 0 28px 54px rgba(155, 97, 27, 0.18);
+      }
       .stage-shell.swiping-reject {
         border-color: rgba(139, 52, 46, 0.45);
         box-shadow: 0 24px 42px rgba(139, 52, 46, 0.12);
         background: linear-gradient(180deg, rgba(251, 236, 234, 0.96), rgba(255, 251, 245, 0.98));
+      }
+      .stage-shell.swiping-reject.swipe-locked {
+        border-color: rgba(139, 52, 46, 0.68);
+        box-shadow: 0 28px 54px rgba(139, 52, 46, 0.18);
       }
       .stage-header {
         display: flex;
@@ -1221,27 +1233,42 @@ async function renderHome(activeId) {
         let statusBeforeSwipe = '';
 
         const clearSwipeState = () => {
-          shell.classList.remove('swiping-approve', 'swiping-changes', 'swiping-reject');
+          shell.classList.remove('swiping-approve', 'swiping-changes', 'swiping-reject', 'swipe-locked');
         };
 
         const updateSwipeIntent = (delta) => {
           clearSwipeState();
 
-          if (delta >= 70) {
+          if (delta >= 100) {
             shell.classList.add('swiping-approve');
-            if (status) status.textContent = 'Approve selected. Release, then tap Approve and next.';
+            shell.classList.add('swipe-locked');
+            if (status) status.textContent = 'Approve locked. Release, then tap Approve and next.';
             return;
           }
 
-          if (delta <= -140) {
+          if (delta >= 70) {
+            shell.classList.add('swiping-approve');
+            if (status) status.textContent = 'Approve selected. Keep going or release here.';
+            return;
+          }
+
+          if (delta <= -170) {
             shell.classList.add('swiping-reject');
-            if (status) status.textContent = 'Reject selected. Release, then tap Reject submission.';
+            shell.classList.add('swipe-locked');
+            if (status) status.textContent = 'Reject locked. Release, then tap Reject submission.';
+            return;
+          }
+
+          if (delta <= -90) {
+            shell.classList.add('swiping-changes');
+            shell.classList.add('swipe-locked');
+            if (status) status.textContent = 'Send back locked. Release, then tap Send back with note.';
             return;
           }
 
           if (delta <= -70) {
             shell.classList.add('swiping-changes');
-            if (status) status.textContent = 'Send back selected. Release, then tap Send back with note.';
+            if (status) status.textContent = 'Send back selected. Keep going or release here.';
             return;
           }
 
@@ -1277,8 +1304,16 @@ async function renderHome(activeId) {
           }
           currentX = event.touches[0].clientX;
           const delta = Math.max(-160, Math.min(160, currentX - startX));
-          const rotation = delta / 26;
-          shell.style.transform = 'translateX(' + delta + 'px) rotate(' + rotation + 'deg)';
+          let displayDelta = delta;
+          if (delta >= 100) {
+            displayDelta = 118;
+          } else if (delta <= -170) {
+            displayDelta = -138;
+          } else if (delta <= -90) {
+            displayDelta = -104;
+          }
+          const rotation = displayDelta / 28;
+          shell.style.transform = 'translateX(' + displayDelta + 'px) rotate(' + rotation + 'deg)';
           updateSwipeIntent(delta);
         }, { passive: true });
 
