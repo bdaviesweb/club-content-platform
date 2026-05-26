@@ -403,6 +403,23 @@ function layout(content, title = "Club Content Ops") {
       .stage-shell {
         padding: 20px;
         background: linear-gradient(180deg, rgba(255,255,255,0.82), rgba(255,251,245,0.96));
+        transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease;
+        will-change: transform;
+      }
+      .stage-shell.swiping-approve {
+        border-color: rgba(23, 103, 68, 0.5);
+        box-shadow: 0 24px 42px rgba(23, 103, 68, 0.12);
+        background: linear-gradient(180deg, rgba(238, 250, 243, 0.95), rgba(255, 251, 245, 0.98));
+      }
+      .stage-shell.swiping-changes {
+        border-color: rgba(155, 97, 27, 0.45);
+        box-shadow: 0 24px 42px rgba(155, 97, 27, 0.12);
+        background: linear-gradient(180deg, rgba(252, 245, 230, 0.96), rgba(255, 251, 245, 0.98));
+      }
+      .stage-shell.swiping-reject {
+        border-color: rgba(139, 52, 46, 0.45);
+        box-shadow: 0 24px 42px rgba(139, 52, 46, 0.12);
+        background: linear-gradient(180deg, rgba(251, 236, 234, 0.96), rgba(255, 251, 245, 0.98));
       }
       .stage-header {
         display: flex;
@@ -1201,10 +1218,43 @@ async function renderHome(activeId) {
         let startX = 0;
         let currentX = 0;
         let dragging = false;
+        let statusBeforeSwipe = '';
+
+        const clearSwipeState = () => {
+          shell.classList.remove('swiping-approve', 'swiping-changes', 'swiping-reject');
+        };
+
+        const updateSwipeIntent = (delta) => {
+          clearSwipeState();
+
+          if (delta >= 70) {
+            shell.classList.add('swiping-approve');
+            if (status) status.textContent = 'Approve selected. Release, then tap Approve and next.';
+            return;
+          }
+
+          if (delta <= -140) {
+            shell.classList.add('swiping-reject');
+            if (status) status.textContent = 'Reject selected. Release, then tap Reject submission.';
+            return;
+          }
+
+          if (delta <= -70) {
+            shell.classList.add('swiping-changes');
+            if (status) status.textContent = 'Send back selected. Release, then tap Send back with note.';
+            return;
+          }
+
+          if (status) status.textContent = statusBeforeSwipe;
+        };
 
         const resetShell = () => {
-          shell.style.transition = 'transform 180ms ease';
+          shell.style.transition = 'transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease';
           shell.style.transform = 'translateX(0px)';
+          clearSwipeState();
+          if (status) {
+            status.textContent = statusBeforeSwipe;
+          }
           window.setTimeout(() => {
             shell.style.transition = '';
           }, 180);
@@ -1215,6 +1265,7 @@ async function renderHome(activeId) {
             return;
           }
           dragging = true;
+          statusBeforeSwipe = status ? status.textContent : '';
           startX = event.touches[0].clientX;
           currentX = startX;
           shell.style.transition = '';
@@ -1226,7 +1277,9 @@ async function renderHome(activeId) {
           }
           currentX = event.touches[0].clientX;
           const delta = Math.max(-160, Math.min(160, currentX - startX));
-          shell.style.transform = 'translateX(' + delta + 'px)';
+          const rotation = delta / 26;
+          shell.style.transform = 'translateX(' + delta + 'px) rotate(' + rotation + 'deg)';
+          updateSwipeIntent(delta);
         }, { passive: true });
 
         shell.addEventListener('touchend', () => {
