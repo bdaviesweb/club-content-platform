@@ -1073,6 +1073,39 @@ export default function App() {
                   <Text style={styles.detailMeta}>{formatSubmittedAt(selectedSubmissionDetail.created_at)}</Text>
                 </View>
 
+                {selectedSubmissionDetail.media?.length ? (
+                  <View style={styles.detailMediaCard}>
+                    {selectedSubmissionDetail.media[0]?.previewUrl &&
+                    !String(selectedSubmissionDetail.media[0]?.mimeType || "").startsWith("video/") ? (
+                      <Image
+                        source={{ uri: selectedSubmissionDetail.media[0].previewUrl }}
+                        style={styles.detailMediaPreview}
+                      />
+                    ) : (
+                      <View style={styles.detailMediaFallback}>
+                        <Text style={styles.detailMediaFallbackLabel}>
+                          {formatContentTypeLabel(selectedSubmissionDetail.content_type)}
+                        </Text>
+                        <Text style={styles.detailMediaFallbackBody}>
+                          Preview is limited for this asset, but this is the media currently attached to the post you are editing.
+                        </Text>
+                      </View>
+                    )}
+                    <View style={styles.detailMediaMetaRow}>
+                      <View style={styles.metaChip}>
+                        <Text style={styles.metaChipText}>
+                          {formatMediaCountLabel(selectedSubmissionDetail.media?.length)}
+                        </Text>
+                      </View>
+                      <View style={styles.metaChip}>
+                        <Text style={styles.metaChipText}>
+                          {formatContentTypeLabel(selectedSubmissionDetail.content_type)}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                ) : null}
+
                 <View style={styles.progressTrackDetail}>
                   {progressStages.map((stage, index) => {
                     const stageState = getProgressStageState(selectedSubmissionDetail.status, stage.key);
@@ -2032,6 +2065,45 @@ const styles = StyleSheet.create({
   },
   detailMeta: {
     color: "#6d6f6d"
+  },
+  detailMediaCard: {
+    marginTop: 14,
+    backgroundColor: "rgba(255,255,255,0.66)",
+    borderRadius: 22,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.72)",
+    gap: 10
+  },
+  detailMediaPreview: {
+    width: "100%",
+    height: 260,
+    borderRadius: 18,
+    backgroundColor: "#e8e1d8"
+  },
+  detailMediaFallback: {
+    minHeight: 180,
+    borderRadius: 18,
+    backgroundColor: "#ece7f8",
+    padding: 18,
+    justifyContent: "center",
+    gap: 8
+  },
+  detailMediaFallbackLabel: {
+    color: "#574da8",
+    fontSize: 13,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1.1
+  },
+  detailMediaFallbackBody: {
+    color: "#5d5a82",
+    lineHeight: 21
+  },
+  detailMediaMetaRow: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap"
   },
   detailHeading: {
     marginTop: 16,
