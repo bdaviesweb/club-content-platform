@@ -52,19 +52,21 @@ export async function runModeration(rawText) {
 export async function runStructuredReview({
   rawText,
   visibilityTarget,
-  contentType
+  contentType,
+  clubPolicy
 }) {
   const prompt = [
-    "You review youth sports club content submissions.",
+    "You review team, school, and community content submissions.",
     "Return only valid JSON.",
-    "Decide whether this submission is low, medium, or high risk for a club content workflow involving minors.",
-    "Provide a concise internal caption draft suitable for a club feed.",
+    "Decide whether this submission is low, medium, or high risk for a workflow involving minors or private participants.",
+    "Provide a concise internal caption draft suitable for the feed.",
     "If the text contains sensitive injury, medical, bullying, harassment, profanity, contact details, or privacy issues, call that out.",
     "Use this JSON shape exactly:",
     '{"risk_level":"low|medium|high","confidence":0.0,"summary":"...","caption_draft":"...","review_required_reason":"...","findings":[{"type":"policy|privacy|quality|safety","severity":"low|medium|high","message":"..."}]}',
     "",
     `Visibility target: ${visibilityTarget}`,
     `Content type: ${contentType}`,
+    `Workspace policy: ${JSON.stringify(clubPolicy || {})}`,
     `Submission text: ${rawText || "(none provided)"}`
   ].join("\n");
 

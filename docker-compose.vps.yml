@@ -62,6 +62,30 @@ services:
       app-api:
         condition: service_started
 
+  mobile-web:
+    build:
+      context: .
+      dockerfile: apps/mobile/Dockerfile.web
+      args:
+        EXPO_PUBLIC_API_BASE_URL: https://clubcontent-api.davmn.net
+        EXPO_PUBLIC_CLUB_SLUG: demo-soccer-club
+        EXPO_PUBLIC_TEAM_SLUG: u14-girls
+        EXPO_PUBLIC_SUBMITTER_EMAIL: coach@demo-club.local
+        EXPO_PUBLIC_REVIEWER_EMAIL: comms@demo-club.local
+        EXPO_PUBLIC_APP_NAME: Club Content
+        EXPO_PUBLIC_APP_SLUG: club-content
+        EXPO_PUBLIC_APP_VERSION: 0.1.0
+        EXPO_PUBLIC_IOS_BUNDLE_IDENTIFIER: com.hermes.clubcontent
+        EXPO_PUBLIC_ANDROID_PACKAGE: com.hermes.clubcontent
+        EXPO_PUBLIC_EXPO_OWNER: clubcontent
+        EXPO_PUBLIC_WORKSPACE_MODE: poster
+    container_name: club-content-mobile-web
+    ports:
+      - "3003:3000"
+    depends_on:
+      app-api:
+        condition: service_started
+
   worker:
     build:
       context: .

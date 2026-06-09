@@ -21,7 +21,7 @@ export async function readJson(req) {
 function corsHeaders() {
   return {
     "access-control-allow-origin": "*",
-    "access-control-allow-methods": "GET,POST,OPTIONS",
+    "access-control-allow-methods": "GET,POST,PUT,OPTIONS",
     "access-control-allow-headers": "content-type, authorization, svix-id, svix-timestamp, svix-signature",
     vary: "Origin"
   };

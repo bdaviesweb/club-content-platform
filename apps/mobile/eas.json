@@ -15,6 +15,7 @@
       "distribution": "internal"
     },
     "production": {
+      "credentialsSource": "local",
       "autoIncrement": true
     }
   }

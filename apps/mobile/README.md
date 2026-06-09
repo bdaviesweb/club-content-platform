@@ -1,6 +1,6 @@
 # Mobile App
 
-Expo-based mobile client for the club content workflow.
+Expo-based mobile client for the content review workflow.
 
 ## Current Flow
 
@@ -19,14 +19,14 @@ Install mobile dependencies from the repo root, then:
 - `npm --workspace @club/mobile run ios`
 - `npm --workspace @club/mobile run android`
 
-## TestFlight Preparation
+## Local iPhone Build
 
-This app is now configured for EAS Build and EAS Submit.
+This repo is set up to build and install the app directly to a connected iPhone without going through TestFlight.
 
 Relevant files:
 
 - `app.config.js`
-- `eas.json`
+- `ios/`
 
 Important environment variables:
 
@@ -38,37 +38,39 @@ Important environment variables:
 - `EXPO_PUBLIC_IOS_BUILD_NUMBER`
 - `EXPO_PUBLIC_EXPO_OWNER`
 
-Suggested iOS flow:
+Suggested iPhone flow:
 
-1. Set `EXPO_PUBLIC_API_BASE_URL` to your dev VPS HTTPS URL.
-2. Set a real bundle identifier, for example `com.hermes.clubcontent`.
-3. Run `npm --workspace @club/mobile run testflight:build`.
-4. Run `npm --workspace @club/mobile run testflight:submit`.
+1. Connect the iPhone by USB and trust the Mac.
+2. Set `EXPO_PUBLIC_API_BASE_URL` to your dev VPS HTTPS URL.
+3. Keep the bundle identifier set to `com.hermes.clubcontent`.
+4. Run `npm --workspace @club/mobile run ios:device`.
 
-## Current App Store Connect State
+If you want the simulator instead, run `npm --workspace @club/mobile run ios:simulator`.
 
-The Expo project for this repo is `@clubhqpro/club-content` with EAS project ID
-`83871f8c-a185-47d5-8f19-5e2749dc81d2`.
+### Simulator Guardrail
 
-The weather project that was temporarily used during a later pivot is no longer wired into this repo.
-`eas.json` no longer pins an App Store Connect app ID, so future iOS submission must be attached to a
-dedicated `Club Content` App Store Connect app before release.
+The simulator can have multiple apps installed at once. That is fine, but the content app launch
+flow now checks for the correct bundle before it runs. If the wrong app is targeted, the script
+fails fast instead of launching the other product by mistake.
 
-If you continue iOS distribution for this repo, create or confirm a separate Apple app identity for:
+Useful commands:
 
-- app name: `Club Content`
-- bundle ID: `com.hermes.clubcontent`
-- Expo/EAS project: `@clubhqpro/club-content`
+- `npm --workspace @club/mobile run sim:check`
+- `npm --workspace @club/mobile run sim:list`
 
-If you only want device-distributed beta builds before App Store Connect submission, use the `preview` profile in `eas.json`.
+## Distribution Notes
+
+The old `testflight:*` scripts have been removed from this app package so the default workflow stays local.
+If you later want to ship again, you can add a separate release flow back in, but this repo now favors
+direct device installs for day-to-day testing.
 
 ## Important Config
 
 The app defaults to:
 
 - `API base URL`: `http://localhost:4000`
-- `clubSlug`: `demo-soccer-club`
-- `teamSlug`: `u14-girls`
-- `submitterEmail`: `coach@demo-club.local`
+- `clubSlug`: `demo-workspace`
+- `teamSlug`: `content-team`
+- `submitterEmail`: `submitter@demo-workspace.local`
 
 On a real phone, replace `localhost` with the dev VPS host or a LAN-reachable machine address.

@@ -65,8 +65,10 @@ The repo is now set up to match the other GitHub-backed projects:
 Useful scripts:
 
 - `./scripts/deploy_vps.sh` - bootstrap or force-sync the repo to the VPS
+- `./scripts/migrate_vps.sh` - apply idempotent VPS database migrations
 - `./scripts/update_vps.sh` - normal day-to-day flow after pushing to GitHub
 - `./scripts/smoke_vps.sh` - check VPS API health and approval queue from your Mac
+- `node scripts/e2e_settings_smoke.mjs` - check the policy studio and membership settings end to end against local services
 
 Recommended routine:
 
@@ -284,6 +286,10 @@ The admin console also includes a workflow recovery panel for retrying failed ev
 Primary public reviewer URL:
 
 - `https://review-clubcontent.davmn.net`
+
+Primary public submitter URL:
+
+- `https://app-clubcontent.davmn.net`
 
 If admin basic-auth credentials are configured on the VPS, your browser will prompt for them before loading the queue.
 

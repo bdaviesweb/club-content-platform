@@ -19,6 +19,9 @@ rsync -av \
 echo "Ensuring VPS env file exists"
 ssh "${REMOTE_HOST}" "cd '${REMOTE_DIR}' && if [ ! -f .env.vps ]; then cp .env.vps.example .env.vps; fi"
 
+echo "Applying database migrations"
+REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/migrate_vps.sh
+
 echo "Starting VPS stack"
 ssh "${REMOTE_HOST}" "cd '${REMOTE_DIR}' && docker compose -f docker-compose.vps.yml up --build -d"
 

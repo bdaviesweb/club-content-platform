@@ -29,7 +29,7 @@ export function summarizeReview(rawText = "", riskScore) {
   }
 
   if (riskScore >= reviewThresholds.highRisk) {
-    return "High-risk language or sensitive details detected. Escalate to club comms.";
+    return "High-risk language or sensitive details detected. Escalate to the review team.";
   }
 
   if (riskScore >= reviewThresholds.mediumRisk) {
@@ -44,5 +44,5 @@ export function draftCaption(rawText = "", submitterName = "Contributor") {
     return rawText.trim();
   }
 
-  return `Club update submitted by ${submitterName}.`;
+  return `Workspace update submitted by ${submitterName}.`;
 }

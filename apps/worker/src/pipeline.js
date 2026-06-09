@@ -6,6 +6,8 @@ import {
 } from "../../../packages/shared/src/index.js";
 import { draftCaption, scoreRisk, summarizeReview } from "./fallback-review.js";
 import { hasOpenAI, runModeration, runStructuredReview } from "./openai.js";
+import { buildAudienceReviewPackage } from "./audience-rewrites.js";
+import { evaluateClubRouting, loadClubPolicy } from "./policy.js";
 
 export function chooseApproverRole(submission) {
   if (
@@ -16,6 +18,84 @@ export function chooseApproverRole(submission) {
   }
 
   return "team_manager";
+}
+
+function normalizeChannelKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseSubmissionChannels(submission) {
+  if (Array.isArray(submission?.selected_channels)) {
+    return submission.selected_channels
+      .map((channel) => String(channel || "").trim())
+      .filter(Boolean);
+  }
+
+  const rawChannels = String(submission?.raw_text || "")
+    .match(/^Channels:\s*(.+)$/gim)?.[0];
+
+  if (!rawChannels) {
+    return [];
+  }
+
+  return rawChannels
+    .replace(/^Channels:\s*/i, "")
+    .split(",")
+    .map((channel) => channel.trim())
+    .filter(Boolean);
+}
+
+function uniqueDestinations(destinations) {
+  const seen = new Set();
+  return destinations.filter((destination) => {
+    if (!destination?.id || seen.has(destination.id)) {
+      return false;
+    }
+    seen.add(destination.id);
+    return true;
+  });
+}
+
+function destinationMatchesSelectedChannels(destination, selectedChannels) {
+  const configChannelKey = normalizeChannelKey(destination?.config?.channelKey);
+  const destinationTypeKey = normalizeChannelKey(destination?.destination_type);
+  return selectedChannels.some(
+    (channel) => normalizeChannelKey(channel) === configChannelKey || normalizeChannelKey(channel) === destinationTypeKey
+  );
+}
+
+async function loadApprovedDestinations(client, submission, clubPolicy) {
+  const result = await client.query(
+    `
+    SELECT id, destination_type, name, config
+    FROM publishing_destinations
+    WHERE club_id = $1 AND is_active = TRUE
+    ORDER BY created_at ASC
+    `,
+    [submission.club_id]
+  );
+
+  const selectedChannels = parseSubmissionChannels(submission);
+  const publishMainFeedByDefault = clubPolicy?.routing?.publishMainFeedByDefault !== false;
+  const destinations = [];
+
+  if (publishMainFeedByDefault) {
+    const mainFeedDestinations = result.rows.filter(
+      (destination) => destination.destination_type === internalDestinationType
+    );
+    destinations.push(...mainFeedDestinations);
+  }
+
+  destinations.push(
+    ...result.rows.filter((destination) => destinationMatchesSelectedChannels(destination, selectedChannels))
+  );
+
+  return uniqueDestinations(destinations);
 }
 
 async function findApprover(client, clubId, preferredRole) {
@@ -56,7 +136,7 @@ function riskLevelToScore(riskLevel) {
   }
 }
 
-async function buildReviewArtifacts(submission) {
+async function buildReviewArtifacts(submission, clubPolicy) {
   const buildFallbackArtifacts = () => {
     const fallbackRiskScore = scoreRisk(submission.raw_text || "");
     return {
@@ -93,7 +173,8 @@ async function buildReviewArtifacts(submission) {
     const structured = await runStructuredReview({
       rawText: submission.raw_text || "",
       visibilityTarget: submission.visibility_target,
-      contentType: submission.content_type
+      contentType: submission.content_type,
+      clubPolicy
     });
     const review = structured.review || {};
     const riskScore = moderation.flagged
@@ -136,32 +217,47 @@ export async function processSubmissionCreated(client, eventRow) {
   }
 
   const submission = submissionResult.rows[0];
-  const reviewArtifacts = await buildReviewArtifacts(submission);
-  const approverRole = chooseApproverRole({
-    visibility_target: submission.visibility_target,
-    risk_score: reviewArtifacts.riskScore
+  const clubPolicy = await loadClubPolicy(client, submission.club_id);
+  const reviewArtifacts = await buildReviewArtifacts(submission, clubPolicy);
+  const routingDecision = evaluateClubRouting(submission, reviewArtifacts, clubPolicy);
+  const audienceReviewPackage = buildAudienceReviewPackage({
+    rawText: submission.raw_text || "",
+    captionDraft: reviewArtifacts.captionDraft,
+    analysisSummary: reviewArtifacts.summary,
+    riskScore: reviewArtifacts.riskScore,
+    routingDecision
   });
+  const approverRole = routingDecision.approverRole;
+  const isAutoApproved = routingDecision.route === "auto_approve";
 
   await client.query(
     `
     UPDATE submissions
-    SET status = 'needs_human_review',
-        risk_score = $2,
-        caption_draft = $3,
-        routing_decision = $4::jsonb,
+    SET status = $2,
+        risk_score = $3,
+        caption_draft = $4,
+        routing_decision = $5::jsonb,
         updated_at = NOW()
     WHERE id = $1
     `,
     [
       submission.id,
+      isAutoApproved ? "approved_internal" : "needs_human_review",
       reviewArtifacts.riskScore,
       reviewArtifacts.captionDraft,
       JSON.stringify({
         approverRole,
+        route: routingDecision.route,
+        policyHits: routingDecision.policyHits,
+        recommendedChannels: routingDecision.recommendedChannels,
+        blockedChannels: routingDecision.blockedChannels,
         rationale: reviewArtifacts.summary,
+        analysisCore: audienceReviewPackage.analysisCore,
+        audienceRewrites: audienceReviewPackage.audienceRewrites,
         reviewMode: reviewArtifacts.mode,
         reviewRequiredReason:
-          reviewArtifacts.structured?.review?.review_required_reason || null
+          reviewArtifacts.structured?.review?.review_required_reason || null,
+        policyReasons: routingDecision.reasons
       })
     ]
   );
@@ -194,7 +290,10 @@ export async function processSubmissionCreated(client, eventRow) {
         riskScore: reviewArtifacts.riskScore,
         rawText: submission.raw_text || "",
         moderation: reviewArtifacts.moderation,
-        structuredReview: reviewArtifacts.structured?.review || null
+        structuredReview: reviewArtifacts.structured?.review || null,
+        analysisCore: audienceReviewPackage.analysisCore,
+        policy: clubPolicy,
+        routingDecision
       })
     ]
   );
@@ -240,28 +339,11 @@ export async function processSubmissionCreated(client, eventRow) {
       "Caption draft generated for reviewer use.",
       JSON.stringify({
         captionDraft: reviewArtifacts.captionDraft,
-        mode: reviewArtifacts.mode
+        audienceRewrites: audienceReviewPackage.audienceRewrites,
+        mode: reviewArtifacts.mode,
+        policy: clubPolicy
       })
     ]
-  );
-
-  const approver = await findApprover(client, submission.club_id, approverRole);
-
-  if (!approver) {
-    throw new Error(`No approver found for role ${approverRole}`);
-  }
-
-  await client.query(
-    `
-    INSERT INTO approval_requests (
-      submission_id,
-      approver_user_id,
-      approver_role,
-      state
-    )
-    VALUES ($1, $2, $3, 'pending')
-    `,
-    [submission.id, approver.userId, approver.role]
   );
 
   await client.query(
@@ -271,24 +353,79 @@ export async function processSubmissionCreated(client, eventRow) {
     `,
     [
       submission.id,
-      submissionEvents.approvalRequested,
+      submissionEvents.routed,
       JSON.stringify({
-        approverRole: approver.role,
-        originallyRequestedRole: approverRole
+        route: routingDecision.route,
+        approverRole,
+        policyHits: routingDecision.policyHits,
+        reasons: routingDecision.reasons
       })
     ]
   );
 
-  await createAndDeliverNotification(client, {
-    userId: submission.submitted_by_user_id,
-    type: "submission_review_started",
-    payload: {
-      submissionId: submission.id,
-      status: "needs_human_review",
-      approverRole: approver.role,
-      summary: reviewArtifacts.summary
+  if (isAutoApproved) {
+    await client.query(
+      `
+      INSERT INTO submission_events (submission_id, event_name, payload)
+      VALUES ($1, $2, $3::jsonb)
+      `,
+      [
+        submission.id,
+        submissionEvents.approved,
+        JSON.stringify({
+          approvalRequestId: null,
+          route: routingDecision.route
+        })
+      ]
+    );
+  } else {
+    const approver = await findApprover(client, submission.club_id, approverRole);
+
+    if (!approver) {
+      throw new Error(`No approver found for role ${approverRole}`);
     }
-  });
+
+    await client.query(
+      `
+      INSERT INTO approval_requests (
+        submission_id,
+        approver_user_id,
+        approver_role,
+        state
+      )
+      VALUES ($1, $2, $3, 'pending')
+      `,
+      [submission.id, approver.userId, approver.role]
+    );
+
+    await client.query(
+      `
+      INSERT INTO submission_events (submission_id, event_name, payload)
+      VALUES ($1, $2, $3::jsonb)
+      `,
+      [
+        submission.id,
+        submissionEvents.approvalRequested,
+        JSON.stringify({
+          approverRole: approver.role,
+          originallyRequestedRole: approverRole,
+          route: routingDecision.route
+        })
+      ]
+    );
+
+    await createAndDeliverNotification(client, {
+      userId: submission.submitted_by_user_id,
+      type: "submission_review_started",
+      payload: {
+        submissionId: submission.id,
+        status: "needs_human_review",
+        approverRole: approver.role,
+        summary: reviewArtifacts.summary,
+        route: routingDecision.route
+      }
+    });
+  }
 }
 
 export async function processSubmissionApproved(client, eventRow) {
@@ -307,45 +444,45 @@ export async function processSubmissionApproved(client, eventRow) {
 
   const submission = submissionResult.rows[0];
 
-  const destination = await client.query(
-    `
-    SELECT id
-    FROM publishing_destinations
-    WHERE club_id = $1 AND destination_type = $2
-    ORDER BY created_at ASC
-    LIMIT 1
-    `,
-    [submission.club_id, internalDestinationType]
-  );
+  const clubPolicy = await loadClubPolicy(client, submission.club_id);
+  const destinations = await loadApprovedDestinations(client, submission, clubPolicy);
 
-  if (!destination.rowCount) {
-    throw new Error("Internal publishing destination not configured");
+  if (!destinations.length) {
+    throw new Error("No publishing destinations configured");
   }
 
-  await client.query(
-    `
-    INSERT INTO publishing_jobs (
-      submission_id,
-      destination_id,
-      state,
-      result_summary
-    )
-    VALUES ($1, $2, 'succeeded', 'Published to internal feed by worker')
-    `,
-    [submission.id, destination.rows[0].id]
-  );
+  for (const destination of destinations) {
+    await client.query(
+      `
+      INSERT INTO publishing_jobs (
+        submission_id,
+        destination_id,
+        state,
+        result_summary
+      )
+      VALUES ($1, $2, 'succeeded', $3)
+      `,
+      [
+        submission.id,
+        destination.id,
+        destination.destination_type === internalDestinationType
+          ? "Published to the primary feed by worker"
+          : `Published to ${destination.name} by worker`
+      ]
+    );
 
-  await client.query(
-    `
-    INSERT INTO published_posts (
-      submission_id,
-      destination_id,
-      external_post_id
-    )
-    VALUES ($1, $2, $3)
-    `,
-    [submission.id, destination.rows[0].id, `internal:${submission.id}`]
-  );
+    await client.query(
+      `
+      INSERT INTO published_posts (
+        submission_id,
+        destination_id,
+        external_post_id
+      )
+      VALUES ($1, $2, $3)
+      `,
+      [submission.id, destination.id, `${destination.destination_type}:${submission.id}`]
+    );
+  }
 
   await client.query(
     `
@@ -364,7 +501,11 @@ export async function processSubmissionApproved(client, eventRow) {
     [
       submission.id,
       submissionEvents.published,
-      JSON.stringify({ destinationType: internalDestinationType })
+      JSON.stringify({
+        destinationType: internalDestinationType,
+        destinationCount: destinations.length,
+        destinationTypes: destinations.map((destination) => destination.destination_type)
+      })
     ]
   );
 
@@ -374,7 +515,9 @@ export async function processSubmissionApproved(client, eventRow) {
     payload: {
       submissionId: submission.id,
       status: "published",
-      destinationType: internalDestinationType
+      destinationType: internalDestinationType,
+      destinationCount: destinations.length,
+      destinationTypes: destinations.map((destination) => destination.destination_type)
     }
   });
 }

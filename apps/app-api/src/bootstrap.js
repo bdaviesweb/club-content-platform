@@ -3,15 +3,58 @@ import { internalDestinationType } from "../../../packages/shared/src/index.js";
 import { ensureBucket } from "./storage.js";
 
 const defaultClubSeed = {
-  slug: "demo-soccer-club",
-  name: "Demo Soccer Club",
-  teamSlug: "u14-girls",
-  teamName: "U14 Girls",
-  approverEmail: "comms@demo-club.local",
-  approverName: "Club Comms",
-  submitterEmail: "coach@demo-club.local",
-  submitterName: "Demo Coach"
+  slug: "demo-workspace",
+  name: "Demo Workspace",
+  teamSlug: "content-team",
+  teamName: "Content Team",
+  adminEmail: "admin@demo-workspace.local",
+  adminName: "Club Admin",
+  approverEmail: "review@demo-workspace.local",
+  approverName: "Review Lead",
+  submitterEmail: "submitter@demo-workspace.local",
+  submitterName: "Content Lead"
 };
+
+const defaultPolicyConfig = {
+  channels: [
+    { key: "instagram", label: "Instagram", favorite: true, allowed: true },
+    { key: "facebook", label: "Facebook", favorite: true, allowed: true },
+    { key: "team-feed", label: "Team Feed", favorite: true, allowed: true },
+    { key: "website", label: "Website", favorite: false, allowed: true },
+    { key: "newsletter", label: "Newsletter", favorite: false, allowed: true },
+    { key: "x", label: "X", favorite: false, allowed: false, reviewRequired: true },
+    { key: "tiktok", label: "TikTok", favorite: false, allowed: false, reviewRequired: true }
+  ],
+  routing: {
+    publishMainFeedByDefault: true
+  },
+  review: {
+    autoApproveMaxRisk: 0.2,
+    alwaysReviewChannels: ["X", "TikTok"],
+    alwaysReviewKeywords: [
+      "injury",
+      "hospital",
+      "concussion",
+      "address",
+      "phone",
+      "email",
+      "contact"
+    ],
+    alwaysReviewContentTypes: ["video"]
+  }
+};
+
+function getPolicyConfig() {
+  try {
+    if (process.env.DEMO_POLICY_CONFIG_JSON) {
+      return JSON.parse(process.env.DEMO_POLICY_CONFIG_JSON);
+    }
+  } catch (_error) {
+    // Fall back to the default config when the override is invalid.
+  }
+
+  return defaultPolicyConfig;
+}
 
 function getClubSeed() {
   return {
@@ -19,6 +62,8 @@ function getClubSeed() {
     name: process.env.DEMO_CLUB_NAME || defaultClubSeed.name,
     teamSlug: process.env.DEMO_TEAM_SLUG || defaultClubSeed.teamSlug,
     teamName: process.env.DEMO_TEAM_NAME || defaultClubSeed.teamName,
+    adminEmail: process.env.DEMO_ADMIN_EMAIL || defaultClubSeed.adminEmail,
+    adminName: process.env.DEMO_ADMIN_NAME || defaultClubSeed.adminName,
     approverEmail:
       process.env.DEMO_REVIEWER_EMAIL ||
       process.env.DEMO_APPROVER_EMAIL ||
@@ -150,6 +195,14 @@ export async function ensureSeedData() {
 
     await ensureRoleMembership(client, {
       clubId,
+      teamId: null,
+      role: "club_admin",
+      email: clubSeed.adminEmail,
+      name: clubSeed.adminName
+    });
+
+    await ensureRoleMembership(client, {
+      clubId,
       teamId,
       role: "club_comms",
       email: clubSeed.approverEmail,
@@ -167,7 +220,7 @@ export async function ensureSeedData() {
     await client.query(
       `
       INSERT INTO publishing_destinations (club_id, destination_type, name, config)
-      SELECT $1, $2, 'Internal Club Feed', '{"mode":"internal"}'::jsonb
+      SELECT $1, $2, 'Internal Feed', '{"mode":"internal"}'::jsonb
       WHERE NOT EXISTS (
         SELECT 1
         FROM publishing_destinations
@@ -176,5 +229,83 @@ export async function ensureSeedData() {
       `,
       [clubId, internalDestinationType]
     );
+
+    const destinationSeeds = [
+      {
+        destinationType: "instagram",
+        name: "Instagram",
+        config: {
+          channelKey: "instagram",
+          accountGroup: "instagram"
+        }
+      },
+      {
+        destinationType: "facebook",
+        name: "Facebook",
+        config: {
+          channelKey: "facebook",
+          accountGroup: "facebook"
+        }
+      },
+      {
+        destinationType: "team-feed",
+        name: "Team Feed",
+        config: {
+          channelKey: "team-feed",
+          accountGroup: "team-feed"
+        }
+      },
+      {
+        destinationType: "website",
+        name: "Website",
+        config: {
+          channelKey: "website",
+          accountGroup: "website"
+        }
+      },
+      {
+        destinationType: "newsletter",
+        name: "Newsletter",
+        config: {
+          channelKey: "newsletter",
+          accountGroup: "newsletter"
+        }
+      }
+    ];
+
+    for (const destination of destinationSeeds) {
+      await client.query(
+        `
+        INSERT INTO publishing_destinations (club_id, destination_type, name, config)
+        SELECT $1, $2, $3, $4::jsonb
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM publishing_destinations
+          WHERE club_id = $1 AND destination_type = $2 AND name = $3
+        )
+        `,
+        [clubId, destination.destinationType, destination.name, JSON.stringify(destination.config)]
+      );
+    }
+
+    try {
+      const policyConfig = getPolicyConfig();
+      await client.query(
+        `
+        INSERT INTO club_workflow_policies (club_id, policy_key, config)
+        VALUES ($1, 'default', $2::jsonb)
+        ON CONFLICT (club_id) DO UPDATE
+        SET policy_key = EXCLUDED.policy_key,
+            config = EXCLUDED.config,
+            updated_at = NOW()
+        `,
+        [clubId, JSON.stringify(policyConfig)]
+      );
+    } catch (error) {
+      if (error?.code !== "42P01") {
+        throw error;
+      }
+      console.warn("club_workflow_policies seed skipped until the schema is migrated");
+    }
   });
 }

@@ -11,6 +11,7 @@ const pollIntervalMs = 5000;
 const handlers = {
   [submissionEvents.created]: processSubmissionCreated,
   [submissionEvents.approved]: processSubmissionApproved,
+  [submissionEvents.routed]: async () => {},
   [submissionEvents.approvalRequested]: async () => {},
   [submissionEvents.published]: async () => {}
 };

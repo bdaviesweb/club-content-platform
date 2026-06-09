@@ -11,6 +11,10 @@
     "dev:admin": "npm --workspace @club/admin-web run dev",
     "dev:worker": "npm --workspace @club/worker run dev",
     "dev:mobile": "npm --workspace @club/mobile run dev",
+    "test:unit": "node --test packages/shared/test/submission-serialization.test.js apps/worker/test/policy.test.js apps/worker/test/audience-rewrites.test.js",
+    "smoke:e2e": "node scripts/e2e_submission_smoke.mjs",
+    "smoke:settings": "node scripts/e2e_settings_smoke.mjs",
+    "smoke:e2e:review": "E2E_SELECTED_CHANNELS=x E2E_RAW_TEXT='E2E smoke review post\\nChannels: X\\nTags: smoke, review\\nInjury update for the team' node scripts/e2e_submission_smoke.mjs",
     "lint": "echo \"Lint targets not wired yet\"",
     "test": "echo \"Test targets not wired yet\""
   },

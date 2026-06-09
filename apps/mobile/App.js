@@ -1,5 +1,4 @@
 import * as FileSystem from "expo-file-system";
-import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
@@ -11,23 +10,31 @@ import {
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View
 } from "react-native";
+import { Linking } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  buildSubmissionRequestBody,
+  buildSubmissionText
+} from "../../packages/shared/src/submission-serialization.js";
 
 const defaultConfig = {
   apiBaseUrl:
     process.env.EXPO_PUBLIC_API_BASE_URL || "https://clubcontent-api.davmn.net",
-  clubSlug: process.env.EXPO_PUBLIC_CLUB_SLUG || "demo-soccer-club",
-  teamSlug: process.env.EXPO_PUBLIC_TEAM_SLUG || "u14-girls",
+  clubSlug: process.env.EXPO_PUBLIC_CLUB_SLUG || "demo-workspace",
+  teamSlug: process.env.EXPO_PUBLIC_TEAM_SLUG || "content-team",
   submitterEmail:
-    process.env.EXPO_PUBLIC_SUBMITTER_EMAIL || "coach@demo-club.local",
+    process.env.EXPO_PUBLIC_SUBMITTER_EMAIL || "submitter@demo-workspace.local",
   reviewerEmail:
-    process.env.EXPO_PUBLIC_REVIEWER_EMAIL || "reviewer@demo-club.local"
+    process.env.EXPO_PUBLIC_REVIEWER_EMAIL ||
+    process.env.EXPO_PUBLIC_DEMO_REVIEWER_EMAIL ||
+    "review@demo-workspace.local",
+  workspaceMode: process.env.EXPO_PUBLIC_WORKSPACE_MODE || "poster"
 };
 
 const progressStages = [
@@ -36,6 +43,16 @@ const progressStages = [
   { key: "approved", label: "Approved" },
   { key: "published", label: "Posted" }
 ];
+
+let imagePickerModulePromise;
+
+function loadImagePickerModule() {
+  if (!imagePickerModulePromise) {
+    imagePickerModulePromise = import("expo-image-picker");
+  }
+
+  return imagePickerModulePromise;
+}
 
 function normalizeApiBaseUrl(value) {
   return String(value || "").replace(/\/+$/, "");
@@ -114,7 +131,7 @@ function formatRiskScoreLabel(value) {
 
 function summarizeSubmissionProgress(item) {
   const status = String(item?.status || "").toLowerCase();
-  if (status === "published") return "Approved and shared to the club feed.";
+  if (status === "published") return "Approved and shared to the primary feed.";
   if (status === "approved") return "Approved and waiting for publishing.";
   if (status === "rejected") return "Stopped in review.";
   if (status === "changes_requested" || status === "needs_metadata") {
@@ -124,11 +141,39 @@ function summarizeSubmissionProgress(item) {
   return "Captured and waiting to enter review.";
 }
 
+function extractSubmissionField(rawText, label) {
+  const value = String(rawText || "");
+  const escapedLabel = String(label || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = value.match(new RegExp(`^${escapedLabel}:\\s*(.+)$`, "im"));
+  return match ? match[1].trim() : "";
+}
+
+function formatSubmissionHeadline(rawText) {
+  const headline = String(rawText || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line && !/^[A-Za-z ]+:\s/.test(line));
+  return headline || "No caption provided";
+}
+
+function buildSubmissionQuickChips(item) {
+  const rawText = String(item?.raw_text || "");
+  return [
+    item?.team_name || formatContentTypeLabel(item?.content_type),
+    extractSubmissionField(rawText, "Event"),
+    extractSubmissionField(rawText, "Channels")
+      .split(",")
+      .map((channel) => channel.trim())
+      .filter(Boolean)[0],
+    formatRiskScoreLabel(item?.risk_score)
+  ].filter(Boolean);
+}
+
 function buildNotificationBody(item) {
   if (item?.payload?.notes) return item.payload.notes;
   if (item?.payload?.summary) return item.payload.summary;
   if (item?.type === "submission_published") {
-    return `Published to ${item.payload?.destinationType || "the club feed"}.`;
+    return `Published to ${item.payload?.destinationType || "the primary feed"}.`;
   }
   if (item?.type === "submission_review_started") {
     return "Your update entered the review queue.";
@@ -163,7 +208,7 @@ function fixPromptForReasonCode(reasonCode) {
     case "caption_tighten":
       return {
         title: "Tighten the caption",
-        body: "Keep it short and club-ready. A cleaner caption should be enough here."
+        body: "Keep it short and brand-ready. A cleaner caption should be enough here."
       };
     case "missing_context":
       return {
@@ -242,10 +287,10 @@ const reviewQueuePreviewItems = [
     submission_status: "needs_human_review",
     raw_text: "Fresh photo upload to verify the live reviewer preview.",
     risk_score: "0.10",
-    approver_name: "Club Comms",
+    approver_name: "Review Lead",
     latest_review_summary: "Low-risk submission. Safe to route for standard internal approval.",
     content_type: "photo",
-    team_name: "U14 Girls"
+    team_name: "Content Team"
   },
   {
     id: "preview-review-2",
@@ -255,11 +300,21 @@ const reviewQueuePreviewItems = [
     submission_status: "needs_human_review",
     raw_text: "Mia scored twice in a 3-1 win over Lakeville North.",
     risk_score: "0.10",
-    approver_name: "Club Comms",
+    approver_name: "Review Lead",
     latest_review_summary: "Low-risk submission. Safe to route for standard internal approval.",
     content_type: "photo",
-    team_name: "U14 Girls"
+    team_name: "Content Team"
   }
+];
+
+const socialChannelOptions = [
+  { key: "instagram", label: "Instagram", favorite: true },
+  { key: "facebook", label: "Facebook", favorite: true },
+  { key: "team-feed", label: "Team Feed", favorite: true },
+  { key: "website", label: "Website", favorite: false },
+  { key: "newsletter", label: "Newsletter", favorite: false },
+  { key: "x", label: "X", favorite: false },
+  { key: "tiktok", label: "TikTok", favorite: false }
 ];
 
 const webReviewPreviewSubmissionIds = new Set(
@@ -276,7 +331,7 @@ function createPreviewPosterDataUrl(title, subtitle, tone = "#9f8cff") {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-  const safeSubtitle = String(subtitle || "Club Content")
+  const safeSubtitle = String(subtitle || "Content Studio")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -302,7 +357,7 @@ function createPreviewPosterDataUrl(title, subtitle, tone = "#9f8cff") {
       <rect x="150" y="248" rx="30" ry="30" width="620" height="430" fill="rgba(255,255,255,0.74)"/>
       <rect x="810" y="248" rx="30" ry="30" width="340" height="430" fill="rgba(255,255,255,0.56)"/>
       <rect x="150" y="736" rx="24" ry="24" width="1000" height="70" fill="rgba(255,255,255,0.44)"/>
-      <text x="162" y="194" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="700" fill="#1d2a46">Club Content preview</text>
+      <text x="162" y="194" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="700" fill="#1d2a46">Content preview</text>
       <text x="175" y="334" font-family="Inter, Arial, sans-serif" font-size="48" font-weight="800" fill="#1d2342">${safeTitle}</text>
       <text x="175" y="392" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="500" fill="#4e5b79">${safeSubtitle}</text>
       <text x="865" y="328" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700" fill="#1f2f56">Review ready</text>
@@ -323,8 +378,8 @@ function buildWebReviewPreviewDetail(item) {
 
   return {
     id: item.submission_id,
-    club_slug: "demo-soccer-club",
-    team_slug: "u14-girls",
+    club_slug: "demo-workspace",
+    team_slug: "content-team",
     content_type: item.content_type || "photo",
     visibility_target: "internal",
     raw_text: item.raw_text,
@@ -347,7 +402,7 @@ function buildWebReviewPreviewDetail(item) {
     latestApprovalRequest: {
       id: item.id,
       state: item.state || "pending",
-      approverName: item.approver_name || "Club Comms",
+      approverName: item.approver_name || "Review Lead",
       latestAction: null
     }
   };
@@ -355,6 +410,70 @@ function buildWebReviewPreviewDetail(item) {
 
 function findWebReviewPreviewItem(submissionId) {
   return reviewQueuePreviewItems.find((item) => item.submission_id === submissionId) || null;
+}
+
+function buildDemoWorkflowDetail(submissionId) {
+  if (!demoWorkflowAsset || submissionId !== "demo-submission-1") return null;
+  const queueItem = demoWorkflowReviewQueue[0];
+
+  return {
+    id: "demo-submission-1",
+    club_slug: "demo-workspace",
+    team_slug: "content-team",
+    content_type: "photo",
+    visibility_target: "internal",
+    raw_text: demoWorkflowSubmissions[0].raw_text,
+    status: "needs_human_review",
+    created_at: demoWorkflowSubmissions[0].created_at,
+    risk_score: queueItem.risk_score,
+    media: [
+      {
+        objectKey: "demo-match-moment",
+        previewUrl: demoWorkflowAsset.uri,
+        mediaType: "image",
+        mimeType: "image/jpeg"
+      }
+    ],
+    latestReviewRun: {
+      resultStatus: "needs_review",
+      agentName: "Demo review",
+      summary: queueItem.latest_review_summary
+    },
+    latestApprovalRequest: {
+      id: queueItem.id,
+      state: "pending",
+      approverName: queueItem.approver_name,
+      latestAction: null
+    }
+  };
+}
+
+function buildQueueFallbackDetail(queueItem, submissionId, currentClubSlug, currentTeamSlug) {
+  if (!queueItem) return null;
+
+  return {
+    id: submissionId,
+    club_slug: currentClubSlug || "demo-workspace",
+    team_slug: currentTeamSlug || "content-team",
+    content_type: queueItem.content_type || "photo",
+    visibility_target: "internal",
+    raw_text: queueItem.raw_text || "",
+    status: queueItem.submission_status || "needs_human_review",
+    created_at: queueItem.created_at || new Date().toISOString(),
+    risk_score: queueItem.risk_score || null,
+    media: [],
+    latestReviewRun: {
+      resultStatus: "needs_review",
+      agentName: queueItem.approver_name || "Review Lead",
+      summary: queueItem.latest_review_summary || "Queued for review."
+    },
+    latestApprovalRequest: {
+      id: queueItem.id || submissionId,
+      state: queueItem.state || "pending",
+      approverName: queueItem.approver_name || "Review Lead",
+      latestAction: null
+    }
+  };
 }
 
 const reviewReasonSets = {
@@ -380,16 +499,16 @@ const reviewReasonSets = {
     {
       code: "caption_tighten",
       label: "Tighten caption",
-      helper: "Ask for a cleaner club-ready caption.",
-      text: "Please tighten the caption so it is club-ready."
+      helper: "Ask for a cleaner caption.",
+      text: "Please tighten the caption so it is ready to post."
     }
   ],
   reject: [
     {
       code: "club_guidelines",
       label: "Off guidelines",
-      helper: "Use when the post does not fit club standards.",
-      text: "This does not fit club posting guidelines."
+      helper: "Use when the post does not fit the publishing standards.",
+      text: "This does not fit the posting guidelines."
     },
     {
       code: "privacy_safe_retake",
@@ -463,6 +582,65 @@ function isVideoAsset(selectedAsset) {
   );
 }
 
+const demoWorkflowAsset =
+  process.env.EXPO_PUBLIC_DEMO_WORKFLOW === "1"
+    ? {
+        uri: "https://images.unsplash.com/photo-1526232761682-d26e03ac148e?auto=format&fit=crop&w=1200&q=80",
+        name: "demo-match-moment.jpg",
+        mimeType: "image/jpeg",
+        type: "image"
+      }
+    : null;
+
+const demoWorkflowSubmissions = demoWorkflowAsset
+  ? [
+      {
+        id: "demo-submission-1",
+        status: "needs_human_review",
+        created_at: new Date().toISOString(),
+        raw_text:
+          "Pregame huddle before kickoff.\nTags: goal, celebration, tournament\nChannels: Instagram, Facebook\nEvent: Game\nOpponent: Lakeville North\nScore: 3-1 win\nLocation: Shakopee Soccer Complex",
+        visibility_target: "internal",
+        media_count: 1
+      }
+    ]
+  : [];
+
+const demoWorkflowNotifications = demoWorkflowAsset
+  ? [
+      {
+        id: "demo-notification-1",
+        type: "submission_review_started",
+        createdAt: new Date().toISOString(),
+        readAt: null,
+        deliveryStatus: "delivered",
+        payload: {
+          submissionId: "demo-submission-1",
+          status: "needs_human_review",
+          summary: "Your post is in the review queue."
+        }
+      }
+    ]
+  : [];
+
+const demoWorkflowReviewQueue = demoWorkflowAsset
+  ? [
+      {
+        id: "demo-review-1",
+        submission_id: "demo-submission-1",
+        state: "pending",
+        created_at: new Date().toISOString(),
+        submission_status: "needs_human_review",
+        raw_text: demoWorkflowSubmissions[0].raw_text,
+        risk_score: "0.10",
+        approver_name: "Review Lead",
+        latest_review_summary: "Low-risk submission. Ready for a quick human approval pass.",
+        content_type: "photo",
+        team_name: "Content Team"
+      }
+    ]
+  : [];
+
 function GlassLayer() {
   return <View pointerEvents="none" style={styles.glassFillSoft} />;
 }
@@ -473,15 +651,24 @@ export default function App() {
   const [teamSlug, setTeamSlug] = useState(defaultConfig.teamSlug);
   const [submitterEmail, setSubmitterEmail] = useState(defaultConfig.submitterEmail);
   const [reviewerEmail, setReviewerEmail] = useState(defaultConfig.reviewerEmail);
+  const [workspaceMode, setWorkspaceMode] = useState(defaultConfig.workspaceMode);
   const [caption, setCaption] = useState("");
-  const [visibilityTarget, setVisibilityTarget] = useState("internal");
-  const [asset, setAsset] = useState(null);
+  const [tagsInput, setTagsInput] = useState("");
+  const [eventTypeInput, setEventTypeInput] = useState("Game");
+  const [eventDetailInput, setEventDetailInput] = useState("");
+  const [opponentInput, setOpponentInput] = useState("");
+  const [scoreInput, setScoreInput] = useState("");
+  const [locationInput, setLocationInput] = useState("");
+  const [selectedChannels, setSelectedChannels] = useState(["instagram", "facebook"]);
+  const [showComposerDetails, setShowComposerDetails] = useState(false);
+  const defaultVisibilityTarget = "internal";
+  const [asset, setAsset] = useState(demoWorkflowAsset);
   const [status, setStatus] = useState("Take a photo or choose one to get started.");
   const [submitting, setSubmitting] = useState(false);
-  const [recentSubmissions, setRecentSubmissions] = useState([]);
+  const [recentSubmissions, setRecentSubmissions] = useState(demoWorkflowSubmissions);
   const [loadingRecent, setLoadingRecent] = useState(false);
   const [recentError, setRecentError] = useState("");
-  const [notifications, setNotifications] = useState([]);
+  const [notifications, setNotifications] = useState(demoWorkflowNotifications);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [notificationsError, setNotificationsError] = useState("");
   const [selectedSubmissionId, setSelectedSubmissionId] = useState(null);
@@ -502,6 +689,8 @@ export default function App() {
   const [reviewActionEditorVisible, setReviewActionEditorVisible] = useState(false);
   const [reviewActionInProgress, setReviewActionInProgress] = useState(false);
   const [reviewActionStatus, setReviewActionStatus] = useState("Pick a review item to get started.");
+  const [reviewDetailsExpanded, setReviewDetailsExpanded] = useState(false);
+  const [pendingReviewSubmissionId, setPendingReviewSubmissionId] = useState(null);
 
   const canSubmit = useMemo(() => {
     return Boolean(asset && apiBaseUrl.trim() && clubSlug.trim() && submitterEmail.trim());
@@ -512,8 +701,16 @@ export default function App() {
   }, [apiBaseUrl, clubSlug, submitterEmail]);
 
   const canReview = useMemo(() => {
-    return Boolean(apiBaseUrl.trim() && reviewerEmail.trim());
-  }, [apiBaseUrl, reviewerEmail]);
+    return Boolean(apiBaseUrl.trim() && reviewerEmail.trim() && workspaceMode === "reviewer");
+  }, [apiBaseUrl, reviewerEmail, workspaceMode]);
+
+  const showReviewTab = workspaceMode === "reviewer";
+
+  useEffect(() => {
+    if (eventTypeInput !== "Other" && eventDetailInput) {
+      setEventDetailInput("");
+    }
+  }, [eventTypeInput, eventDetailInput]);
 
   const unreadNotificationCount = useMemo(() => {
     return notifications.filter((item) => !item.readAt).length;
@@ -524,6 +721,43 @@ export default function App() {
   const latestStatusSummary = latestSubmission
     ? summarizeSubmissionProgress(latestSubmission)
     : "Your first post will show review and publish status here.";
+  const postDraftText = useMemo(() => {
+    return buildSubmissionText(
+      caption,
+      tagsInput,
+      socialChannelOptions
+        .filter((channel) => selectedChannels.includes(channel.key))
+        .map((channel) => channel.label),
+      eventTypeInput,
+      eventDetailInput,
+      opponentInput,
+      scoreInput,
+      locationInput
+    );
+  }, [
+    caption,
+    tagsInput,
+    selectedChannels,
+    eventTypeInput,
+    eventDetailInput,
+    opponentInput,
+    scoreInput,
+    locationInput
+  ]);
+  const locationSuggestions = useMemo(() => {
+    const locations = new Map();
+    recentSubmissions.forEach((item) => {
+      const rawText = String(item?.raw_text || "");
+      const parsedLocation =
+        extractSubmissionField(rawText, "Location") || String(item?.location || "").trim();
+      if (!parsedLocation) return;
+      locations.set(parsedLocation, (locations.get(parsedLocation) || 0) + 1);
+    });
+    return [...locations.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([location]) => location);
+  }, [recentSubmissions]);
   const resubmitPrompt = useMemo(() => {
     return fixPromptForReasonCode(
       selectedSubmissionDetail?.latestApprovalRequest?.latestAction?.reasonCode
@@ -535,7 +769,22 @@ export default function App() {
     );
   }, [selectedSubmissionDetail]);
 
+  function toggleSelectedChannel(channelKey) {
+    setSelectedChannels((current) => {
+      if (current.includes(channelKey)) {
+        return current.filter((item) => item !== channelKey);
+      }
+      return [...current, channelKey];
+    });
+  }
+
   async function loadRecentSubmissions() {
+    if (demoWorkflowSubmissions.length) {
+      setRecentSubmissions(demoWorkflowSubmissions);
+      setRecentError("");
+      return;
+    }
+
     if (!canLoadRecent) {
       setRecentSubmissions([]);
       return;
@@ -565,6 +814,12 @@ export default function App() {
   }
 
   async function loadNotifications() {
+    if (demoWorkflowNotifications.length) {
+      setNotifications(demoWorkflowNotifications);
+      setNotificationsError("");
+      return;
+    }
+
     if (!canLoadRecent) {
       setNotifications([]);
       return;
@@ -592,6 +847,16 @@ export default function App() {
   }
 
   async function loadSubmissionDetail(submissionId) {
+    const demoDetail = buildDemoWorkflowDetail(submissionId);
+    if (demoDetail) {
+      setSelectedSubmissionDetail(demoDetail);
+      setSelectedSubmissionId(submissionId);
+      setResubmissionText(demoDetail.raw_text || "");
+      setResubmissionAsset(null);
+      setStatus("Demo workflow: showing a sample review item.");
+      return;
+    }
+
     const previewItem = isWebReviewPreviewSubmission(submissionId)
       ? findWebReviewPreviewItem(submissionId)
       : null;
@@ -616,6 +881,19 @@ export default function App() {
       setResubmissionText(payload.raw_text || "");
       setResubmissionAsset(null);
     } catch (error) {
+      const queueItem = reviewQueue.find(
+        (item) => item.submission_id === submissionId || item.submissionId === submissionId
+      );
+      const fallbackDetail = buildQueueFallbackDetail(queueItem, submissionId, clubSlug, teamSlug);
+      if (fallbackDetail) {
+        setSelectedSubmissionDetail(fallbackDetail);
+        setSelectedSubmissionId(submissionId);
+        setResubmissionText(fallbackDetail.raw_text || "");
+        setResubmissionAsset(null);
+        setStatus("Submission detail unavailable. Showing the queue summary instead.");
+        return;
+      }
+
       setStatus(error.message || "Could not load submission detail");
       Alert.alert("Detail unavailable", error.message || "Unknown error");
     } finally {
@@ -716,6 +994,7 @@ export default function App() {
   }
 
   async function pickReplacementFromLibrary() {
+    const ImagePicker = await loadImagePickerModule();
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       Alert.alert("Permission needed", "Allow photo library access to replace this post.");
@@ -734,6 +1013,7 @@ export default function App() {
   }
 
   async function captureReplacementWithCamera() {
+    const ImagePicker = await loadImagePickerModule();
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
       Alert.alert("Permission needed", "Allow camera access to retake this post.");
@@ -790,9 +1070,112 @@ export default function App() {
       loadReviewQueue();
     }, 20000);
     return () => clearInterval(intervalId);
-  }, [canReview, apiBaseUrl, reviewerEmail, activeView]);
+  }, [canReview, apiBaseUrl, reviewerEmail, activeView, workspaceMode]);
+
+  useEffect(() => {
+    if (showReviewTab) return;
+    if (activeView === "review") {
+      setActiveView("post");
+    }
+  }, [activeView, showReviewTab]);
+
+  useEffect(() => {
+    if (workspaceMode !== "reviewer" || !pendingReviewSubmissionId) return;
+
+    const demoDetail = buildDemoWorkflowDetail(pendingReviewSubmissionId);
+    const queueItem = reviewQueue.find(
+      (item) => item.submission_id === pendingReviewSubmissionId || item.submissionId === pendingReviewSubmissionId
+    );
+    const fallbackDetail =
+      demoDetail ||
+      buildQueueFallbackDetail(queueItem, pendingReviewSubmissionId, clubSlug, teamSlug);
+
+    if (!fallbackDetail) return;
+
+    setSelectedSubmissionDetail(fallbackDetail);
+    setSelectedSubmissionId(pendingReviewSubmissionId);
+    setResubmissionText(fallbackDetail.raw_text || "");
+    setResubmissionAsset(null);
+    setStatus("Showing the review queue summary.");
+    setPendingReviewSubmissionId(null);
+  }, [clubSlug, pendingReviewSubmissionId, reviewQueue, teamSlug, workspaceMode]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const applyRouteFromUrl = (incomingUrl) => {
+      if (!incomingUrl) return;
+      try {
+        const parsedUrl = new URL(incomingUrl);
+        const candidateView =
+          parsedUrl.searchParams.get("view") ||
+          parsedUrl.hostname ||
+          parsedUrl.pathname.replace(/^\/+/, "");
+        const normalizedView = String(candidateView || "").toLowerCase();
+        if (["post", "review", "status"].includes(normalizedView)) {
+          setActiveView(normalizedView);
+        }
+
+        const candidateMode =
+          parsedUrl.searchParams.get("mode") ||
+          parsedUrl.searchParams.get("workspace") ||
+          parsedUrl.searchParams.get("workspaceMode");
+        const normalizedMode = String(candidateMode || "").toLowerCase();
+        if (["poster", "reviewer"].includes(normalizedMode)) {
+          setWorkspaceMode(normalizedMode);
+        }
+
+        const submissionId = parsedUrl.searchParams.get("submissionId");
+        if (submissionId && normalizedView === "review") {
+          setPendingReviewSubmissionId(submissionId);
+          setActiveView("review");
+        }
+      } catch {
+        const viewMatch = String(incomingUrl || "").match(/view=([a-z]+)/i);
+        const candidateView = viewMatch?.[1] || "";
+        const normalizedView = candidateView.toLowerCase();
+        if (["post", "review", "status"].includes(normalizedView)) {
+          setActiveView(normalizedView);
+        }
+
+        const modeMatch = String(incomingUrl || "").match(/(?:mode|workspace|workspaceMode)=([a-z]+)/i);
+        const candidateMode = modeMatch?.[1] || "";
+        const normalizedMode = candidateMode.toLowerCase();
+        if (["poster", "reviewer"].includes(normalizedMode)) {
+          setWorkspaceMode(normalizedMode);
+        }
+
+        const submissionMatch = String(incomingUrl || "").match(/submissionId=([^&]+)/i);
+        const submissionId = submissionMatch?.[1] ? decodeURIComponent(submissionMatch[1]) : "";
+        if (submissionId && normalizedView === "review") {
+          setPendingReviewSubmissionId(submissionId);
+          setActiveView("review");
+        }
+      }
+    };
+
+    Linking.getInitialURL().then((incomingUrl) => {
+      if (!mounted) return;
+      applyRouteFromUrl(incomingUrl);
+    });
+
+    const subscription = Linking.addEventListener("url", (event) => {
+      applyRouteFromUrl(event?.url);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, []);
 
   async function loadReviewQueue() {
+    if (demoWorkflowReviewQueue.length) {
+      setReviewQueue(demoWorkflowReviewQueue);
+      setReviewQueueError("");
+      return demoWorkflowReviewQueue;
+    }
+
     if (!canReview) {
       setReviewQueue([]);
       return [];
@@ -810,11 +1193,19 @@ export default function App() {
       setReviewQueue(items);
       return items;
     } catch (error) {
-      if (Platform.OS === "web") {
-        setReviewQueue(reviewQueuePreviewItems);
+      const previewQueue = reviewQueuePreviewItems.length
+        ? reviewQueuePreviewItems
+        : demoWorkflowReviewQueue;
+
+      if (previewQueue.length) {
+        setReviewQueue(previewQueue);
         setReviewQueueError("");
-        setStatus("Browser preview mode: showing a sample review queue.");
-        return reviewQueuePreviewItems;
+        setStatus(
+          Platform.OS === "web"
+            ? "Browser preview mode: showing a sample review queue."
+            : "Review API unavailable; showing the local preview queue."
+        );
+        return previewQueue;
       }
 
       setReviewQueueError(error.message || "Could not load review queue");
@@ -831,6 +1222,7 @@ export default function App() {
     setReviewActionNotes("");
     setReviewActionEditorVisible(false);
     setReviewActionStatus("Pick a review item to get started.");
+    setReviewDetailsExpanded(false);
   }
 
   function selectReviewAction(action) {
@@ -857,10 +1249,27 @@ export default function App() {
     setReviewActionEditorVisible(true);
   }
 
-  async function openReviewItem(submissionId) {
+  function openReviewItem(submissionId) {
+    const demoDetail = buildDemoWorkflowDetail(submissionId);
+    const queueItem = reviewQueue.find(
+      (item) => item.submission_id === submissionId || item.submissionId === submissionId
+    );
+    const fallbackDetail = demoDetail || buildQueueFallbackDetail(queueItem, submissionId, clubSlug, teamSlug);
+
     setActiveView("review");
-    await loadSubmissionDetail(submissionId);
     resetReviewActionState();
+
+    if (fallbackDetail) {
+      setSelectedSubmissionDetail(fallbackDetail);
+      setSelectedSubmissionId(submissionId);
+      setResubmissionText(fallbackDetail.raw_text || "");
+      setResubmissionAsset(null);
+      setStatus("Showing the review queue summary.");
+      setPendingReviewSubmissionId(null);
+      return;
+    }
+
+    setPendingReviewSubmissionId(submissionId);
   }
 
   async function submitReviewAction() {
@@ -874,7 +1283,7 @@ export default function App() {
 
     if (isWebReviewPreviewSubmission(selectedSubmissionDetail?.id)) {
       setReviewActionStatus("Browser preview mode. Actions are disabled here.");
-      Alert.alert("Preview only", "This browser view is for layout inspection. Use the native app or TestFlight for real review actions.");
+      Alert.alert("Preview only", "This browser view is for layout inspection. Use the native app or an on-device build for real review actions.");
       return;
     }
 
@@ -932,6 +1341,7 @@ export default function App() {
   }
 
   async function pickFromLibrary() {
+    const ImagePicker = await loadImagePickerModule();
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       Alert.alert("Permission needed", "Allow photo library access to choose a post.");
@@ -953,9 +1363,10 @@ export default function App() {
   }
 
   async function captureWithCamera() {
+    const ImagePicker = await loadImagePickerModule();
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert("Permission needed", "Allow camera access to capture a club update.");
+      Alert.alert("Permission needed", "Allow camera access to capture an update.");
       return;
     }
 
@@ -976,6 +1387,14 @@ export default function App() {
   function clearDraft() {
     setAsset(null);
     setCaption("");
+    setTagsInput("");
+    setEventTypeInput("Game");
+    setEventDetailInput("");
+    setOpponentInput("");
+    setScoreInput("");
+    setLocationInput("");
+    setSelectedChannels(["instagram", "facebook"]);
+    setShowComposerDetails(false);
     setStatus("Take a photo or choose one to get started.");
   }
 
@@ -1028,31 +1447,37 @@ export default function App() {
       const submissionResponse = await fetch(`${baseUrl}/submissions`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+        body: JSON.stringify(
+          buildSubmissionRequestBody({
           clubSlug,
           teamSlug,
           submitterEmail,
           contentType,
-          rawText: caption.trim(),
-          visibilityTarget,
-          media: [
-            {
-              objectKey: uploadPlan.objectKey,
-              mediaType: contentType,
-              mimeType: asset.mimeType || "application/octet-stream"
-            }
-          ]
-        })
+          rawText: postDraftText,
+          selectedChannels,
+          visibilityTarget: defaultVisibilityTarget,
+          objectKey: uploadPlan.objectKey,
+          mimeType: asset.mimeType || "application/octet-stream"
+          })
+        )
       });
 
       if (!submissionResponse.ok) throw new Error(`Submission failed: ${submissionResponse.status}`);
       const submissionPayload = await submissionResponse.json();
       setStatus(`Submitted ${submissionPayload.submission.id}`);
       setCaption("");
+      setTagsInput("");
+      setEventTypeInput("Game");
+      setEventDetailInput("");
+      setOpponentInput("");
+      setScoreInput("");
+      setLocationInput("");
+      setSelectedChannels(["instagram", "facebook"]);
+      setShowComposerDetails(false);
       setAsset(null);
       setActiveView("status");
       await refreshStatusFeed();
-      Alert.alert("Submitted for review", "Your update is in the club workflow now.");
+      Alert.alert("Submitted for review", "Your update is in the workflow now.");
     } catch (error) {
       setStatus(error.message || "Submission failed");
       Alert.alert("Submission failed", error.message || "Unknown error");
@@ -1080,9 +1505,27 @@ export default function App() {
             <Text style={styles.appName}>Club Content</Text>
             <Text style={styles.appSubtitle}>Post fast. Track clearly.</Text>
           </View>
-          <Pressable style={styles.settingsButton} onPress={() => setSettingsVisible(true)}>
-            <Text style={styles.settingsButtonText}>Settings</Text>
-          </Pressable>
+          <View style={styles.chromeActions}>
+            <Pressable
+              style={[
+                styles.modeToggle,
+                workspaceMode === "reviewer" && styles.modeToggleActive
+              ]}
+              onPress={() => setWorkspaceMode((current) => (current === "reviewer" ? "poster" : "reviewer"))}
+            >
+              <Text
+                style={[
+                  styles.modeToggleText,
+                  workspaceMode === "reviewer" && styles.modeToggleTextActive
+                ]}
+              >
+                {workspaceMode === "reviewer" ? "Reviewer" : "Poster"}
+              </Text>
+            </Pressable>
+            <Pressable style={styles.settingsButton} onPress={() => setSettingsVisible(true)}>
+              <Text style={styles.settingsButtonText}>Settings</Text>
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.segmentRow}>
@@ -1092,14 +1535,16 @@ export default function App() {
           >
             <Text style={[styles.segmentText, activeView === "post" && styles.segmentTextActive]}>Post</Text>
           </Pressable>
-          <Pressable
-            style={[styles.segmentButton, activeView === "review" && styles.segmentButtonActive]}
-            onPress={() => setActiveView("review")}
-          >
-            <Text style={[styles.segmentText, activeView === "review" && styles.segmentTextActive]}>
-              Review{reviewQueue.length ? ` (${reviewQueue.length})` : ""}
-            </Text>
-          </Pressable>
+          {showReviewTab ? (
+            <Pressable
+              style={[styles.segmentButton, activeView === "review" && styles.segmentButtonActive]}
+              onPress={() => setActiveView("review")}
+            >
+              <Text style={[styles.segmentText, activeView === "review" && styles.segmentTextActive]}>
+                Review{reviewQueue.length ? ` (${reviewQueue.length})` : ""}
+              </Text>
+            </Pressable>
+          ) : null}
           <Pressable
             style={[styles.segmentButton, activeView === "status" && styles.segmentButtonActive]}
             onPress={() => setActiveView("status")}
@@ -1163,9 +1608,6 @@ export default function App() {
                             <View style={styles.previewChip}>
                               <Text style={styles.previewChipText}>Video</Text>
                             </View>
-                            <View style={styles.previewChip}>
-                              <Text style={styles.previewChipText}>{formatVisibilityLabel(visibilityTarget)}</Text>
-                            </View>
                           </View>
                           <View style={styles.previewMediaOverlay}>
                             <Text style={styles.videoPreviewName}>{asset.name}</Text>
@@ -1200,9 +1642,6 @@ export default function App() {
                             <View style={styles.previewChip}>
                               <Text style={styles.previewChipText}>Photo</Text>
                             </View>
-                            <View style={styles.previewChip}>
-                              <Text style={styles.previewChipText}>{formatVisibilityLabel(visibilityTarget)}</Text>
-                            </View>
                           </View>
                           <View style={styles.previewMediaOverlay}>
                             <Text style={styles.previewAssetName}>{asset.name}</Text>
@@ -1221,34 +1660,48 @@ export default function App() {
                         <Text style={styles.sheetLabel}>Almost there</Text>
                         <Text style={styles.sheetTitle}>Add a quick note and send it in.</Text>
                       </View>
-                      <View style={styles.inlineMetaPill}>
-                        <Text style={styles.inlineMetaPillText}>{formatVisibilityLabel(visibilityTarget)}</Text>
-                      </View>
                     </View>
 
-                    <View style={styles.audienceRow}>
-                      {[
-                        { key: "internal", label: "Internal" },
-                        { key: "public", label: "Public" }
-                      ].map((option) => (
-                        <Pressable
-                          key={option.key}
-                          style={[
-                            styles.audiencePill,
-                            visibilityTarget === option.key && styles.audiencePillActive
-                          ]}
-                          onPress={() => setVisibilityTarget(option.key)}
-                        >
-                          <Text
-                            style={[
-                              styles.audiencePillText,
-                              visibilityTarget === option.key && styles.audiencePillTextActive
-                            ]}
-                          >
-                            {option.label}
-                          </Text>
-                        </Pressable>
-                      ))}
+                    <View style={styles.channelPicker}>
+                      <View style={styles.composerMetaHeader}>
+                        <Text style={styles.composerMetaLabel}>Channels</Text>
+                        <Text style={styles.composerMetaHint}>Favorites first · main feed is automatic</Text>
+                      </View>
+                      <View style={styles.channelRow}>
+                        {socialChannelOptions.map((channel) => {
+                          const isSelected = selectedChannels.includes(channel.key);
+                          return (
+                            <Pressable
+                              key={channel.key}
+                              onPress={() => toggleSelectedChannel(channel.key)}
+                              style={[
+                                styles.channelPill,
+                                channel.favorite && styles.channelPillFavorite,
+                                isSelected && styles.channelPillActive
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.channelPillText,
+                                  isSelected && styles.channelPillTextActive
+                                ]}
+                              >
+                                {channel.label}
+                              </Text>
+                              {channel.favorite ? (
+                                <Text
+                                  style={[
+                                    styles.channelFavoriteText,
+                                    isSelected && styles.channelPillTextActive
+                                  ]}
+                                >
+                                  Favorite
+                                </Text>
+                              ) : null}
+                            </Pressable>
+                          );
+                        })}
+                      </View>
                     </View>
 
                     <TextInput
@@ -1259,6 +1712,146 @@ export default function App() {
                       placeholder="Add a short caption if it helps."
                       placeholderTextColor="#8f908c"
                     />
+
+                    <View style={styles.composerMetaGroup}>
+                      <View style={styles.composerMetaHeader}>
+                        <Text style={styles.composerMetaLabel}>Tags</Text>
+                        <Text style={styles.composerMetaHint}>Quick tags, optional</Text>
+                      </View>
+                      <TextInput
+                        style={styles.metaInput}
+                        value={tagsInput}
+                        onChangeText={setTagsInput}
+                        placeholder="goal, celebration, tournament"
+                        placeholderTextColor="#9a98b8"
+                        autoCapitalize="none"
+                      />
+                    </View>
+
+                    <Pressable
+                      onPress={() => setShowComposerDetails((value) => !value)}
+                      style={styles.detailsToggle}
+                    >
+                      <View style={styles.detailsToggleRow}>
+                        <Text style={styles.detailsToggleText}>
+                          {showComposerDetails ? "Hide details" : "More details"}
+                        </Text>
+                        <Text style={styles.detailsToggleBadge}>Optional</Text>
+                      </View>
+                    </Pressable>
+
+                    {showComposerDetails ? (
+                      <View style={styles.composerDetailsPanel}>
+                        <View style={styles.composerMetaGroup}>
+                          <View style={styles.composerMetaHeader}>
+                            <Text style={styles.composerMetaLabel}>Post type</Text>
+                            <Text style={styles.composerMetaHint}>Pick the closest fit</Text>
+                          </View>
+                          <View style={styles.eventChoiceRow}>
+                            {["Game", "Practice", "Tournament", "Other"].map((option) => (
+                              <Pressable
+                                key={option}
+                                onPress={() => setEventTypeInput(option)}
+                                style={[
+                                  styles.audiencePill,
+                                  eventTypeInput === option && styles.audiencePillActive
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.audiencePillText,
+                                    eventTypeInput === option && styles.audiencePillTextActive
+                                  ]}
+                                >
+                                  {option}
+                                </Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                          {eventTypeInput === "Other" ? (
+                            <View style={styles.metaInputGroup}>
+                              <Text style={styles.composerMetaHint}>Describe the event</Text>
+                              <TextInput
+                                style={styles.metaInput}
+                                value={eventDetailInput}
+                                onChangeText={setEventDetailInput}
+                                placeholder="Team outing, banquet, award night"
+                                placeholderTextColor="#9a98b8"
+                              />
+                            </View>
+                          ) : null}
+                        </View>
+
+                        <View style={styles.composerMetaGrid}>
+                          <View style={[styles.composerMetaGroup, styles.composerMetaHalf]}>
+                            <View style={styles.composerMetaHeader}>
+                              <Text style={styles.composerMetaLabel}>Opponent</Text>
+                              <Text style={styles.composerMetaHint}>Game posts only</Text>
+                            </View>
+                            <TextInput
+                              style={styles.metaInput}
+                              value={opponentInput}
+                              onChangeText={setOpponentInput}
+                              placeholder="Lakeville North"
+                              placeholderTextColor="#9a98b8"
+                            />
+                          </View>
+
+                          <View style={[styles.composerMetaGroup, styles.composerMetaHalf]}>
+                            <View style={styles.composerMetaHeader}>
+                              <Text style={styles.composerMetaLabel}>Score</Text>
+                              <Text style={styles.composerMetaHint}>Final or current</Text>
+                            </View>
+                            <TextInput
+                              style={styles.metaInput}
+                              value={scoreInput}
+                              onChangeText={setScoreInput}
+                              placeholder="3-1 win"
+                              placeholderTextColor="#9a98b8"
+                            />
+                          </View>
+
+                          <View style={styles.composerMetaGroup}>
+                            <View style={styles.composerMetaHeader}>
+                              <Text style={styles.composerMetaLabel}>Location</Text>
+                              <Text style={styles.composerMetaHint}>Tap one or type yours</Text>
+                            </View>
+                            {locationSuggestions.length ? (
+                              <View style={styles.locationSuggestionBlock}>
+                                <View style={styles.locationSuggestionRow}>
+                                {locationSuggestions.map((suggestion) => (
+                                  <Pressable
+                                    key={suggestion}
+                                    onPress={() => setLocationInput(suggestion)}
+                                    style={[
+                                      styles.locationSuggestionPill,
+                                      locationInput === suggestion && styles.audiencePillActive
+                                    ]}
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.locationSuggestionText,
+                                        locationInput === suggestion && styles.audiencePillTextActive
+                                      ]}
+                                    >
+                                      {suggestion}
+                                    </Text>
+                                  </Pressable>
+                                ))}
+                                </View>
+                              </View>
+                            ) : null}
+                            <TextInput
+                              style={styles.metaInput}
+                              value={locationInput}
+                              onChangeText={setLocationInput}
+                              placeholder="Type another location"
+                              placeholderTextColor="#9a98b8"
+                            />
+                          </View>
+                        </View>
+                      </View>
+                    ) : null}
 
                     <View style={styles.submitRow}>
                       <Pressable style={styles.inlineButton} onPress={pickFromLibrary}>
@@ -1345,6 +1938,8 @@ export default function App() {
                       key={item.id}
                       style={[styles.feedCard, index === 0 && styles.feedCardFeatured]}
                       onPress={() => openReviewItem(item.submission_id || item.submissionId)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${index === 0 ? "Up next" : `Then ${index + 1}`} review item. ${formatSubmissionHeadline(item.raw_text)}.`}
                     >
                       <GlassLayer />
                       <View style={styles.statusBadgeRow}>
@@ -1353,21 +1948,16 @@ export default function App() {
                         </View>
                         <Text style={styles.feedTime}>{formatSubmittedAt(item.created_at)}</Text>
                       </View>
-                      <Text style={styles.feedHeadline}>{item.raw_text?.trim() || "No caption provided"}</Text>
+                      <Text style={styles.feedHeadline}>{formatSubmissionHeadline(item.raw_text)}</Text>
                       <Text style={styles.feedSupport}>
                         {item.latest_review_summary || summarizeSubmissionProgress({ status: "needs_human_review" })}
                       </Text>
                       <View style={styles.metaChipRow}>
-                        <View style={styles.metaChip}>
-                          <Text style={styles.metaChipText}>
-                            {item.team_name || formatContentTypeLabel(item.content_type)}
-                          </Text>
-                        </View>
-                        <View style={styles.metaChip}>
-                          <Text style={styles.metaChipText}>
-                            {formatRiskScoreLabel(item.risk_score)}
-                          </Text>
-                        </View>
+                        {buildSubmissionQuickChips(item).map((chip) => (
+                          <View key={chip} style={styles.metaChip}>
+                            <Text style={styles.metaChipText}>{chip}</Text>
+                          </View>
+                        ))}
                       </View>
                     </Pressable>
                   ))
@@ -1614,9 +2204,9 @@ export default function App() {
           <View style={styles.modalCard}>
             <GlassLayer />
             <View style={styles.sectionHeader}>
-              <View>
-                <Text style={styles.sectionKicker}>Settings</Text>
-                <Text style={styles.sectionTitle}>Your posting setup</Text>
+          <View>
+            <Text style={styles.sectionKicker}>Settings</Text>
+            <Text style={styles.sectionTitle}>Your workspace setup</Text>
               </View>
               <Pressable onPress={() => setSettingsVisible(false)}>
                 <Text style={styles.closeButtonText}>Done</Text>
@@ -1635,55 +2225,28 @@ export default function App() {
               />
             </View>
 
-            <View style={styles.settingsCard}>
-              <GlassLayer />
-              <Text style={styles.settingsLabel}>Reviewer email</Text>
-              <TextInput
-                autoCapitalize="none"
-                style={styles.input}
-                value={reviewerEmail}
-                onChangeText={setReviewerEmail}
-                placeholder="Reviewer email"
-              />
-              <Text style={styles.advancedHelpText}>
-                Used when you open the review tab on this device.
-              </Text>
-            </View>
-
-            <View style={styles.settingsCard}>
-              <GlassLayer />
-              <Text style={styles.settingsLabel}>Club</Text>
-              <TextInput style={styles.input} value={clubSlug} onChangeText={setClubSlug} placeholder="Club slug" />
-              <TextInput style={[styles.input, styles.settingsStackTop]} value={teamSlug} onChangeText={setTeamSlug} placeholder="Team slug" />
-            </View>
-
-            <View style={styles.settingsCard}>
-              <GlassLayer />
-              <Text style={styles.settingsLabel}>Audience default</Text>
-              <View style={styles.audienceRow}>
-                {[
-                  { key: "internal", label: "Internal" },
-                  { key: "public", label: "Public" }
-                ].map((option) => (
-                  <Pressable
-                    key={option.key}
-                    style={[
-                      styles.audiencePill,
-                      visibilityTarget === option.key && styles.audiencePillActive
-                    ]}
-                    onPress={() => setVisibilityTarget(option.key)}
-                  >
-                    <Text
-                      style={[
-                        styles.audiencePillText,
-                        visibilityTarget === option.key && styles.audiencePillTextActive
-                      ]}
-                    >
-                      {option.label}
-                    </Text>
-                  </Pressable>
-                ))}
+            {workspaceMode === "reviewer" ? (
+              <View style={styles.settingsCard}>
+                <GlassLayer />
+                <Text style={styles.settingsLabel}>Reviewer email</Text>
+                <TextInput
+                  autoCapitalize="none"
+                  style={styles.input}
+                  value={reviewerEmail}
+                  onChangeText={setReviewerEmail}
+                  placeholder="Reviewer email"
+                />
+                <Text style={styles.advancedHelpText}>
+                  Used when Reviewer mode is enabled from the header toggle.
+                </Text>
               </View>
+            ) : null}
+
+            <View style={styles.settingsCard}>
+              <GlassLayer />
+            <Text style={styles.settingsLabel}>Workspace</Text>
+            <TextInput style={styles.input} value={clubSlug} onChangeText={setClubSlug} placeholder="Workspace slug" />
+              <TextInput style={[styles.input, styles.settingsStackTop]} value={teamSlug} onChangeText={setTeamSlug} placeholder="Team slug" />
             </View>
 
             <Pressable style={styles.advancedToggle} onPress={() => setShowAdvancedSettings((current) => !current)}>
@@ -1704,7 +2267,7 @@ export default function App() {
                   placeholder="API base URL"
                 />
                 <Text style={styles.advancedHelpText}>
-                  For TestFlight and production-style builds, this should be preconfigured so normal users never need to edit it.
+                  For production-style builds, this should be preconfigured so normal users never need to edit it.
                 </Text>
               </View>
             ) : null}
@@ -1719,6 +2282,7 @@ export default function App() {
         onRequestClose={() => {
           setSelectedSubmissionId(null);
           setSelectedSubmissionDetail(null);
+          setReviewDetailsExpanded(false);
         }}
       >
         <View style={styles.modalBackdrop}>
@@ -1732,6 +2296,7 @@ export default function App() {
                 onPress={() => {
                   setSelectedSubmissionId(null);
                   setSelectedSubmissionDetail(null);
+                  setReviewDetailsExpanded(false);
                 }}
               >
                 <Text style={styles.closeButtonText}>Close</Text>
@@ -1741,150 +2306,53 @@ export default function App() {
             {loadingDetail || !selectedSubmissionDetail ? (
               <ActivityIndicator color="#12372d" />
             ) : (
-              <ScrollView>
+              <ScrollView contentContainerStyle={styles.detailScrollContent}>
                 <View style={styles.detailHero}>
                   <Text style={styles.detailStatus}>{formatStatusLabel(selectedSubmissionDetail.status)}</Text>
-                  <Text style={styles.detailSummary}>{selectedSubmissionDetail.raw_text?.trim() || "No caption provided"}</Text>
+                  <Text style={styles.detailSummary}>
+                    {formatSubmissionHeadline(selectedSubmissionDetail.raw_text)}
+                  </Text>
+                  <View style={styles.metaChipRow}>
+                    {buildSubmissionQuickChips(selectedSubmissionDetail).map((chip) => (
+                      <View key={chip} style={styles.metaChip}>
+                        <Text style={styles.metaChipText}>{chip}</Text>
+                      </View>
+                    ))}
+                  </View>
                   <Text style={styles.detailMeta}>{formatSubmittedAt(selectedSubmissionDetail.created_at)}</Text>
                 </View>
-
-                {selectedSubmissionDetail.media?.length || resubmissionAsset ? (
-                  <View style={styles.detailMediaCard}>
-                    {resubmissionAsset && !isVideoAsset(resubmissionAsset) ? (
-                      <Image
-                        source={{ uri: resubmissionAsset.uri }}
-                        style={styles.detailMediaPreview}
-                      />
-                    ) : selectedSubmissionDetail.media[0]?.previewUrl &&
-                      !String(selectedSubmissionDetail.media[0]?.mimeType || "").startsWith("video/") ? (
-                      <Image
-                        source={{ uri: selectedSubmissionDetail.media[0].previewUrl }}
-                        style={styles.detailMediaPreview}
-                      />
-                    ) : (
-                      <View style={styles.detailMediaFallback}>
-                        <Text style={styles.detailMediaFallbackLabel}>
-                          {resubmissionAsset
-                            ? formatContentTypeLabel(
-                                isVideoAsset(resubmissionAsset) ? "video" : "photo"
-                              )
-                            : formatContentTypeLabel(selectedSubmissionDetail.content_type)}
-                        </Text>
-                        <Text style={styles.detailMediaFallbackBody}>
-                          {resubmissionAsset
-                            ? "Replacement media selected. This will replace the current attachment when you resubmit."
-                            : "Preview is limited for this asset, but this is the media currently attached to the post you are editing."}
-                        </Text>
-                      </View>
-                    )}
-                    <View style={styles.detailMediaMetaRow}>
-                      <View style={styles.metaChip}>
-                        <Text style={styles.metaChipText}>
-                          {formatMediaCountLabel(
-                            resubmissionAsset ? 1 : selectedSubmissionDetail.media?.length
-                          )}
-                        </Text>
-                      </View>
-                      <View style={styles.metaChip}>
-                        <Text style={styles.metaChipText}>
-                          {resubmissionAsset
-                            ? formatContentTypeLabel(
-                                isVideoAsset(resubmissionAsset) ? "video" : "photo"
-                              )
-                            : formatContentTypeLabel(selectedSubmissionDetail.content_type)}
-                        </Text>
-                      </View>
-                      {resubmissionAsset ? (
-                        <View style={styles.metaChip}>
-                          <Text style={styles.metaChipText}>Replacement ready</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  </View>
-                ) : null}
-
-                <View style={styles.progressTrackDetail}>
-                  {progressStages.map((stage, index) => {
-                    const stageState = getProgressStageState(selectedSubmissionDetail.status, stage.key);
-                    return (
-                      <View key={stage.key} style={styles.progressStep}>
-                        <View
-                          style={[
-                            styles.progressDot,
-                            stageState === "complete" && styles.progressDotComplete,
-                            stageState === "current" && styles.progressDotCurrent
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.progressDotText,
-                              stageState !== "pending" && styles.progressDotTextActive
-                            ]}
-                          >
-                            {index + 1}
-                          </Text>
-                        </View>
-                        <Text style={[styles.progressLabel, stageState !== "pending" && styles.progressLabelActive]}>
-                          {stage.label}
-                        </Text>
-                      </View>
-                    );
-                  })}
-                </View>
-
-                <View style={styles.metaChipRow}>
-                  <View style={styles.metaChip}><Text style={styles.metaChipText}>{formatContentTypeLabel(selectedSubmissionDetail.content_type)}</Text></View>
-                  <View style={styles.metaChip}><Text style={styles.metaChipText}>{formatMediaCountLabel(selectedSubmissionDetail.media?.length)}</Text></View>
-                  <View style={styles.metaChip}><Text style={styles.metaChipText}>{formatVisibilityLabel(selectedSubmissionDetail.visibility_target)}</Text></View>
-                </View>
-
-                <Text style={styles.detailLine}>Review score: {formatRiskScoreLabel(selectedSubmissionDetail.risk_score)}</Text>
-                <Text style={styles.detailLine}>
-                  Club: {selectedSubmissionDetail.club_slug}
-                  {selectedSubmissionDetail.team_slug ? ` · Team: ${selectedSubmissionDetail.team_slug}` : ""}
-                </Text>
-
-                {selectedSubmissionDetail.latestReviewRun ? (
-                  <>
-                    <Text style={styles.detailHeading}>Latest review</Text>
-                    <Text style={styles.detailBody}>
-                      {formatStatusLabel(selectedSubmissionDetail.latestReviewRun.resultStatus)} · {selectedSubmissionDetail.latestReviewRun.agentName}
-                    </Text>
-                    <Text style={styles.detailBody}>{selectedSubmissionDetail.latestReviewRun.summary}</Text>
-                  </>
-                ) : null}
-
-                {selectedSubmissionDetail.latestApprovalRequest ? (
-                  <>
-                    <Text style={styles.detailHeading}>Approval</Text>
-                    <Text style={styles.detailBody}>
-                      {formatStatusLabel(selectedSubmissionDetail.latestApprovalRequest.state)} · {selectedSubmissionDetail.latestApprovalRequest.approverName}
-                    </Text>
-                    {selectedSubmissionDetail.latestApprovalRequest.latestAction ? (
-                      <Text style={styles.detailBody}>
-                        Latest action: {formatStatusLabel(selectedSubmissionDetail.latestApprovalRequest.latestAction.action)}
-                        {selectedSubmissionDetail.latestApprovalRequest.latestAction.notes ? ` — ${selectedSubmissionDetail.latestApprovalRequest.latestAction.notes}` : ""}
-                      </Text>
-                    ) : null}
-                  </>
-                ) : null}
 
                 {activeView === "review" && selectedSubmissionDetail.latestApprovalRequest?.state === "pending" ? (
                   <View style={styles.reviewActionPanel}>
                     <Text style={styles.detailHeading}>Quick review</Text>
-                    <Text style={styles.reviewActionTitle}>Pick the action, then keep moving.</Text>
-                    <View style={styles.detailMediaActionRow}>
+                    <Text style={styles.reviewActionTitle}>Approve is the default. Use the other actions only if this needs a fix or should stop here.</Text>
+                    <Pressable
+                      style={[
+                        styles.reviewPrimaryActionButton,
+                        reviewAction === "approve" && styles.reviewActionButtonApprove,
+                        reviewAction === "approve" && styles.reviewActionButtonActive
+                      ]}
+                      onPress={() => selectReviewAction("approve")}
+                    >
+                      <Text
+                        style={[
+                          styles.reviewPrimaryActionText,
+                          reviewAction === "approve" && styles.reviewActionButtonTextApprove
+                        ]}
+                      >
+                        Approve now
+                      </Text>
+                    </Pressable>
+                    <View style={styles.reviewSecondaryActionsRow}>
                       {[
-                        { action: "approve", label: "Approve" },
                         { action: "request_changes", label: "Send back" },
                         { action: "reject", label: "Reject" }
                       ].map((option) => (
                         <Pressable
                           key={option.action}
                           style={[
-                            styles.detailMediaActionButton,
+                            styles.reviewSecondaryActionButton,
                             reviewAction === option.action && styles.reviewActionButtonActive,
-                            option.action === "approve" && styles.reviewActionButtonApprove,
                             option.action === "request_changes" && styles.reviewActionButtonChanges,
                             option.action === "reject" && styles.reviewActionButtonReject
                           ]}
@@ -1892,9 +2360,8 @@ export default function App() {
                         >
                           <Text
                             style={[
-                              styles.detailMediaActionText,
+                              styles.reviewSecondaryActionText,
                               reviewAction === option.action && styles.reviewActionButtonTextActive,
-                              option.action === "approve" && styles.reviewActionButtonTextApprove,
                               option.action === "request_changes" && styles.reviewActionButtonTextChanges,
                               option.action === "reject" && styles.reviewActionButtonTextReject
                             ]}
@@ -1948,31 +2415,93 @@ export default function App() {
                       </View>
                     ) : null}
 
-                    <Pressable
-                      disabled={reviewActionInProgress || (reviewAction !== "approve" && !reviewActionNotes.trim())}
-                      style={[
-                        styles.detailResubmitButton,
-                        reviewAction === "approve" && styles.reviewActionApproveButton,
-                        reviewAction === "request_changes" && styles.reviewActionChangesButton,
-                        reviewAction === "reject" && styles.reviewActionRejectButton,
-                        (reviewActionInProgress || (reviewAction !== "approve" && !reviewActionNotes.trim())) && styles.buttonDisabled
-                      ]}
-                      onPress={submitReviewAction}
-                    >
-                      {reviewActionInProgress ? (
-                        <ActivityIndicator color="#fffdf8" />
-                      ) : (
-                        <Text style={styles.detailResubmitButtonText}>
-                          {reviewAction === "approve"
-                            ? "Approve and next"
-                            : reviewAction === "request_changes"
-                              ? "Send back"
-                              : "Reject submission"}
-                        </Text>
-                      )}
-                    </Pressable>
+                    {selectedSubmissionDetail.status === "needs_metadata" ? (
+                      <>
+                        <Pressable
+                          disabled={reviewActionInProgress || (reviewAction !== "approve" && !reviewActionNotes.trim())}
+                          style={[
+                            styles.detailResubmitButton,
+                            reviewAction === "approve" && styles.reviewActionApproveButton,
+                            reviewAction === "request_changes" && styles.reviewActionChangesButton,
+                            reviewAction === "reject" && styles.reviewActionRejectButton,
+                            (reviewActionInProgress || (reviewAction !== "approve" && !reviewActionNotes.trim())) && styles.buttonDisabled
+                          ]}
+                          onPress={submitReviewAction}
+                        >
+                          {reviewActionInProgress ? (
+                            <ActivityIndicator color="#fffdf8" />
+                          ) : (
+                            <Text style={styles.detailResubmitButtonText}>
+                              {reviewAction === "approve"
+                                ? "Approve and next"
+                                : reviewAction === "request_changes"
+                                  ? "Send back"
+                                  : "Reject submission"}
+                            </Text>
+                          )}
+                        </Pressable>
 
-                    {reviewActionStatus ? <Text style={styles.reviewActionStatus}>{reviewActionStatus}</Text> : null}
+                        {reviewActionStatus && reviewActionStatus !== "Pick a review item to get started." ? (
+                          <Text style={styles.reviewActionStatus}>{reviewActionStatus}</Text>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                {(selectedSubmissionDetail.status === "needs_metadata" || reviewDetailsExpanded) &&
+                (selectedSubmissionDetail.media?.length || resubmissionAsset) ? (
+                  <View style={styles.detailMediaCard}>
+                    {resubmissionAsset && !isVideoAsset(resubmissionAsset) ? (
+                      <Image
+                        source={{ uri: resubmissionAsset.uri }}
+                        style={styles.detailMediaPreview}
+                      />
+                    ) : selectedSubmissionDetail.media[0]?.previewUrl &&
+                      !String(selectedSubmissionDetail.media[0]?.mimeType || "").startsWith("video/") ? (
+                      <Image
+                        source={{ uri: selectedSubmissionDetail.media[0].previewUrl }}
+                        style={styles.detailMediaPreview}
+                      />
+                    ) : (
+                      <View style={styles.detailMediaFallback}>
+                        <Text style={styles.detailMediaFallbackLabel}>
+                          {resubmissionAsset
+                            ? formatContentTypeLabel(
+                                isVideoAsset(resubmissionAsset) ? "video" : "photo"
+                              )
+                            : formatContentTypeLabel(selectedSubmissionDetail.content_type)}
+                        </Text>
+                        <Text style={styles.detailMediaFallbackBody}>
+                          {resubmissionAsset
+                            ? "Replacement media selected. This will replace the current attachment when you resubmit."
+                            : "Preview is limited for this asset, but this is the media currently attached to the post you are editing."}
+                        </Text>
+                      </View>
+                    )}
+                    <View style={styles.detailMediaMetaRow}>
+                      <View style={styles.metaChip}>
+                        <Text style={styles.metaChipText}>
+                          {formatMediaCountLabel(
+                            resubmissionAsset ? 1 : selectedSubmissionDetail.media?.length
+                          )}
+                        </Text>
+                      </View>
+                      <View style={styles.metaChip}>
+                        <Text style={styles.metaChipText}>
+                          {resubmissionAsset
+                            ? formatContentTypeLabel(
+                                isVideoAsset(resubmissionAsset) ? "video" : "photo"
+                              )
+                            : formatContentTypeLabel(selectedSubmissionDetail.content_type)}
+                        </Text>
+                      </View>
+                      {resubmissionAsset ? (
+                        <View style={styles.metaChip}>
+                          <Text style={styles.metaChipText}>Replacement ready</Text>
+                        </View>
+                      ) : null}
+                    </View>
                   </View>
                 ) : null}
 
@@ -2035,6 +2564,85 @@ export default function App() {
                   </>
                 ) : null}
 
+                <Pressable
+                  style={styles.moreDetailsButton}
+                  onPress={() => setReviewDetailsExpanded((current) => !current)}
+                >
+                  <Text style={styles.moreDetailsButtonText}>
+                    {reviewDetailsExpanded ? "Hide details" : "More details"}
+                  </Text>
+                </Pressable>
+
+                {reviewDetailsExpanded ? (
+                  <View style={styles.moreDetailsSection}>
+                    <View style={styles.progressTrackDetail}>
+                      {progressStages.map((stage, index) => {
+                        const stageState = getProgressStageState(selectedSubmissionDetail.status, stage.key);
+                        return (
+                          <View key={stage.key} style={styles.progressStep}>
+                            <View
+                              style={[
+                                styles.progressDot,
+                                stageState === "complete" && styles.progressDotComplete,
+                                stageState === "current" && styles.progressDotCurrent
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.progressDotText,
+                                  stageState !== "pending" && styles.progressDotTextActive
+                                ]}
+                              >
+                                {index + 1}
+                              </Text>
+                            </View>
+                            <Text style={[styles.progressLabel, stageState !== "pending" && styles.progressLabelActive]}>
+                              {stage.label}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+
+                    <View style={styles.metaChipRow}>
+                      <View style={styles.metaChip}><Text style={styles.metaChipText}>{formatContentTypeLabel(selectedSubmissionDetail.content_type)}</Text></View>
+                      <View style={styles.metaChip}><Text style={styles.metaChipText}>{formatMediaCountLabel(selectedSubmissionDetail.media?.length)}</Text></View>
+                      <View style={styles.metaChip}><Text style={styles.metaChipText}>{formatVisibilityLabel(selectedSubmissionDetail.visibility_target)}</Text></View>
+                    </View>
+
+                    <Text style={styles.detailLine}>Review score: {formatRiskScoreLabel(selectedSubmissionDetail.risk_score)}</Text>
+                    <Text style={styles.detailLine}>
+                      Workspace: {selectedSubmissionDetail.club_slug}
+                      {selectedSubmissionDetail.team_slug ? ` · Team: ${selectedSubmissionDetail.team_slug}` : ""}
+                    </Text>
+
+                    {selectedSubmissionDetail.latestReviewRun ? (
+                      <>
+                        <Text style={styles.detailHeading}>Latest review</Text>
+                        <Text style={styles.detailBody}>
+                          {formatStatusLabel(selectedSubmissionDetail.latestReviewRun.resultStatus)} · {selectedSubmissionDetail.latestReviewRun.agentName}
+                        </Text>
+                        <Text style={styles.detailBody}>{selectedSubmissionDetail.latestReviewRun.summary}</Text>
+                      </>
+                    ) : null}
+
+                    {selectedSubmissionDetail.latestApprovalRequest ? (
+                      <>
+                        <Text style={styles.detailHeading}>Approval</Text>
+                        <Text style={styles.detailBody}>
+                          {formatStatusLabel(selectedSubmissionDetail.latestApprovalRequest.state)} · {selectedSubmissionDetail.latestApprovalRequest.approverName}
+                        </Text>
+                        {selectedSubmissionDetail.latestApprovalRequest.latestAction ? (
+                          <Text style={styles.detailBody}>
+                            Latest action: {formatStatusLabel(selectedSubmissionDetail.latestApprovalRequest.latestAction.action)}
+                            {selectedSubmissionDetail.latestApprovalRequest.latestAction.notes ? ` — ${selectedSubmissionDetail.latestApprovalRequest.latestAction.notes}` : ""}
+                          </Text>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </View>
+                ) : null}
+
                 {selectedSubmissionDetail.publishedPost ? (
                   <>
                     <Text style={styles.detailHeading}>Publishing</Text>
@@ -2054,7 +2662,8 @@ export default function App() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#e8e6f6"
+    backgroundColor: "#e8e6f6",
+    paddingTop: Platform.OS === "ios" ? 42 : 6
   },
   screen: {
     flex: 1,
@@ -2105,8 +2714,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 10
+    paddingTop: 14,
+    paddingBottom: 12
+  },
+  chromeActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10
   },
   appName: {
     fontSize: 24,
@@ -2130,11 +2744,31 @@ const styles = StyleSheet.create({
     color: "#352c68",
     fontWeight: "800"
   },
+  modeToggle: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.34)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.58)"
+  },
+  modeToggleActive: {
+    backgroundColor: "rgba(71, 62, 153, 0.92)",
+    borderColor: "rgba(255,255,255,0.16)"
+  },
+  modeToggleText: {
+    color: "#342c67",
+    fontWeight: "900",
+    letterSpacing: 0.2
+  },
+  modeToggleTextActive: {
+    color: "#f8f7ff"
+  },
   segmentRow: {
     flexDirection: "row",
     gap: 10,
     paddingHorizontal: 20,
-    paddingBottom: 10
+    paddingBottom: 14
   },
   segmentButton: {
     paddingHorizontal: 16,
@@ -2285,7 +2919,7 @@ const styles = StyleSheet.create({
   },
   previewImage: {
     width: "100%",
-    height: 560,
+    height: 470,
     justifyContent: "flex-end",
     backgroundColor: "#d6ddd7"
   },
@@ -2295,7 +2929,7 @@ const styles = StyleSheet.create({
   previewImageShade: {
     flex: 1,
     justifyContent: "space-between",
-    padding: 18
+    padding: 16
   },
   videoPreviewStage: {
     minHeight: 520,
@@ -2319,8 +2953,8 @@ const styles = StyleSheet.create({
   },
   previewHeroTitle: {
     marginTop: 4,
-    fontSize: 30,
-    lineHeight: 32,
+    fontSize: 26,
+    lineHeight: 28,
     color: "#f7f6ff",
     fontWeight: "800"
   },
@@ -2337,12 +2971,12 @@ const styles = StyleSheet.create({
     fontWeight: "800"
   },
   previewBottomStack: {
-    gap: 12
+    gap: 10
   },
   previewMediaOverlay: {
     backgroundColor: "rgba(255,255,255,0.16)",
-    borderRadius: 24,
-    padding: 16,
+    borderRadius: 22,
+    padding: 14,
     gap: 8,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.26)"
@@ -2367,13 +3001,14 @@ const styles = StyleSheet.create({
   },
   previewAssetName: {
     color: "#f8f7ff",
-    fontSize: 24,
-    lineHeight: 27,
+    fontSize: 21,
+    lineHeight: 24,
     fontWeight: "800"
   },
   previewOverlayHint: {
     color: "#efeefe",
-    lineHeight: 20
+    lineHeight: 18,
+    fontSize: 13
   },
   videoPreviewName: {
     color: "#fcfbff",
@@ -2388,10 +3023,10 @@ const styles = StyleSheet.create({
   composerSheet: {
     borderRadius: 30,
     backgroundColor: "rgba(255,255,255,0.56)",
-    padding: 18,
-    gap: 12,
-    marginTop: -34,
-    marginHorizontal: 12,
+    padding: 12,
+    gap: 8,
+    marginTop: 8,
+    marginHorizontal: 8,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.68)",
@@ -2422,8 +3057,8 @@ const styles = StyleSheet.create({
   sheetTitle: {
     marginTop: 4,
     color: "#2a2451",
-    fontSize: 20,
-    lineHeight: 23,
+    fontSize: 18,
+    lineHeight: 21,
     fontWeight: "800",
     maxWidth: 220
   },
@@ -2463,11 +3098,61 @@ const styles = StyleSheet.create({
   audiencePillTextActive: {
     color: "#f8f7ff"
   },
+  audienceHelpText: {
+    color: "#756f9b",
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: -2
+  },
+  channelPicker: {
+    gap: 8,
+    padding: 10,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.30)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.50)"
+  },
+  channelRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7
+  },
+  channelPill: {
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.52)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.64)",
+    gap: 2
+  },
+  channelPillFavorite: {
+    borderColor: "rgba(255, 177, 92, 0.42)"
+  },
+  channelPillActive: {
+    backgroundColor: "rgba(82, 71, 173, 0.88)",
+    borderColor: "rgba(255,255,255,0.18)"
+  },
+  channelPillText: {
+    color: "#514982",
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  channelPillTextActive: {
+    color: "#f8f7ff"
+  },
+  channelFavoriteText: {
+    color: "#9b7442",
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.6
+  },
   captionInput: {
-    minHeight: 108,
+    minHeight: 84,
     borderRadius: 22,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     backgroundColor: "rgba(255,255,255,0.58)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.66)",
@@ -2476,33 +3161,158 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22
   },
-  submitRow: {
+  composerMetaGroup: {
+    gap: 8
+  },
+  composerDetailsPanel: {
+    gap: 12,
+    marginTop: 4,
+    padding: 12,
+    paddingLeft: 14,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.34)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.54)",
+    borderLeftWidth: 4,
+    borderLeftColor: "rgba(109,99,207,0.72)",
+    shadowColor: "#faf8ff",
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 2
+  },
+  composerMetaGrid: {
     flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12
+  },
+  composerMetaHalf: {
+    flexBasis: "48%",
+    flexGrow: 1,
+    minWidth: 160
+  },
+  metaInputGroup: {
     gap: 10
   },
-  inlineButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderRadius: 22,
-    backgroundColor: "rgba(255,255,255,0.44)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.58)"
+  eventChoiceRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
   },
-  inlineButtonText: {
+  composerMetaHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8
+  },
+  composerMetaLabel: {
+    color: "#7369a2",
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1.2
+  },
+  composerMetaHint: {
+    color: "#7b7698",
+    fontSize: 12,
+    flexShrink: 1,
+    textAlign: "right"
+  },
+  locationSuggestionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  locationSuggestionBlock: {
+    gap: 8,
+    padding: 12,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.26)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.36)"
+  },
+  locationSuggestionPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.52)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.65)"
+  },
+  locationSuggestionText: {
+    color: "#4f467f",
+    fontSize: 12,
+    fontWeight: "700"
+  },
+  suggestionBlock: {
+    gap: 8
+  },
+  metaInput: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.62)",
+    backgroundColor: "rgba(255,255,255,0.58)",
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+    color: "#2a2451"
+  },
+  metaInputTall: {
+    minHeight: 92,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.62)",
+    backgroundColor: "rgba(255,255,255,0.58)",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    color: "#2a2451",
+    textAlignVertical: "top"
+  },
+  submitRow: {
+    flexDirection: "row",
+    gap: 6
+  },
+  detailsToggle: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.48)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.64)",
+    shadowColor: "#ffffff",
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 1
+  },
+  detailsToggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12
+  },
+  detailsToggleText: {
     color: "#5e5894",
-    fontWeight: "800"
+    fontWeight: "800",
+    fontSize: 14
+  },
+  detailsToggleBadge: {
+    color: "#7f78a9",
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1
   },
   submitButton: {
     flex: 1,
-    borderRadius: 22,
+    borderRadius: 20,
     backgroundColor: "#6d63cf",
-    paddingVertical: 16,
+    paddingVertical: 13,
     alignItems: "center",
     justifyContent: "center"
   },
   submitButtonText: {
     color: "#f8f7ff",
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "800"
   },
   buttonDisabled: {
@@ -2510,8 +3320,8 @@ const styles = StyleSheet.create({
   },
   miniStatusCard: {
     backgroundColor: "rgba(255,255,255,0.38)",
-    borderRadius: 26,
-    padding: 18,
+    borderRadius: 24,
+    padding: 16,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.56)",
     gap: 8,
@@ -2883,11 +3693,14 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     color: "#2a2451"
   },
+  detailScrollContent: {
+    paddingBottom: 26
+  },
   detailHero: {
     backgroundColor: "#f1e8da",
     borderRadius: 22,
-    padding: 16,
-    gap: 8
+    padding: 14,
+    gap: 6
   },
   detailStatus: {
     color: "#176744",
@@ -2895,8 +3708,8 @@ const styles = StyleSheet.create({
   },
   detailSummary: {
     color: "#11261f",
-    fontSize: 22,
-    lineHeight: 26,
+    fontSize: 18,
+    lineHeight: 22,
     fontWeight: "800"
   },
   detailMeta: {
@@ -2913,7 +3726,7 @@ const styles = StyleSheet.create({
   },
   detailMediaPreview: {
     width: "100%",
-    height: 260,
+    height: 220,
     borderRadius: 18,
     backgroundColor: "#e8e1d8"
   },
@@ -3020,15 +3833,52 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     padding: 14,
     marginTop: 10,
-    gap: 10,
+    gap: 12,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.74)"
   },
   reviewActionTitle: {
     color: "#2a2451",
     fontWeight: "800",
-    fontSize: 18,
+    fontSize: 17,
     lineHeight: 22
+  },
+  reviewPrimaryActionButton: {
+    borderRadius: 22,
+    paddingVertical: 15,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(205, 246, 224, 0.80)",
+    borderWidth: 1,
+    borderColor: "rgba(112, 204, 160, 0.36)"
+  },
+  reviewPrimaryActionText: {
+    color: "#176744",
+    fontWeight: "800",
+    fontSize: 16
+  },
+  reviewSecondaryActionsRow: {
+    flexDirection: "row",
+    gap: 10,
+    flexWrap: "wrap"
+  },
+  reviewSecondaryActionButton: {
+    flexGrow: 1,
+    flexBasis: 0,
+    minWidth: 120,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.88)",
+    borderWidth: 1,
+    borderColor: "rgba(91, 82, 186, 0.18)",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  reviewSecondaryActionText: {
+    color: "#4f46a6",
+    fontWeight: "700"
   },
   reviewReasonSection: {
     gap: 10

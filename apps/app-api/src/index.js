@@ -14,6 +14,16 @@ import {
   submissionEvents
 } from "../../../packages/shared/src/index.js";
 import { buildPublicObjectUrl, createUploadPlan } from "./storage.js";
+import {
+  allowedEditableRoles,
+  canEditMembershipRole,
+  canViewMemberships,
+  describeMembershipChange,
+  membershipKey,
+  normalizeMembershipDraft,
+  normalizeMembershipRecord,
+  pickHighestMembershipRole
+} from "./club-memberships.js";
 
 const port = Number(process.env.API_PORT || 4000);
 const publicAppName = process.env.PUBLIC_PRODUCT_NAME || "Club Content";
@@ -36,6 +46,34 @@ const pushNotificationsEnabled =
   String(process.env.PUSH_NOTIFICATIONS_ENABLED || "").toLowerCase() === "true";
 const pushProvider = process.env.PUSH_PROVIDER || "expo";
 const pushProjectId = process.env.PUSH_PROJECT_ID || "";
+const defaultClubPolicy = {
+  channels: [
+    { key: "instagram", label: "Instagram", favorite: true, allowed: true },
+    { key: "facebook", label: "Facebook", favorite: true, allowed: true },
+    { key: "team-feed", label: "Team Feed", favorite: true, allowed: true },
+    { key: "website", label: "Website", favorite: false, allowed: true },
+    { key: "newsletter", label: "Newsletter", favorite: false, allowed: true },
+    { key: "x", label: "X", favorite: false, allowed: false, reviewRequired: true },
+    { key: "tiktok", label: "TikTok", favorite: false, allowed: false, reviewRequired: true }
+  ],
+  routing: {
+    publishMainFeedByDefault: true
+  },
+  review: {
+    autoApproveMaxRisk: 0.2,
+    alwaysReviewChannels: ["X", "TikTok"],
+    alwaysReviewKeywords: [
+      "injury",
+      "hospital",
+      "concussion",
+      "address",
+      "phone",
+      "email",
+      "contact"
+    ],
+    alwaysReviewContentTypes: ["video"]
+  }
+};
 
 function parseUrl(req) {
   return new URL(req.url, `http://${req.headers.host || "localhost"}`);
@@ -64,6 +102,161 @@ function normalizeOptionalString(value) {
 
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+
+function normalizeEmail(value) {
+  return normalizeOptionalString(value)?.toLowerCase() || null;
+}
+
+function mergeClubPolicy(rawConfig) {
+  const config = rawConfig && typeof rawConfig === "object" ? rawConfig : {};
+  return {
+    ...defaultClubPolicy,
+    ...config,
+    routing: {
+      ...defaultClubPolicy.routing,
+      ...(config.routing || {})
+    },
+    review: {
+      ...defaultClubPolicy.review,
+      ...(config.review || {})
+    },
+    channels: Array.isArray(config.channels)
+      ? config.channels
+      : defaultClubPolicy.channels
+  };
+}
+
+async function loadClubMembershipContext(client, clubSlug, actorEmail) {
+  const normalizedActorEmail = normalizeEmail(actorEmail);
+  if (!normalizedActorEmail) {
+    return null;
+  }
+
+  const clubResult = await client.query(
+    `
+    SELECT id, slug, name
+    FROM clubs
+    WHERE slug = $1
+    LIMIT 1
+    `,
+    [clubSlug]
+  );
+
+  if (!clubResult.rowCount) {
+    return null;
+  }
+
+  const club = clubResult.rows[0];
+  const actorResult = await client.query(
+    `
+    SELECT
+      u.id AS user_id,
+      u.email,
+      u.full_name,
+      m.role
+    FROM memberships m
+    INNER JOIN users u ON u.id = m.user_id
+    WHERE m.club_id = $1
+      AND lower(u.email) = $2
+    `,
+    [club.id, normalizedActorEmail]
+  );
+
+  if (!actorResult.rowCount) {
+    return { club, actorEmail: normalizedActorEmail, actorRole: null, actorUserId: null };
+  }
+
+  const actorRole = pickHighestMembershipRole(actorResult.rows.map((row) => row.role));
+
+  return {
+    club,
+    actorEmail: normalizedActorEmail,
+    actorUserId: actorResult.rows[0].user_id,
+    actorFullName: actorResult.rows[0].full_name,
+    actorRole
+  };
+}
+
+async function loadClubMembershipRows(client, clubId) {
+  const result = await client.query(
+    `
+    SELECT
+      m.id AS membership_id,
+      m.team_id,
+      m.user_id,
+      m.role,
+      m.created_at,
+      c.slug AS club_slug,
+      c.name AS club_name,
+      t.slug AS team_slug,
+      t.name AS team_name,
+      u.email,
+      u.full_name
+    FROM memberships m
+    INNER JOIN clubs c ON c.id = m.club_id
+    INNER JOIN users u ON u.id = m.user_id
+    LEFT JOIN teams t ON t.id = m.team_id
+    WHERE m.club_id = $1
+    ORDER BY m.role, u.full_name, u.email, COALESCE(t.name, '')
+    `,
+    [clubId]
+  );
+
+  return result.rows.map(normalizeMembershipRecord);
+}
+
+async function loadClubMembershipHistory(client, clubId) {
+  const result = await client.query(
+    `
+    SELECT
+      al.id,
+      al.action,
+      al.metadata,
+      al.created_at,
+      u.full_name AS actor_name,
+      u.email AS actor_email
+    FROM audit_logs al
+    LEFT JOIN users u ON u.id = al.actor_user_id
+    WHERE al.entity_type = 'club'
+      AND al.entity_id = $1
+      AND al.action = 'membership_roster_updated'
+    ORDER BY al.created_at DESC
+    LIMIT 20
+    `,
+    [clubId]
+  );
+
+  return result.rows.map((row) => ({
+    id: row.id,
+    action: row.action,
+    actorName: row.actor_name || "Unknown",
+    actorEmail: row.actor_email || null,
+    createdAt: row.created_at,
+    metadata: row.metadata || {}
+  }));
+}
+
+async function ensureClubMembershipUser(client, { email, fullName }) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) {
+    throw new Error("email is required");
+  }
+
+  const safeName = normalizeOptionalString(fullName) || normalizedEmail;
+
+  const result = await client.query(
+    `
+    INSERT INTO users (email, full_name)
+    VALUES ($1, $2)
+    ON CONFLICT (email) DO UPDATE
+    SET full_name = EXCLUDED.full_name
+    RETURNING id
+    `,
+    [normalizedEmail, safeName]
+  );
+
+  return result.rows[0].id;
 }
 
 function maskPushToken(pushToken) {
@@ -192,9 +385,9 @@ function handleSupportPage(res) {
       title: `${publicAppName} Support`,
       eyebrow: publicAppName,
       body: `
-        <p>${escapeHtml(publicAppName)} helps clubs, coaches, families, and team staff collect updates and move content through a structured review flow.</p>
+        <p>${escapeHtml(publicAppName)} helps workspaces, coaches, families, and team staff collect updates and move content through a structured review flow.</p>
         <h2>Contact Support</h2>
-        <p>Email <a href="mailto:${escapeHtml(supportEmail)}">${escapeHtml(supportEmail)}</a> for help with account issues, alerts, TestFlight access, or app problems.</p>
+        <p>Email <a href="mailto:${escapeHtml(supportEmail)}">${escapeHtml(supportEmail)}</a> for help with account issues, alerts, beta access, or app problems.</p>
         <h2>What To Include</h2>
         <ul>
           <li>Your device model and app version</li>
@@ -217,7 +410,7 @@ function handlePrivacyPage(res) {
       title: `${publicAppName} Privacy Policy`,
       eyebrow: "Privacy Policy",
       body: `
-        <p>${escapeHtml(publicAppName)} supports club content submissions, approvals, publishing workflows, and related mobile app usage.</p>
+        <p>${escapeHtml(publicAppName)} supports content submissions, approvals, publishing workflows, and related mobile app usage.</p>
         <h2>Information We Use</h2>
         <p>We may process limited account, device, and usage information needed to operate the app, deliver notifications, improve reliability, and support users.</p>
         <h2>How Information Is Used</h2>
@@ -242,6 +435,7 @@ async function handleCreateSubmission(req, res) {
     submitterEmail,
     contentType,
     rawText,
+    selectedChannels = [],
     visibilityTarget = "internal",
     media = []
   } = body;
@@ -294,10 +488,11 @@ async function handleCreateSubmission(req, res) {
         submitted_by_user_id,
         content_type,
         raw_text,
+        selected_channels,
         visibility_target,
         status
       )
-      VALUES ($1, $2, $3, $4, $5, $6, 'received')
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'received')
       RETURNING *
       `,
       [
@@ -306,6 +501,7 @@ async function handleCreateSubmission(req, res) {
         userResult.rows[0].id,
         contentType,
         rawText || null,
+        JSON.stringify(Array.isArray(selectedChannels) ? selectedChannels : []),
         visibilityTarget
       ]
     );
@@ -351,6 +547,7 @@ async function handleCreateSubmission(req, res) {
         JSON.stringify({
           contentType,
           visibilityTarget,
+          selectedChannels: Array.isArray(selectedChannels) ? selectedChannels : [],
           mediaCount: media.length
         })
       ]
@@ -539,6 +736,7 @@ async function handleListSubmissions(res, query) {
       s.id,
       s.content_type,
       s.raw_text,
+      s.selected_channels AS "selectedChannels",
       s.visibility_target,
       s.status,
       s.risk_score,
@@ -566,6 +764,7 @@ async function handleResubmitSubmission(req, res, submissionId) {
   const body = await readJson(req);
   const submitterEmail = normalizeOptionalString(body.submitterEmail);
   const rawText = normalizeOptionalString(body.rawText);
+  const selectedChannels = Array.isArray(body.selectedChannels) ? body.selectedChannels : null;
   const visibilityTarget = normalizeOptionalString(body.visibilityTarget);
   const media = Array.isArray(body.media) ? body.media : null;
 
@@ -612,7 +811,8 @@ async function handleResubmitSubmission(req, res, submissionId) {
       `
       UPDATE submissions
       SET raw_text = COALESCE($2, raw_text),
-          visibility_target = COALESCE($3, visibility_target),
+          selected_channels = COALESCE($3, selected_channels),
+          visibility_target = COALESCE($4, visibility_target),
           status = 'received',
           risk_score = NULL,
           routing_decision = NULL,
@@ -620,7 +820,12 @@ async function handleResubmitSubmission(req, res, submissionId) {
           updated_at = NOW()
       WHERE id = $1
       `,
-      [submissionId, rawText, visibilityTarget]
+      [
+        submissionId,
+        rawText,
+        selectedChannels ? JSON.stringify(selectedChannels) : null,
+        visibilityTarget
+      ]
     );
 
     if (media) {
@@ -688,6 +893,7 @@ async function handleResubmitSubmission(req, res, submissionId) {
         submissionId,
         JSON.stringify({
           visibilityTarget: visibilityTarget || submission.visibility_target,
+          selectedChannels: selectedChannels || submission.selected_channels || [],
           rawText: rawText || submission.raw_text || null
         })
       ]
@@ -702,6 +908,386 @@ async function handleResubmitSubmission(req, res, submissionId) {
   }
 
   sendJson(res, 200, { submission: result });
+}
+
+async function handleGetClubWorkflowPolicy(res, clubSlug) {
+  const result = await getPool().query(
+    `
+    SELECT
+      c.slug AS club_slug,
+      c.name AS club_name,
+      p.policy_key,
+      p.config,
+      p.updated_at
+    FROM clubs c
+    LEFT JOIN club_workflow_policies p ON p.club_id = c.id
+    WHERE c.slug = $1
+    LIMIT 1
+    `,
+    [clubSlug]
+  );
+
+  if (!result.rowCount) {
+    sendNotFound(res);
+    return;
+  }
+
+  const row = result.rows[0];
+  sendJson(res, 200, {
+    clubSlug: row.club_slug,
+    clubName: row.club_name,
+    policyKey: row.policy_key || "default",
+    config: mergeClubPolicy(row.config),
+    updatedAt: row.updated_at || null
+  });
+}
+
+async function handleUpdateClubWorkflowPolicy(req, res, clubSlug) {
+  const body = await readJson(req);
+  const policyKey = normalizeOptionalString(body.policyKey) || "default";
+  const config = body.config && typeof body.config === "object" ? body.config : null;
+
+  if (!config) {
+    sendJson(res, 400, { error: "config is required" });
+    return;
+  }
+
+  const result = await withTransaction(async (client) => {
+    const clubResult = await client.query(
+      `
+      SELECT id, slug, name
+      FROM clubs
+      WHERE slug = $1
+      LIMIT 1
+      `,
+      [clubSlug]
+    );
+
+    if (!clubResult.rowCount) {
+      return null;
+    }
+
+    const club = clubResult.rows[0];
+    const mergedConfig = mergeClubPolicy(config);
+
+    const saved = await client.query(
+      `
+      INSERT INTO club_workflow_policies (club_id, policy_key, config)
+      VALUES ($1, $2, $3::jsonb)
+      ON CONFLICT (club_id) DO UPDATE
+      SET policy_key = EXCLUDED.policy_key,
+          config = EXCLUDED.config,
+          updated_at = NOW()
+      RETURNING updated_at
+      `,
+      [club.id, policyKey, JSON.stringify(mergedConfig)]
+    );
+
+    return {
+      clubSlug: club.slug,
+      clubName: club.name,
+      policyKey,
+      config: mergedConfig,
+      updatedAt: saved.rows[0].updated_at
+    };
+  });
+
+  if (!result) {
+    sendNotFound(res);
+    return;
+  }
+
+  sendJson(res, 200, result);
+}
+
+async function handleGetClubMemberships(res, clubSlug, actorEmail) {
+  if (!normalizeEmail(actorEmail)) {
+    sendJson(res, 400, { error: "actorEmail is required" });
+    return;
+  }
+
+  const result = await getPool().query(
+    `
+    SELECT id, slug, name
+    FROM clubs
+    WHERE slug = $1
+    LIMIT 1
+    `,
+    [clubSlug]
+  );
+
+  if (!result.rowCount) {
+    sendNotFound(res);
+    return;
+  }
+
+  const club = result.rows[0];
+  const access = await getPool().query(
+    `
+    SELECT
+      u.id AS user_id,
+      u.email,
+      u.full_name,
+      m.role
+    FROM memberships m
+    INNER JOIN users u ON u.id = m.user_id
+    WHERE m.club_id = $1
+      AND lower(u.email) = $2
+    `,
+    [club.id, normalizeEmail(actorEmail) || ""]
+  );
+
+  const actorRole = pickHighestMembershipRole(access.rows.map((row) => row.role));
+
+  if (!canViewMemberships(actorRole)) {
+    sendJson(res, 403, { error: "Membership settings are limited to club admins and club comms." });
+    return;
+  }
+
+  const teams = await getPool().query(
+    `
+    SELECT id, slug, name, age_group
+    FROM teams
+    WHERE club_id = $1
+    ORDER BY name ASC
+    `,
+    [club.id]
+  );
+
+  const memberships = await getPool().query(
+    `
+    SELECT
+      m.id AS membership_id,
+      m.team_id,
+      m.user_id,
+      m.role,
+      m.created_at,
+      c.slug AS club_slug,
+      c.name AS club_name,
+      t.slug AS team_slug,
+      t.name AS team_name,
+      u.email,
+      u.full_name
+    FROM memberships m
+    INNER JOIN clubs c ON c.id = m.club_id
+    INNER JOIN users u ON u.id = m.user_id
+    LEFT JOIN teams t ON t.id = m.team_id
+    WHERE m.club_id = $1
+    ORDER BY m.role, u.full_name, u.email, COALESCE(t.name, '')
+    `,
+    [club.id]
+  );
+  const history = await loadClubMembershipHistory(getPool(), club.id);
+
+  const actorView = {
+    email: normalizeEmail(actorEmail),
+    role: actorRole,
+    canView: true,
+    canEditAll: actorRole === "club_admin",
+    editableRoles: allowedEditableRoles(actorRole)
+  };
+
+  sendJson(res, 200, {
+    clubSlug: club.slug,
+    clubName: club.name,
+    actor: actorView,
+    teams: [
+      { id: null, slug: null, name: "Club-wide", ageGroup: null },
+      ...teams.rows.map((team) => ({
+        id: team.id,
+        slug: team.slug,
+        name: team.name,
+        ageGroup: team.age_group || null
+      }))
+    ],
+    memberships: memberships.rows.map(normalizeMembershipRecord),
+    editableRoles: allowedEditableRoles(actorRole),
+    history
+  });
+}
+
+async function handleUpdateClubMemberships(req, res, clubSlug) {
+  const body = await readJson(req);
+  const actorEmail = normalizeEmail(body.actorEmail);
+  const incomingRows = Array.isArray(body.memberships) ? body.memberships : [];
+
+  if (!actorEmail) {
+    sendJson(res, 400, { error: "actorEmail is required" });
+    return;
+  }
+
+  const result = await withTransaction(async (client) => {
+    const clubContext = await loadClubMembershipContext(client, clubSlug, actorEmail);
+
+    if (!clubContext?.club) {
+      return { status: 404, payload: { error: "Club not found" } };
+    }
+
+    if (!canViewMemberships(clubContext.actorRole)) {
+      return {
+        status: 403,
+        payload: { error: "Membership settings are limited to club admins and club comms." }
+      };
+    }
+
+    const editableRoles = allowedEditableRoles(clubContext.actorRole);
+    const teamResult = await client.query(
+      `
+      SELECT id, slug, name, age_group
+      FROM teams
+      WHERE club_id = $1
+      `,
+      [clubContext.club.id]
+    );
+    const teamBySlug = new Map(teamResult.rows.map((team) => [team.slug, team]));
+
+    const currentRows = await loadClubMembershipRows(client, clubContext.club.id);
+    const currentEditableRows = currentRows.filter((row) => editableRoles.includes(row.role));
+
+    const desiredRows = [];
+    const seenKeys = new Set();
+
+    for (const input of incomingRows) {
+      const draft = normalizeMembershipDraft(input);
+      if (!draft) {
+        return {
+          status: 400,
+          payload: { error: "Each membership row needs email, fullName, and a valid role." }
+        };
+      }
+
+      if (!canEditMembershipRole(clubContext.actorRole, draft.role)) {
+        return {
+          status: 403,
+          payload: { error: `You cannot edit the ${draft.role} role.` }
+        };
+      }
+
+      if (draft.teamSlug && !teamBySlug.has(draft.teamSlug)) {
+        return {
+          status: 400,
+          payload: { error: `Unknown team slug: ${draft.teamSlug}` }
+        };
+      }
+
+      const key = membershipKey(draft);
+      if (seenKeys.has(key)) {
+        return {
+          status: 400,
+          payload: { error: "Duplicate membership rows are not allowed." }
+        };
+      }
+      seenKeys.add(key);
+
+      desiredRows.push({
+        ...draft,
+        teamId: draft.teamSlug ? teamBySlug.get(draft.teamSlug).id : null,
+        teamName: draft.teamSlug ? teamBySlug.get(draft.teamSlug).name : "Club-wide"
+      });
+    }
+
+    const desiredKeys = new Set(desiredRows.map((row) => membershipKey(row)));
+    const currentEditableByKey = new Map(
+      currentEditableRows.map((row) => [membershipKey(row), row])
+    );
+
+    for (const row of currentEditableRows) {
+      if (!desiredKeys.has(membershipKey(row))) {
+        await client.query(
+          `
+          DELETE FROM memberships
+          WHERE id = $1
+          `,
+          [row.membershipId]
+        );
+      }
+    }
+
+    for (const row of desiredRows) {
+      const existing = currentEditableByKey.get(membershipKey(row));
+      const userId = await ensureClubMembershipUser(client, {
+        email: row.email,
+        fullName: row.fullName
+      });
+
+      if (existing?.userId && existing.userId !== userId) {
+        await client.query(
+          `
+          DELETE FROM memberships
+          WHERE id = $1
+          `,
+          [existing.membershipId]
+        );
+      }
+
+      await client.query(
+        `
+        INSERT INTO memberships (club_id, team_id, user_id, role)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT DO NOTHING
+        `,
+        [clubContext.club.id, row.teamId, userId, row.role]
+      );
+    }
+
+    const nextRows = await loadClubMembershipRows(client, clubContext.club.id);
+    const nextEditableRows = nextRows.filter((row) => editableRoles.includes(row.role));
+    const diff = describeMembershipChange(currentEditableRows, nextEditableRows);
+
+    const audit = await client.query(
+      `
+      INSERT INTO audit_logs (actor_user_id, entity_type, entity_id, action, metadata)
+      VALUES ($1, 'club', $2, 'membership_roster_updated', $3::jsonb)
+      RETURNING id, created_at
+      `,
+      [
+        clubContext.actorUserId,
+        clubContext.club.id,
+        JSON.stringify({
+          actorEmail,
+          actorRole: clubContext.actorRole,
+          diff,
+          editableRoles
+        })
+      ]
+    );
+
+    return {
+      status: 200,
+      payload: {
+        clubSlug: clubContext.club.slug,
+        clubName: clubContext.club.name,
+        actor: {
+          email: actorEmail,
+          role: clubContext.actorRole,
+          canView: true,
+          canEditAll: clubContext.actorRole === "club_admin",
+          editableRoles
+        },
+        teams: [
+          { id: null, slug: null, name: "Club-wide", ageGroup: null },
+          ...teamResult.rows.map((team) => ({
+            id: team.id,
+            slug: team.slug,
+            name: team.name,
+            ageGroup: team.age_group || null
+          }))
+        ],
+        memberships: nextRows,
+        editableRoles,
+        audit: audit.rows[0],
+        diff,
+        history: await loadClubMembershipHistory(client, clubContext.club.id)
+      }
+    };
+  });
+
+  if (!result) {
+    sendNotFound(res);
+    return;
+  }
+
+  sendJson(res, result.status, result.payload);
 }
 
 async function handleApprovalQueue(res) {
@@ -1461,7 +2047,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "OPTIONS") {
       res.writeHead(204, {
         "access-control-allow-origin": "*",
-        "access-control-allow-methods": "GET,POST,OPTIONS",
+        "access-control-allow-methods": "GET,POST,PUT,OPTIONS",
         "access-control-allow-headers": "content-type, authorization, svix-id, svix-timestamp, svix-signature",
         vary: "Origin"
       });
@@ -1491,6 +2077,30 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "POST" && url.pathname === "/uploads/sign") {
       await handleCreateUploadPlan(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && /^\/clubs\/[^/]+\/workflow-policy$/.test(url.pathname)) {
+      await handleGetClubWorkflowPolicy(res, decodeURIComponent(url.pathname.split("/")[2]));
+      return;
+    }
+
+    if (req.method === "GET" && /^\/clubs\/[^/]+\/memberships$/.test(url.pathname)) {
+      await handleGetClubMemberships(
+        res,
+        decodeURIComponent(url.pathname.split("/")[2]),
+        url.searchParams.get("actorEmail")
+      );
+      return;
+    }
+
+    if (req.method === "PUT" && /^\/clubs\/[^/]+\/workflow-policy$/.test(url.pathname)) {
+      await handleUpdateClubWorkflowPolicy(req, res, decodeURIComponent(url.pathname.split("/")[2]));
+      return;
+    }
+
+    if (req.method === "PUT" && /^\/clubs\/[^/]+\/memberships$/.test(url.pathname)) {
+      await handleUpdateClubMemberships(req, res, decodeURIComponent(url.pathname.split("/")[2]));
       return;
     }
 

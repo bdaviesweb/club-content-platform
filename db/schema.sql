@@ -106,11 +106,21 @@ CREATE TABLE submissions (
   submitted_by_user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   content_type submission_content_type NOT NULL,
   raw_text TEXT,
+  selected_channels JSONB NOT NULL DEFAULT '[]'::JSONB,
   caption_draft TEXT,
   visibility_target TEXT NOT NULL DEFAULT 'internal',
   status submission_status NOT NULL DEFAULT 'received',
   risk_score NUMERIC(5,2),
   routing_decision JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE club_workflow_policies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  club_id UUID NOT NULL REFERENCES clubs(id) ON DELETE CASCADE UNIQUE,
+  policy_key TEXT NOT NULL DEFAULT 'default',
+  config JSONB NOT NULL DEFAULT '{}'::JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -246,6 +256,9 @@ CREATE TABLE audit_logs (
 );
 
 CREATE INDEX idx_submissions_club_status ON submissions(club_id, status);
+CREATE INDEX idx_club_workflow_policies_club_id ON club_workflow_policies(club_id);
+CREATE UNIQUE INDEX idx_memberships_unique_scope_user_role
+  ON memberships(club_id, COALESCE(team_id, '00000000-0000-0000-0000-000000000000'::UUID), user_id, role);
 CREATE INDEX idx_submission_media_submission_id ON submission_media(submission_id);
 CREATE INDEX idx_review_runs_submission_id ON review_runs(submission_id);
 CREATE INDEX idx_approval_requests_submission_id ON approval_requests(submission_id);

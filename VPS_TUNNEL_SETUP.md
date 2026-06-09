@@ -21,6 +21,10 @@ ingress:
     service: http://localhost:4000
   - hostname: clubcontent-uploads.davmn.net
     service: http://localhost:9000
+  - hostname: app-clubcontent.davmn.net
+    service: http://localhost:3003
+  - hostname: review-clubcontent.davmn.net
+    service: http://localhost:3002
   - service: http_status:404
 ```
 
@@ -37,6 +41,8 @@ sudo systemctl status cloudflared
 
 - API: `https://clubcontent-api.davmn.net`
 - Upload signing target base: `https://clubcontent-uploads.davmn.net`
+- Submitter app: `https://app-clubcontent.davmn.net`
+- Reviewer console: `https://review-clubcontent.davmn.net`
 
 ## Notes
 

@@ -10,5 +10,7 @@ coverage
 .expo
 apps/mobile/.expo
 apps/mobile/.expo-shared
+apps/mobile/credentials.json
+apps/mobile/credentials/
 tmp
 data

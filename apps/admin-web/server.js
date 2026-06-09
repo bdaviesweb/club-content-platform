@@ -3,6 +3,13 @@ import { timingSafeEqual } from "node:crypto";
 
 const port = 3001;
 const apiBase = process.env.API_BASE_URL || "http://app-api:4000";
+const defaultClubSlug =
+  process.env.ADMIN_DEFAULT_CLUB_SLUG || process.env.DEMO_CLUB_SLUG || "demo-workspace";
+const defaultActorEmail =
+  process.env.ADMIN_SETTINGS_ACTOR_EMAIL ||
+  process.env.DEMO_ADMIN_EMAIL ||
+  process.env.DEMO_REVIEWER_EMAIL ||
+  "";
 const authUser = process.env.ADMIN_BASIC_AUTH_USER || "";
 const authPassword = process.env.ADMIN_BASIC_AUTH_PASSWORD || "";
 const basicAuthEnabled = Boolean(authUser && authPassword);
@@ -98,7 +105,7 @@ function recommendationFor(detail) {
       reasonChips: [
         "Risk or policy concern needs revision.",
         "Needs a manual review before publishing.",
-        "Rejecting due to policy or club fit."
+        "Rejecting due to policy or brand fit."
       ]
     };
   }
@@ -116,6 +123,83 @@ function recommendationFor(detail) {
       "Approved after routine review."
     ]
   };
+}
+
+function splitCsv(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function renderChannelRow(channel = {}, index = 0) {
+  const key = channel.key || "";
+  const label = channel.label || "";
+  const favorite = Boolean(channel.favorite);
+  const allowed = channel.allowed !== false;
+  const reviewRequired = Boolean(channel.reviewRequired);
+
+  return `<div class="channel-row" data-channel-row>
+    <div class="policy-field">
+      <label>Key</label>
+      <input class="small-input" data-channel-key value="${escapeHtml(key)}" placeholder="instagram" />
+    </div>
+    <div class="policy-field">
+      <label>Label</label>
+      <input class="small-input" data-channel-label value="${escapeHtml(label)}" placeholder="Instagram" />
+    </div>
+    <label class="channel-toggle"><input type="checkbox" data-channel-favorite${favorite ? " checked" : ""} /> Favorite</label>
+    <label class="channel-toggle"><input type="checkbox" data-channel-allowed${allowed ? " checked" : ""} /> Allowed</label>
+    <label class="channel-toggle"><input type="checkbox" data-channel-review${reviewRequired ? " checked" : ""} /> Review</label>
+    <button class="button-secondary" type="button" data-remove-channel-row data-row-index="${index}">Remove</button>
+  </div>`;
+}
+
+function renderMembershipRow(row = {}, index = 0, teamOptions = [], editableRoles = [], locked = false) {
+  const teamSlug = row.teamSlug || "";
+  const role = row.role || "submitter_parent";
+  const email = row.email || "";
+  const fullName = row.fullName || "";
+  const title = locked ? "Locked role" : "Editable role";
+
+  return `<div class="membership-row${locked ? " locked" : ""}" data-membership-row data-locked="${locked ? "true" : "false"}">
+    <div class="membership-field">
+      <label>Team</label>
+      <select data-membership-team${locked ? " disabled" : ""}>
+        ${teamOptions.map((team) => `<option value="${escapeHtml(team.slug || "")}"${String(team.slug || "") === teamSlug ? " selected" : ""}>${escapeHtml(team.name || "Club-wide")}</option>`).join("")}
+      </select>
+    </div>
+    <div class="membership-field">
+      <label>Role</label>
+      <select data-membership-role${locked ? " disabled" : ""}>
+        ${editableRoles.map((optionRole) => `<option value="${escapeHtml(optionRole)}"${optionRole === role ? " selected" : ""}>${escapeHtml(formatLabel(optionRole))}</option>`).join("")}
+      </select>
+    </div>
+    <div class="membership-field">
+      <label>Email</label>
+      <input class="small-input" data-membership-email type="email" value="${escapeHtml(email)}"${locked ? " disabled" : ""} placeholder="parent@demo.local" />
+    </div>
+    <div class="membership-field">
+      <label>Full name</label>
+      <input class="small-input" data-membership-name value="${escapeHtml(fullName)}"${locked ? " disabled" : ""} placeholder="Taylor Parent" />
+    </div>
+    <div class="membership-actions">
+      <span class="membership-state">${escapeHtml(title)}</span>
+      ${locked ? "" : `<button class="button-secondary" type="button" data-remove-membership-row data-row-index="${index}">Remove</button>`}
+    </div>
+  </div>`;
+}
+
+function renderMembershipHistoryItem(item = {}) {
+  const metadata = item.metadata || {};
+  const diff = metadata.diff || { counts: { added: 0, removed: 0, updated: 0 }, added: [], removed: [], updated: [] };
+  const actorLabel = item.actorName || item.actorEmail || "Unknown";
+  const summary = `${diff.counts.added || 0} added, ${diff.counts.updated || 0} updated, ${diff.counts.removed || 0} removed`;
+
+  return `<div class="membership-history-item">
+    <strong>${escapeHtml(actorLabel)} · ${escapeHtml(formatRelativeTime(item.createdAt))}</strong>
+    <div class="subtle">${escapeHtml(summary)}</div>
+  </div>`;
 }
 
 function renderStatusBadge(label, tone = "neutral") {
@@ -167,12 +251,12 @@ function isAuthorized(req) {
 function requestAuth(res) {
   res.writeHead(401, {
     "content-type": "text/plain; charset=utf-8",
-    "www-authenticate": 'Basic realm="Club Content Review"'
+    "www-authenticate": 'Basic realm="Content Review"'
   });
   res.end("Authentication required");
 }
 
-function layout(content, title = "Club Content Ops") {
+function layout(content, title = "Content Ops") {
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -359,6 +443,172 @@ function layout(content, title = "Club Content Ops") {
       .post-grid {
         display: grid;
         gap: 10px;
+      }
+      .policy-grid {
+        display: grid;
+        gap: 12px;
+      }
+      .policy-toolbar,
+      .policy-actions,
+      .policy-head,
+      .policy-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+      .policy-toolbar,
+      .policy-actions,
+      .policy-head {
+        justify-content: space-between;
+      }
+      .policy-field {
+        display: grid;
+        gap: 6px;
+        min-width: min(100%, 280px);
+      }
+      .policy-field label {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .policy-field input,
+      .policy-field textarea,
+      .policy-field select {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 11px 12px;
+        font: inherit;
+        background: white;
+      }
+      .policy-field textarea {
+        min-height: 92px;
+        resize: vertical;
+      }
+      .policy-card {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(255,255,255,0.78);
+        padding: 14px;
+      }
+      .membership-grid {
+        display: grid;
+        gap: 12px;
+      }
+      .membership-toolbar,
+      .membership-actions,
+      .membership-head,
+      .membership-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+      .membership-toolbar,
+      .membership-actions,
+      .membership-head {
+        justify-content: space-between;
+      }
+      .membership-field {
+        display: grid;
+        gap: 6px;
+        min-width: min(100%, 220px);
+      }
+      .membership-field label {
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .membership-field input,
+      .membership-field select {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 11px 12px;
+        font: inherit;
+        background: white;
+      }
+      .membership-table {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .membership-row {
+        display: grid;
+        grid-template-columns: 1.25fr 1.1fr 1.2fr 1.2fr auto;
+        gap: 8px;
+        align-items: end;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(255,255,255,0.9);
+      }
+      .membership-row.locked {
+        opacity: 0.82;
+        background: rgba(248, 245, 238, 0.9);
+      }
+      .membership-row .small-input,
+      .membership-row select {
+        min-width: 0;
+        width: 100%;
+      }
+      .membership-state {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        background: rgba(104, 118, 111, 0.12);
+        color: var(--muted);
+      }
+      .membership-history {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .membership-history-item {
+        padding: 12px 14px;
+        border-radius: 16px;
+        background: rgba(255,255,255,0.72);
+        border: 1px solid rgba(222,206,179,0.9);
+      }
+      .membership-history-item strong {
+        display: block;
+        margin-bottom: 6px;
+      }
+      .channel-table {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .channel-row {
+        display: grid;
+        grid-template-columns: 1.4fr 1.4fr 0.8fr 0.8fr 0.95fr auto;
+        gap: 8px;
+        align-items: center;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(255,255,255,0.9);
+      }
+      .channel-row .small-input {
+        min-width: 0;
+        width: 100%;
+      }
+      .channel-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.9rem;
+        color: var(--muted);
+      }
+      .policy-note {
+        color: var(--muted);
+        line-height: 1.45;
       }
       .queue-card {
         display: block;
@@ -855,6 +1105,9 @@ function layout(content, title = "Club Content Ops") {
         .dock-actions button {
           width: 100%;
         }
+        .channel-row {
+          grid-template-columns: 1fr;
+        }
       }
     </style>
   </head>
@@ -1213,7 +1466,10 @@ async function renderHome(activeId) {
         <h1>See it. Decide it. Move on.</h1>
         <p class="subtle" style="margin-top:10px; max-width:780px;">The default view is intentionally short: content, recommendation, action. Open more details only when you actually need them.</p>
       </div>
-      ${renderStatusBadge(`${queue.length} waiting`, queue.length ? "review" : "good")}
+      <div class="quick-actions">
+        ${renderStatusBadge(`${queue.length} waiting`, queue.length ? "review" : "good")}
+        <a class="quick-link" href="/policy">Policy studio</a>
+      </div>
     </section>
 
     <details class="queue-toggle">
@@ -1238,10 +1494,10 @@ async function renderHome(activeId) {
           { code: 'missing_context', label: 'More context', helper: 'Ask for who, what, or when.', text: 'Please add more context so families know what happened.' },
           { code: 'caption_detail', label: 'One more detail', helper: 'Ask for one clear missing point.', text: 'Looks good, but the caption needs one clear detail added.' },
           { code: 'score_details', label: 'Score details', helper: 'Ask for the score, opponent, or event.', text: 'Please confirm the event, opponent, or score before we post this.' },
-          { code: 'caption_tighten', label: 'Tighten caption', helper: 'Ask for a cleaner club-ready caption.', text: 'Please tighten the caption so it is club-ready.' }
+          { code: 'caption_tighten', label: 'Tighten caption', helper: 'Ask for a cleaner caption.', text: 'Please tighten the caption so it is ready to post.' }
         ],
         reject: [
-          { code: 'club_guidelines', label: 'Off guidelines', helper: 'Use when the post does not fit club standards.', text: 'This does not fit club posting guidelines.' },
+          { code: 'club_guidelines', label: 'Off guidelines', helper: 'Use when the post does not fit the posting standards.', text: 'This does not fit the posting guidelines.' },
           { code: 'privacy_safe_retake', label: 'Safer retake', helper: 'Use when the media needs a privacy-safe replacement.', text: 'We cannot publish this without a clearer privacy-safe version.' },
           { code: 'stop_current_form', label: 'Stop this version', helper: 'Use when this exact post should not move forward.', text: 'This should not move forward in its current form.' },
           { code: 'admin_review_required', label: 'Admin follow-up', helper: 'Use when this needs a stronger admin conversation.', text: 'Please do not repost this item without admin review.' }
@@ -1698,7 +1954,7 @@ async function renderHome(activeId) {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            actorEmail: 'comms@demo-club.local',
+            actorEmail: 'review@demo-workspace.local',
             notes: 'Retry requested from reviewer workspace.'
           })
         });
@@ -1758,7 +2014,7 @@ async function renderQuickReviewHome(activeId) {
           </div>
         </div>
       </section>
-    `, "Club Content Quick Review");
+    `, "Content Quick Review");
   }
 
   return layout(`
@@ -1787,7 +2043,469 @@ async function renderQuickReviewHome(activeId) {
 
       ${renderCenterStage(detail, recommendation, queueIds)}
     </section>
-  `, "Club Content Quick Review");
+  `, "Content Quick Review");
+}
+
+async function renderPolicyStudio(activeClubSlug = defaultClubSlug, actorEmail = defaultActorEmail) {
+  let policyPayload = null;
+  let membershipPayload = null;
+  let loadError = "";
+  let membershipLoadError = "";
+  const resolvedActorEmail = String(actorEmail || defaultActorEmail || "").trim();
+
+  try {
+    policyPayload = await fetchJson(`/clubs/${encodeURIComponent(activeClubSlug)}/workflow-policy`);
+  } catch (error) {
+    loadError = error.message || "Unable to load workspace policy.";
+    policyPayload = {
+      clubSlug: activeClubSlug,
+      clubName: activeClubSlug,
+      policyKey: "default",
+      config: {
+        channels: [],
+        review: {
+          autoApproveMaxRisk: 0.2,
+          alwaysReviewChannels: [],
+          alwaysReviewKeywords: [],
+          alwaysReviewContentTypes: []
+        }
+      }
+    };
+  }
+
+  try {
+    membershipPayload = await fetchJson(
+      `/clubs/${encodeURIComponent(activeClubSlug)}/memberships?actorEmail=${encodeURIComponent(resolvedActorEmail)}`
+    );
+  } catch (error) {
+    membershipLoadError = error.message || "Unable to load membership roster.";
+    membershipPayload = {
+      clubSlug: activeClubSlug,
+      clubName: activeClubSlug,
+      actor: {
+        email: resolvedActorEmail,
+        role: null,
+        canView: false,
+        canEditAll: false,
+        editableRoles: []
+      },
+      teams: [{ id: null, slug: null, name: "Club-wide", ageGroup: null }],
+      memberships: [],
+      editableRoles: [],
+      history: []
+    };
+  }
+
+  const config = policyPayload.config || {};
+  const review = config.review || {};
+  const channels = Array.isArray(config.channels) ? config.channels : [];
+  const membershipTeams = Array.isArray(membershipPayload.teams) ? membershipPayload.teams : [{ id: null, slug: null, name: "Club-wide", ageGroup: null }];
+  const editableRoles = Array.isArray(membershipPayload.editableRoles) ? membershipPayload.editableRoles : [];
+  const editableRoleSet = new Set(editableRoles);
+  const memberships = Array.isArray(membershipPayload.memberships) ? membershipPayload.memberships : [];
+  const editableMemberships = memberships.filter((row) => editableRoleSet.has(row.role));
+  const lockedMemberships = memberships.filter((row) => !editableRoleSet.has(row.role));
+  const membershipHistory = Array.isArray(membershipPayload.history) ? membershipPayload.history : [];
+
+  return layout(`
+    <section class="quick-main">
+      <div class="quick-header">
+        <div>
+          <div class="eyebrow">Policy studio</div>
+          <h1>Workspace rules, without JSON.</h1>
+          <p class="subtle" style="margin-top:8px; max-width:760px;">These settings shape what Hermes can auto-approve, what gets human review, and which destinations are treated as favorites or review-only channels.</p>
+        </div>
+        <div class="quick-actions">
+          <a class="quick-link" href="/">Back to review</a>
+          <a class="quick-link" href="/quick-review">Quick review</a>
+        </div>
+      </div>
+
+      ${loadError ? `<div class="action-feedback review" style="margin-bottom:14px;"><strong>Using defaults</strong><p style="margin-top:6px; line-height:1.45;">${escapeHtml(loadError)} You can still edit and save once the policy table is available.</p></div>` : ""}
+      ${membershipLoadError ? `<div class="action-feedback review" style="margin-bottom:14px;"><strong>Membership roster unavailable</strong><p style="margin-top:6px; line-height:1.45;">${escapeHtml(membershipLoadError)} The policy section still loads.</p></div>` : ""}
+
+      <div class="panel">
+        <div class="policy-head">
+          <div>
+            <div class="section-label">Workspace</div>
+            <h2>${escapeHtml(policyPayload.clubName || activeClubSlug)}</h2>
+          </div>
+          <span class="subtle">Last updated ${escapeHtml(policyPayload.updatedAt ? formatRelativeTime(policyPayload.updatedAt) : "recently")}</span>
+        </div>
+
+        <div class="policy-toolbar" style="margin-top:12px;">
+          <div class="policy-field">
+            <label for="club-slug">Workspace slug</label>
+            <input id="club-slug" value="${escapeHtml(activeClubSlug)}" />
+          </div>
+          <div class="policy-field">
+            <label for="actor-email">Actor email</label>
+            <input id="actor-email" value="${escapeHtml(resolvedActorEmail)}" placeholder="admin@demo-club.local" />
+          </div>
+          <div class="policy-field">
+            <label for="policy-key">Policy key</label>
+            <input id="policy-key" value="${escapeHtml(policyPayload.policyKey || "default")}" />
+          </div>
+          <div class="policy-actions">
+            <button class="button-secondary" type="button" onclick="loadPolicy()">Load workspace</button>
+            <button class="button-primary" type="button" onclick="savePolicy()">Save policy</button>
+          </div>
+        </div>
+
+        <div class="policy-note" style="margin-top:8px;">
+          Membership editing follows the actor email above. Club admins can manage every role. Club comms can manage only non-admin roles.
+        </div>
+
+        <div class="policy-grid" style="margin-top:16px;">
+          <div class="policy-card">
+            <div class="section-label">Review thresholds</div>
+            <div class="policy-row">
+              <div class="policy-field">
+                <label for="auto-approve-risk">Auto-approve max risk</label>
+                <input id="auto-approve-risk" type="number" min="0" max="1" step="0.05" value="${escapeHtml(String(review.autoApproveMaxRisk ?? 0.2))}" />
+              </div>
+              <div class="policy-field" style="flex:1; min-width:240px;">
+                <label for="review-content-types">Always review content types</label>
+                <input id="review-content-types" value="${escapeHtml(splitCsv(review.alwaysReviewContentTypes).join(", "))}" placeholder="video" />
+              </div>
+            </div>
+            <div class="policy-row" style="margin-top:10px;">
+              <div class="policy-field" style="flex:1; min-width:240px;">
+                <label for="review-keywords">Always review keywords</label>
+                <textarea id="review-keywords" placeholder="injury, hospital, concussion">${escapeHtml(splitCsv(review.alwaysReviewKeywords).join(", "))}</textarea>
+              </div>
+              <div class="policy-field" style="flex:1; min-width:240px;">
+                <label for="review-channels">Always review channels</label>
+                <textarea id="review-channels" placeholder="X, TikTok">${escapeHtml(splitCsv(review.alwaysReviewChannels).join(", "))}</textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="policy-card">
+            <div class="policy-head">
+              <div>
+                <div class="section-label">Channels</div>
+                <p class="policy-note">These drive favorites in the composer and destination-specific review behavior.</p>
+              </div>
+              <button class="button-secondary" type="button" onclick="addChannelRow()">Add channel</button>
+            </div>
+            <div class="channel-table" id="channel-table">
+              ${channels.map((channel, index) => renderChannelRow(channel, index)).join("")}
+            </div>
+          </div>
+        </div>
+
+        <div class="policy-card" style="margin-top:16px;">
+          <div class="membership-head">
+            <div>
+              <div class="section-label">Club members</div>
+              <p class="policy-note">Manage submitter, team manager, and publisher roles here. Admin roles stay locked for club comms.</p>
+            </div>
+            <div class="membership-actions">
+              <span class="membership-state">Actor: ${escapeHtml(membershipPayload.actor?.email || resolvedActorEmail || "unknown")}</span>
+              <span class="membership-state">Role: ${escapeHtml(membershipPayload.actor?.role || "none")}</span>
+              <button class="button-secondary" type="button" onclick="addMembershipRow()">Add member</button>
+            </div>
+          </div>
+
+          <div class="membership-toolbar" style="margin-top:12px;">
+            <div class="membership-field">
+              <label for="membership-scope">Editable roles</label>
+              <input id="membership-scope" value="${escapeHtml((editableRoles || []).map((role) => formatLabel(role)).join(", ") || "None")}" disabled />
+            </div>
+            <div class="membership-field" style="flex:1; min-width: 300px;">
+              <label>Scope note</label>
+              <input value="${escapeHtml(membershipPayload.actor?.canEditAll ? "Can edit every role" : membershipPayload.actor?.role === "club_comms" ? "Can edit non-admin roles only" : "Read-only")}" disabled />
+            </div>
+          </div>
+
+          <div class="membership-grid">
+            <div>
+              <div class="section-label">Editable roster</div>
+              <div class="membership-table" id="membership-editable-table">
+                ${editableMemberships.map((row, index) => renderMembershipRow(row, index, membershipTeams, editableRoles, false)).join("") || `<div class="membership-history-item"><strong>No editable members yet.</strong><div class="subtle">Add the first role to get started.</div></div>`}
+              </div>
+            </div>
+
+            ${lockedMemberships.length ? `
+              <div>
+                <div class="section-label">Locked roster</div>
+                <div class="membership-table" id="membership-locked-table">
+                  ${lockedMemberships.map((row, index) => renderMembershipRow(
+                    row,
+                    index,
+                    membershipTeams,
+                    ["club_admin", "club_comms", "submitter_parent", "submitter_player", "submitter_coach", "team_manager", "publisher"],
+                    true
+                  )).join("")}
+                </div>
+              </div>
+            ` : ""}
+          </div>
+
+          <div style="margin-top:16px;">
+            <div class="section-label">Membership activity</div>
+            <div class="membership-history" id="membership-history">
+              ${membershipHistory.length ? membershipHistory.map((item) => renderMembershipHistoryItem(item)).join("") : `<div class="membership-history-item"><strong>No membership changes yet.</strong><div class="subtle">Save a roster change to create the first entry.</div></div>`}
+            </div>
+          </div>
+
+          <div class="membership-actions" style="margin-top:16px;">
+            <span id="membership-status" class="subtle"></span>
+            <div class="quick-actions">
+              <button class="button-secondary" type="button" onclick="resetMemberships()">Reset roster</button>
+              <button class="button-primary" type="button" onclick="saveMemberships()">Save roster</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="policy-actions" style="margin-top:16px;">
+          <span id="policy-status" class="subtle"></span>
+          <div class="quick-actions">
+            <button class="button-secondary" type="button" onclick="resetPolicy()">Reset to defaults</button>
+            <button class="button-primary" type="button" onclick="savePolicy()">Save policy</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <script>
+      const defaultPolicy = ${JSON.stringify(policyPayload)};
+      const defaultMemberships = ${JSON.stringify(membershipPayload)};
+      const membershipTeamOptions = ${JSON.stringify(membershipTeams)};
+      const membershipEditableRoles = ${JSON.stringify(editableRoles)};
+      const membershipAllRoles = ${JSON.stringify(["submitter_parent", "submitter_player", "submitter_coach", "team_manager", "club_admin", "club_comms", "publisher"])};
+
+      function loadPolicy() {
+        const clubSlug = document.getElementById('club-slug').value.trim();
+        const actorEmail = document.getElementById('actor-email').value.trim();
+        if (!clubSlug) return;
+        window.location.href = '/policy?clubSlug=' + encodeURIComponent(clubSlug) + '&actorEmail=' + encodeURIComponent(actorEmail);
+      }
+
+      function membershipRowTemplate(row = {}, locked = false) {
+        const roleOptions = locked ? membershipAllRoles : membershipEditableRoles;
+        const selectTeamOptions = membershipTeamOptions.map((team) => \`<option value="\${String(team.slug || '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')}"\${String(team.slug || '') === String(row.teamSlug || '') ? ' selected' : ''}>\${String(team.name || 'Club-wide').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')}</option>\`).join('');
+        const selectRoleOptions = roleOptions.map((optionRole) => \`<option value="\${optionRole}"\${optionRole === row.role ? ' selected' : ''}>\${roleLabel(optionRole)}</option>\`).join('');
+        return \`
+          <div class="membership-row\${locked ? ' locked' : ''}" data-membership-row data-locked="\${locked ? 'true' : 'false'}">
+            <div class="membership-field">
+              <label>Team</label>
+              <select data-membership-team\${locked ? ' disabled' : ''}>
+                \${selectTeamOptions}
+              </select>
+            </div>
+            <div class="membership-field">
+              <label>Role</label>
+              <select data-membership-role\${locked ? ' disabled' : ''}>
+                \${selectRoleOptions}
+              </select>
+            </div>
+            <div class="membership-field">
+              <label>Email</label>
+              <input class="small-input" data-membership-email type="email" value="\${String(row.email || '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')}"\${locked ? ' disabled' : ''} placeholder="parent@demo.local" />
+            </div>
+            <div class="membership-field">
+              <label>Full name</label>
+              <input class="small-input" data-membership-name value="\${String(row.fullName || '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')}"\${locked ? ' disabled' : ''} placeholder="Taylor Parent" />
+            </div>
+            <div class="membership-actions">
+              <span class="membership-state">\${locked ? 'Locked role' : 'Editable role'}</span>
+              \${locked ? '' : '<button class="button-secondary" type="button" data-remove-membership-row>Remove</button>'}
+            </div>
+          </div>
+        \`;
+      }
+
+      function roleLabel(value) {
+        return String(value || '')
+          .split('_')
+          .filter(Boolean)
+          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+          .join(' ');
+      }
+
+      function addMembershipRow() {
+        const table = document.getElementById('membership-editable-table');
+        const row = document.createElement('div');
+        row.innerHTML = membershipRowTemplate({ role: membershipEditableRoles[0] || 'submitter_parent', teamSlug: '', email: '', fullName: '' }, false);
+        const element = row.firstElementChild;
+        element.querySelector('[data-remove-membership-row]').addEventListener('click', () => element.remove());
+        table.appendChild(element);
+      }
+
+      function collectMembershipRows() {
+        return Array.from(document.querySelectorAll('#membership-editable-table [data-membership-row]')).map((row) => ({
+          teamSlug: row.querySelector('[data-membership-team]').value || null,
+          role: row.querySelector('[data-membership-role]').value,
+          email: row.querySelector('[data-membership-email]').value.trim(),
+          fullName: row.querySelector('[data-membership-name]').value.trim()
+        }));
+      }
+
+      function resetMemberships() {
+        const editableTable = document.getElementById('membership-editable-table');
+        const lockedTable = document.getElementById('membership-locked-table');
+        const editableMemberships = (defaultMemberships.memberships || []).filter((row) => (defaultMemberships.editableRoles || []).includes(row.role));
+        const lockedMemberships = (defaultMemberships.memberships || []).filter((row) => !(defaultMemberships.editableRoles || []).includes(row.role));
+
+        editableTable.innerHTML = editableMemberships.length
+          ? editableMemberships.map((row) => membershipRowTemplate(row, false)).join('')
+          : '<div class="membership-history-item"><strong>No editable members yet.</strong><div class="subtle">Add the first role to get started.</div></div>';
+
+        if (lockedTable) {
+          lockedTable.innerHTML = lockedMemberships.map((row) => membershipRowTemplate(row, true)).join('');
+        }
+
+        editableTable.querySelectorAll('[data-remove-membership-row]').forEach((button) => {
+          button.addEventListener('click', () => button.closest('[data-membership-row]').remove());
+        });
+      }
+
+      function channelRowTemplate(channel = {}) {
+        const row = document.createElement('div');
+        row.className = 'channel-row';
+        row.setAttribute('data-channel-row', '');
+        row.innerHTML = \`
+          <div class="policy-field">
+            <label>Key</label>
+            <input class="small-input" data-channel-key value="\${String(channel.key || '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')}" placeholder="instagram" />
+          </div>
+          <div class="policy-field">
+            <label>Label</label>
+            <input class="small-input" data-channel-label value="\${String(channel.label || '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')}" placeholder="Instagram" />
+          </div>
+          <label class="channel-toggle"><input type="checkbox" data-channel-favorite\${channel.favorite ? ' checked' : ''} /> Favorite</label>
+          <label class="channel-toggle"><input type="checkbox" data-channel-allowed\${channel.allowed === false ? '' : ' checked'} /> Allowed</label>
+          <label class="channel-toggle"><input type="checkbox" data-channel-review\${channel.reviewRequired ? ' checked' : ''} /> Review</label>
+          <button class="button-secondary" type="button" data-remove-channel-row>Remove</button>
+        \`;
+        row.querySelector('[data-remove-channel-row]').addEventListener('click', () => row.remove());
+        return row;
+      }
+
+      function addChannelRow() {
+        document.getElementById('channel-table').appendChild(channelRowTemplate({}));
+      }
+
+      function collectPolicy() {
+        const policyKey = document.getElementById('policy-key').value.trim() || 'default';
+        const autoApproveMaxRisk = Number(document.getElementById('auto-approve-risk').value || 0.2);
+        const alwaysReviewContentTypes = document.getElementById('review-content-types').value
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean);
+        const alwaysReviewKeywords = document.getElementById('review-keywords').value
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean);
+        const alwaysReviewChannels = document.getElementById('review-channels').value
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean);
+
+        const channels = Array.from(document.querySelectorAll('[data-channel-row]')).map((row) => ({
+          key: row.querySelector('[data-channel-key]').value.trim(),
+          label: row.querySelector('[data-channel-label]').value.trim(),
+          favorite: row.querySelector('[data-channel-favorite]').checked,
+          allowed: row.querySelector('[data-channel-allowed]').checked,
+          reviewRequired: row.querySelector('[data-channel-review]').checked
+        })).filter((row) => row.key || row.label);
+
+        return {
+          policyKey,
+          config: {
+            channels,
+            review: {
+              autoApproveMaxRisk: Number.isFinite(autoApproveMaxRisk) ? autoApproveMaxRisk : 0.2,
+              alwaysReviewContentTypes,
+              alwaysReviewKeywords,
+              alwaysReviewChannels
+            }
+          }
+        };
+      }
+
+      async function savePolicy() {
+        const clubSlug = document.getElementById('club-slug').value.trim();
+        const actorEmail = document.getElementById('actor-email').value.trim();
+        const status = document.getElementById('policy-status');
+        if (!clubSlug) {
+          status.textContent = 'Workspace slug is required.';
+          return;
+        }
+
+        status.textContent = 'Saving policy...';
+        const response = await fetch('/ui/policy/' + encodeURIComponent(clubSlug), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(collectPolicy())
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          status.textContent = payload.error || 'Save failed';
+          return;
+        }
+
+        status.textContent = 'Saved. Reloading...';
+        window.setTimeout(() => {
+          window.location.href = '/policy?clubSlug=' + encodeURIComponent(clubSlug) + '&actorEmail=' + encodeURIComponent(actorEmail);
+        }, 700);
+      }
+
+      async function saveMemberships() {
+        const clubSlug = document.getElementById('club-slug').value.trim();
+        const actorEmail = document.getElementById('actor-email').value.trim();
+        const status = document.getElementById('membership-status');
+        if (!clubSlug) {
+          status.textContent = 'Workspace slug is required.';
+          return;
+        }
+        if (!actorEmail) {
+          status.textContent = 'Actor email is required.';
+          return;
+        }
+
+        status.textContent = 'Saving membership roster...';
+        const response = await fetch('/ui/memberships/' + encodeURIComponent(clubSlug), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            actorEmail,
+            memberships: collectMembershipRows()
+          })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          status.textContent = payload.error || 'Save failed';
+          return;
+        }
+
+        status.textContent = 'Saved. Reloading...';
+        window.setTimeout(() => {
+          window.location.href = '/policy?clubSlug=' + encodeURIComponent(clubSlug) + '&actorEmail=' + encodeURIComponent(actorEmail);
+        }, 700);
+      }
+
+      function resetPolicy() {
+        const channels = document.getElementById('channel-table');
+        document.getElementById('policy-key').value = defaultPolicy.policyKey || 'default';
+        document.getElementById('auto-approve-risk').value = defaultPolicy.config.review.autoApproveMaxRisk ?? 0.2;
+        document.getElementById('review-content-types').value = (defaultPolicy.config.review.alwaysReviewContentTypes || []).join(', ');
+        document.getElementById('review-keywords').value = (defaultPolicy.config.review.alwaysReviewKeywords || []).join(', ');
+        document.getElementById('review-channels').value = (defaultPolicy.config.review.alwaysReviewChannels || []).join(', ');
+        channels.innerHTML = '';
+        (defaultPolicy.config.channels || []).forEach((channel) => channels.appendChild(channelRowTemplate(channel)));
+      }
+
+      document.querySelectorAll('[data-remove-channel-row]').forEach((button) => {
+        button.addEventListener('click', () => button.closest('[data-channel-row]').remove());
+      });
+      document.querySelectorAll('#membership-editable-table [data-remove-membership-row]').forEach((button) => {
+        button.addEventListener('click', () => button.closest('[data-membership-row]').remove());
+      });
+    </script>
+  `, "Content Policy Studio");
 }
 
 function readJson(req) {
@@ -1829,11 +2547,47 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/policy") {
+      const html = await renderPolicyStudio(
+        url.searchParams.get("clubSlug") || defaultClubSlug,
+        url.searchParams.get("actorEmail") || defaultActorEmail
+      );
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(html);
+      return;
+    }
+
     if (req.method === "POST" && /^\/ui\/actions\/[^/]+$/.test(url.pathname)) {
       const approvalRequestId = url.pathname.split("/")[3];
       const body = await readJson(req);
       const payload = await fetchJson(`/approval-requests/${approvalRequestId}/actions`, {
         method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(payload));
+      return;
+    }
+
+    if (req.method === "POST" && /^\/ui\/policy\/[^/]+$/.test(url.pathname)) {
+      const clubSlug = decodeURIComponent(url.pathname.split("/")[3]);
+      const body = await readJson(req);
+      const payload = await fetchJson(`/clubs/${encodeURIComponent(clubSlug)}/workflow-policy`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(payload));
+      return;
+    }
+
+    if (req.method === "POST" && /^\/ui\/memberships\/[^/]+$/.test(url.pathname)) {
+      const clubSlug = decodeURIComponent(url.pathname.split("/")[3]);
+      const body = await readJson(req);
+      const payload = await fetchJson(`/clubs/${encodeURIComponent(clubSlug)}/memberships`, {
+        method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body)
       });
