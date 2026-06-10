@@ -13,6 +13,25 @@ Use this process for focused coding work in this repository.
 7. Commit only when the change works or is a useful, clearly labeled checkpoint.
 8. Push and create a PR when the change is ready for review or deployment.
 
+## Critical Function Work
+
+For work that touches app-critical behavior, Codex should run the full developer loop without waiting to be asked each time. App-critical behavior includes uploads, submissions, review routing, approvals, publishing, notifications, auth/session behavior, schema changes, deployment scripts, mobile release identity, and shared contracts.
+
+Default procedure:
+
+1. Confirm the working tree state and avoid mixing unrelated changes.
+2. Create or use a focused `codex/<short-purpose>` branch before editing.
+3. Define a narrow function or module boundary for the change.
+4. Keep the behavior isolated enough to test without a full app run when practical.
+5. Add or update focused tests, smoke scripts, or direct verification steps for the changed behavior.
+6. Wire the isolated function into the app flow after the behavior is testable.
+7. Run the most relevant available checks and record any checks that cannot run.
+8. Review the diff before committing.
+9. Commit the working change with a clear message.
+10. Push and open a PR into `main` when the change is ready for review or deployment, unless the user asks for local-only work.
+
+For provider integrations such as email, push, storage, AI review, or external publishing, keep provider-specific code behind a small internal interface so app flows can be tested with disabled, mocked, or log-only delivery modes.
+
 ## Branching
 
 - Use `codex/<short-purpose>` for Codex-created branches.
