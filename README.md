@@ -138,15 +138,15 @@ Optional environment variables:
 - `DEMO_REVIEWER_EMAIL`
 - `DEMO_SUBMITTER_EMAIL`
 
-Push delivery is intentionally only groundwork in this slice. The backend now accepts and
-stores device registrations without a schema migration, but it does not yet fan out real
-provider sends when a notification is created.
+Push delivery now uses registered Expo push tokens when enabled. Device registrations are
+still stored in `audit_logs`, which keeps the current schema stable while giving the delivery
+pipeline the active tokens it needs.
 
 Current channel split:
 
 - in-app notifications: stored in `notifications`
 - email notifications: delivered from the existing notification pipeline when Resend is configured
-- push notifications: device registrations stored in `audit_logs` and exposed for later delivery work
+- push notifications: Expo push delivery when enabled, with device registrations and delivery outcomes stored in `audit_logs`
 
 Push registration endpoints:
 
@@ -179,7 +179,7 @@ GET /push-tokens?userEmail=coach@demo-club.local
 ```
 
 The readback response exposes the active registration metadata plus `pushToken` and a masked
-`tokenPreview` so later delivery work can consume the real token without another storage layer.
+`tokenPreview` so the delivery pipeline can consume the real token without another storage layer.
 
 Verification endpoints:
 
@@ -187,10 +187,20 @@ Verification endpoints:
 - `POST /webhooks/resend`
 
 Without those values, notifications still appear in-app and delivery attempts fall back to
-log-only mode with audit log entries. If `RESEND_WEBHOOK_SECRET` is omitted, the webhook
+log-only or skipped modes with audit log entries. If `RESEND_WEBHOOK_SECRET` is omitted, the webhook
 endpoint can still parse JSON payloads in dev, but signature verification stays disabled.
 Push status is also surfaced on `GET /notification-delivery/status`, including whether push
 is enabled and whether a push project id is configured.
+
+To enable Expo push delivery, set:
+
+- `PUSH_NOTIFICATIONS_ENABLED=true`
+- `PUSH_PROVIDER=expo`
+- `PUSH_PROJECT_ID=<Expo/EAS project id>`
+
+Push delivery runs from the same notification pipeline as email. Delivery results are written
+to `audit_logs` with actions such as `notification.push.delivered`,
+`notification.push.skipped`, and `notification.push.failed`.
 
 Recommended Resend webhook events:
 
