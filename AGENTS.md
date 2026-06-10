@@ -43,8 +43,8 @@ Mobile-first club content workflow platform for parents, players, coaches, and a
 
 ## Important Mobile Identity
 
-- Expo/EAS project: `@clubhqpro/club-content`
-- EAS project ID: `83871f8c-a185-47d5-8f19-5e2749dc81d2`
+- Expo/EAS project: `@bdaviesweb/club-content`
+- EAS project ID: `65730568-7767-47c8-8d3a-9545a5973af5`
 - iOS bundle ID: `com.hermes.clubcontent`
 
 Do not rewire this repo to the weather app identity.
