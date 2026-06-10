@@ -1,3 +1,5 @@
+import { sendPushNotifications } from "./push-delivery.js";
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -70,6 +72,25 @@ function buildNotificationMessage(type, payload) {
         statusExplanation: "Open the app to review the latest details."
       };
   }
+}
+
+export function buildNotificationPush({
+  type,
+  payload,
+  appName
+}) {
+  const message = buildNotificationMessage(type, payload);
+  return {
+    title: `${appName || "Club Content"}: ${message.subject}`,
+    body: message.detail,
+    data: {
+      type,
+      submissionId: payload.submissionId || null,
+      approvalRequestId: payload.approvalRequestId || null,
+      status: payload.status || null,
+      reasonCode: payload.reasonCode || null
+    }
+  };
 }
 
 export function buildNotificationEmail({
@@ -243,6 +264,7 @@ export async function createAndDeliverNotification(client, {
     supportEmail: process.env.SUPPORT_EMAIL || "support@davmn.net",
     publicAppUrl: process.env.PUBLIC_APP_URL || process.env.EXPO_PUBLIC_API_BASE_URL || ""
   });
+  const appName = process.env.PUBLIC_PRODUCT_NAME || "Club Content";
 
   const delivery = await sendEmailViaResend({
     toEmail: user.email,
@@ -281,8 +303,102 @@ export async function createAndDeliverNotification(client, {
     });
   }
 
+  const pushRegistrations = await listActivePushRegistrations(client, userId);
+  const pushContent = buildNotificationPush({
+    type,
+    payload,
+    appName
+  });
+  const pushDelivery = await sendPushNotifications({
+    tokens: pushRegistrations.map((registration) => registration.pushToken),
+    title: pushContent.title,
+    body: pushContent.body,
+    data: pushContent.data,
+    enabled: String(process.env.PUSH_NOTIFICATIONS_ENABLED || "").toLowerCase() === "true",
+    provider: process.env.PUSH_PROVIDER || "expo",
+    projectId: process.env.PUSH_PROJECT_ID || ""
+  });
+
+  await client.query(
+    `
+    INSERT INTO audit_logs (actor_user_id, entity_type, entity_id, action, metadata)
+    VALUES ($1, 'notification', $2, $3, $4::jsonb)
+    `,
+    [
+      actorUserId,
+      notification.id,
+      pushAuditAction(pushDelivery),
+      JSON.stringify({
+        type,
+        recipientEmail: user.email,
+        tokenCount: pushRegistrations.length,
+        delivery: pushDelivery,
+        payload
+      })
+    ]
+  );
+
+  if (!pushDelivery.delivered) {
+    console.log("notification push not sent", {
+      notificationId: notification.id,
+      to: user.email,
+      type,
+      reason: pushDelivery.reason,
+      mode: pushDelivery.mode
+    });
+  }
+
   return {
     notification,
-    delivery
+    delivery,
+    deliveries: {
+      email: delivery,
+      push: pushDelivery
+    }
   };
+}
+
+function pushAuditAction(delivery) {
+  if (delivery.delivered) {
+    return "notification.push.delivered";
+  }
+
+  if (["disabled", "no-recipients"].includes(delivery.mode)) {
+    return "notification.push.skipped";
+  }
+
+  return "notification.push.failed";
+}
+
+async function listActivePushRegistrations(client, userId) {
+  const result = await client.query(
+    `
+    WITH latest_push_state AS (
+      SELECT DISTINCT ON (al.metadata->'push'->>'installationId')
+        al.metadata->'push'->>'provider' AS provider,
+        al.metadata->'push'->>'installationId' AS "installationId",
+        al.metadata->'push'->>'pushToken' AS "pushToken",
+        al.metadata->'push'->>'platform' AS platform,
+        al.metadata->'push'->>'appId' AS "appId",
+        al.metadata->'push'->>'environment' AS environment,
+        al.metadata->'push'->>'deviceLabel' AS "deviceLabel",
+        COALESCE((al.metadata->'push'->>'enabled')::boolean, false) AS enabled,
+        al.created_at AS "updatedAt"
+      FROM audit_logs al
+      WHERE al.entity_type = 'user'
+        AND al.entity_id = $1
+        AND al.action IN ('push_token.upserted', 'push_token.revoked')
+        AND COALESCE(al.metadata->'push'->>'installationId', '') <> ''
+      ORDER BY al.metadata->'push'->>'installationId', al.created_at DESC
+    )
+    SELECT *
+    FROM latest_push_state
+    WHERE enabled = TRUE
+      AND COALESCE("pushToken", '') <> ''
+    ORDER BY "updatedAt" DESC
+    `,
+    [userId]
+  );
+
+  return result.rows;
 }
