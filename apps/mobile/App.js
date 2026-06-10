@@ -18,6 +18,8 @@ import {
   View
 } from "react-native";
 
+const { registerPushToken } = require("./pushRegistration");
+
 const defaultConfig = {
   apiBaseUrl:
     process.env.EXPO_PUBLIC_API_BASE_URL || "https://clubcontent-api.davmn.net",
@@ -359,6 +361,7 @@ export default function App() {
   const [notifications, setNotifications] = useState([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [notificationsError, setNotificationsError] = useState("");
+  const [pushRegistrationStatus, setPushRegistrationStatus] = useState("");
   const [selectedSubmissionId, setSelectedSubmissionId] = useState(null);
   const [selectedSubmissionDetail, setSelectedSubmissionDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -643,6 +646,49 @@ export default function App() {
     }, 20000);
     return () => clearInterval(intervalId);
   }, [canLoadRecent, apiBaseUrl, clubSlug, teamSlug, submitterEmail]);
+
+  useEffect(() => {
+    if (!canLoadRecent) {
+      setPushRegistrationStatus("");
+      return;
+    }
+
+    let isCurrent = true;
+
+    async function registerForPush() {
+      const result = await registerPushToken({
+        apiBaseUrl: apiBaseUrl.trim(),
+        userEmail: submitterEmail.trim()
+      });
+
+      if (!isCurrent) return;
+
+      if (result.registered) {
+        setPushRegistrationStatus("Push alerts ready");
+        return;
+      }
+
+      if (result.reason === "permission_denied") {
+        setPushRegistrationStatus("Push alerts off");
+        return;
+      }
+
+      if (result.reason === "missing_project_id") {
+        setPushRegistrationStatus("Push alerts need app setup");
+        return;
+      }
+
+      setPushRegistrationStatus("");
+    }
+
+    registerForPush().catch(() => {
+      if (isCurrent) setPushRegistrationStatus("");
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [canLoadRecent, apiBaseUrl, submitterEmail]);
 
   useEffect(() => {
     if (!canReview) return;
@@ -1420,6 +1466,9 @@ export default function App() {
                     {unreadNotificationCount ? `${unreadNotificationCount} unread` : "All caught up"}
                   </Text>
                 </View>
+                {pushRegistrationStatus ? (
+                  <Text style={styles.pushRegistrationStatus}>{pushRegistrationStatus}</Text>
+                ) : null}
 
                 {notifications.length ? (
                   notifications.map((item) => (
@@ -2652,6 +2701,12 @@ const styles = StyleSheet.create({
   notificationMeta: {
     color: "#7d79a2",
     fontSize: 12
+  },
+  pushRegistrationStatus: {
+    color: "#625a92",
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: -2
   },
   emptyStateText: {
     color: "#666186",

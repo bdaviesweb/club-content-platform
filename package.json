@@ -12,7 +12,7 @@
     "dev:worker": "npm --workspace @club/worker run dev",
     "dev:mobile": "npm --workspace @club/mobile run dev",
     "lint": "echo \"Lint targets not wired yet\"",
-    "test": "node --test packages/shared/src/*.test.js"
+    "test": "node --test packages/shared/src/*.test.js apps/mobile/*.test.js apps/app-api/src/*.test.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.901.0",

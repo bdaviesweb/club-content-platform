@@ -14,6 +14,10 @@ import {
   submissionEvents
 } from "../../../packages/shared/src/index.js";
 import { buildPublicObjectUrl, createUploadPlan } from "./storage.js";
+import {
+  maskPushToken,
+  registerPushToken
+} from "./push-tokens.js";
 
 const port = Number(process.env.API_PORT || 4000);
 const publicAppName = process.env.PUBLIC_PRODUCT_NAME || "Club Content";
@@ -64,18 +68,6 @@ function normalizeOptionalString(value) {
 
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
-}
-
-function maskPushToken(pushToken) {
-  if (!pushToken) {
-    return null;
-  }
-
-  if (pushToken.length <= 12) {
-    return pushToken;
-  }
-
-  return `${pushToken.slice(0, 6)}...${pushToken.slice(-6)}`;
 }
 
 function enrichMediaAsset(item) {
@@ -1056,84 +1048,12 @@ async function handleNotifications(res, searchParams) {
 
 async function handleRegisterPushToken(req, res) {
   const body = await readJson(req);
-  const userEmail = normalizeOptionalString(body.userEmail);
-  const installationId = normalizeOptionalString(body.installationId);
-  const pushToken = normalizeOptionalString(body.pushToken);
-  const platform = normalizeOptionalString(body.platform);
-  const provider = normalizeOptionalString(body.provider) || pushProvider;
-  const appId = normalizeOptionalString(body.appId);
-  const environment = normalizeOptionalString(body.environment);
-  const deviceLabel = normalizeOptionalString(body.deviceLabel);
-  const enabled = body.enabled !== false;
-
-  if (!userEmail || !installationId) {
-    sendJson(res, 400, {
-      error: "userEmail and installationId are required"
-    });
-    return;
-  }
-
-  if (enabled && !pushToken) {
-    sendJson(res, 400, {
-      error: "pushToken is required when enabled is true"
-    });
-    return;
-  }
-
-  const result = await withTransaction(async (client) => {
-    const userResult = await client.query(
-      `SELECT id, email FROM users WHERE email = $1`,
-      [userEmail]
-    );
-
-    if (!userResult.rowCount) {
-      return null;
-    }
-
-    const userId = userResult.rows[0].id;
-    const action = enabled ? "push_token.upserted" : "push_token.revoked";
-    const metadata = {
-      push: {
-        provider,
-        installationId,
-        pushToken: enabled ? pushToken : null,
-        platform,
-        appId,
-        environment,
-        deviceLabel,
-        enabled
-      }
-    };
-
-    await client.query(
-      `
-      INSERT INTO audit_logs (entity_type, entity_id, action, metadata)
-      VALUES ('user', $1, $2, $3::jsonb)
-      `,
-      [userId, action, JSON.stringify(metadata)]
-    );
-
-    return {
-      userId,
-      userEmail: userResult.rows[0].email,
-      provider,
-      installationId,
-      platform,
-      appId,
-      environment,
-      deviceLabel,
-      enabled,
-      pushToken: enabled ? pushToken : null,
-      tokenPreview: enabled ? maskPushToken(pushToken) : null
-    };
+  const result = await registerPushToken({
+    body,
+    withTransaction,
+    defaultProvider: pushProvider
   });
-
-  if (!result) {
-    sendNotFound(res);
-    return;
-  }
-
-  sendJson(res, 200, { registration: result });
+  sendJson(res, result.status, result.payload);
 }
 
 async function handleListPushTokens(res, searchParams) {
