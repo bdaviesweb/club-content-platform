@@ -2,6 +2,10 @@
 
 This workspace is the local Codex project for `Club Content Platform`.
 
+## Codex Working Agreement
+
+Follow `CODEX_WORKFLOW.md` for branch, commit, verification, push, and PR behavior.
+
 ## Project Description
 
 Mobile-first club content workflow platform for parents, players, coaches, and admins, with AI review, approval routing, publishing, and iOS beta distribution.
