@@ -48,8 +48,8 @@ Suggested iOS flow:
 
 ## Current App Store Connect State
 
-The Expo project for this repo is `@clubhqpro/club-content` with EAS project ID
-`83871f8c-a185-47d5-8f19-5e2749dc81d2`.
+The Expo project for this repo is `@bdaviesweb/club-content` with EAS project ID
+`65730568-7767-47c8-8d3a-9545a5973af5`.
 
 The weather project that was temporarily used during a later pivot is no longer wired into this repo.
 `eas.json` no longer pins an App Store Connect app ID, so future iOS submission must be attached to a
@@ -59,7 +59,7 @@ If you continue iOS distribution for this repo, create or confirm a separate App
 
 - app name: `Club Content`
 - bundle ID: `com.hermes.clubcontent`
-- Expo/EAS project: `@clubhqpro/club-content`
+- Expo/EAS project: `@bdaviesweb/club-content`
 
 If you only want device-distributed beta builds before App Store Connect submission, use the `preview` profile in `eas.json`.
 
