@@ -1219,7 +1219,7 @@ export default function App() {
 
                     <View style={styles.submitRow}>
                       <Pressable style={styles.inlineButton} onPress={replaceDraftMedia}>
-                        <Text style={styles.inlineButtonText}>Retake/select new</Text>
+                        <Text style={styles.inlineButtonText}>Retake or choose</Text>
                       </Pressable>
                       <Pressable
                         disabled={!canSubmit || submitting}
@@ -2500,24 +2500,30 @@ const styles = StyleSheet.create({
     alignItems: "stretch"
   },
   inlineButton: {
-    flexShrink: 1,
-    minWidth: 132,
-    paddingHorizontal: 16,
+    flex: 1,
+    minHeight: 76,
+    paddingHorizontal: 12,
     paddingVertical: 16,
     borderRadius: 22,
     backgroundColor: "rgba(255,255,255,0.44)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.58)"
+    borderColor: "rgba(255,255,255,0.58)",
+    alignItems: "center",
+    justifyContent: "center"
   },
   inlineButtonText: {
     color: "#5e5894",
+    fontSize: 15,
     fontWeight: "800",
+    lineHeight: 19,
     textAlign: "center"
   },
   submitButton: {
     flex: 1,
+    minHeight: 76,
     borderRadius: 22,
     backgroundColor: "#6d63cf",
+    paddingHorizontal: 12,
     paddingVertical: 16,
     alignItems: "center",
     justifyContent: "center"
@@ -2525,7 +2531,9 @@ const styles = StyleSheet.create({
   submitButtonText: {
     color: "#f8f7ff",
     fontSize: 16,
-    fontWeight: "800"
+    fontWeight: "800",
+    lineHeight: 20,
+    textAlign: "center"
   },
   buttonDisabled: {
     opacity: 0.45
