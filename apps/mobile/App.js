@@ -9,7 +9,10 @@ import {
   Alert,
   Image,
   ImageBackground,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -229,7 +232,7 @@ function resubmitShortcutsForReasonCode(reasonCode) {
     case "club_guidelines":
       return [
         { label: "Rewrite caption", text: "Rewritten caption: " },
-        { label: "Swap media", mediaAction: "library" }
+        { label: "Choose new media", mediaAction: "library" }
       ];
     default:
       return [];
@@ -536,6 +539,7 @@ export default function App() {
   async function resubmitSelectedSubmission() {
     if (!selectedSubmissionDetail) return;
 
+    Keyboard.dismiss();
     setResubmittingDetail(true);
     try {
       const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
@@ -802,6 +806,7 @@ export default function App() {
     }
 
     setReviewActionInProgress(true);
+    Keyboard.dismiss();
     try {
       const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
       const actionLabel =
@@ -896,6 +901,14 @@ export default function App() {
     setActiveView("post");
   }
 
+  function replaceDraftMedia() {
+    Alert.alert("Replace media", "Retake the moment or choose a different file.", [
+      { text: "Retake", onPress: captureWithCamera },
+      { text: "Choose library", onPress: pickFromLibrary },
+      { text: "Cancel", style: "cancel" }
+    ]);
+  }
+
   function clearDraft() {
     setAsset(null);
     setCaption("");
@@ -917,6 +930,7 @@ export default function App() {
   async function submit() {
     if (!asset) return;
 
+    Keyboard.dismiss();
     setSubmitting(true);
     setStatus("Requesting upload URL...");
 
@@ -988,7 +1002,10 @@ export default function App() {
     <SafeAreaProvider>
       <SafeAreaView style={styles.safeArea}>
         <StatusBar style="dark" />
-        <View style={styles.screen}>
+        <KeyboardAvoidingView
+          style={styles.screen}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
         <LinearGradient
           colors={["#f4f0ff", "#ece8ff", "#eaf8ff"]}
           start={{ x: 0, y: 0 }}
@@ -1036,7 +1053,15 @@ export default function App() {
           </Pressable>
         </View>
 
-        <ScrollView contentContainerStyle={styles.container}>
+        <ScrollView
+          automaticallyAdjustKeyboardInsets
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[
+            styles.container,
+            asset && styles.containerWithKeyboardBuffer
+          ]}
+        >
           {activeView === "post" ? (
             <>
               {!asset ? (
@@ -1179,16 +1204,22 @@ export default function App() {
 
                     <TextInput
                       multiline
+                      blurOnSubmit
+                      enablesReturnKeyAutomatically
+                      returnKeyType="send"
                       style={styles.captionInput}
                       value={caption}
                       onChangeText={setCaption}
+                      onSubmitEditing={() => {
+                        if (canSubmit && !submitting) submit();
+                      }}
                       placeholder="Add a short caption if it helps."
                       placeholderTextColor="#8f908c"
                     />
 
                     <View style={styles.submitRow}>
-                      <Pressable style={styles.inlineButton} onPress={pickFromLibrary}>
-                        <Text style={styles.inlineButtonText}>Swap media</Text>
+                      <Pressable style={styles.inlineButton} onPress={replaceDraftMedia}>
+                        <Text style={styles.inlineButtonText}>Retake/select new</Text>
                       </Pressable>
                       <Pressable
                         disabled={!canSubmit || submitting}
@@ -1536,7 +1567,7 @@ export default function App() {
             </>
           )}
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
 
       <Modal visible={settingsVisible} animationType="slide" transparent onRequestClose={() => setSettingsVisible(false)}>
         <View style={styles.modalBackdrop}>
@@ -1901,9 +1932,21 @@ export default function App() {
                         {reviewActionEditorVisible ? (
                           <TextInput
                             multiline
+                            blurOnSubmit
+                            enablesReturnKeyAutomatically
+                            returnKeyType="send"
                             style={styles.detailResubmitInput}
                             value={reviewActionNotes}
                             onChangeText={setReviewActionNotes}
+                            onSubmitEditing={() => {
+                              if (
+                                roleAccess.canReview &&
+                                !reviewActionInProgress &&
+                                (reviewAction === "approve" || reviewActionNotes.trim())
+                              ) {
+                                submitReviewAction();
+                              }
+                            }}
                             placeholder="Add a short note."
                             placeholderTextColor="#8f908c"
                           />
@@ -1975,9 +2018,17 @@ export default function App() {
                     ) : null}
                     <TextInput
                       multiline
+                      blurOnSubmit
+                      enablesReturnKeyAutomatically
+                      returnKeyType="send"
                       style={styles.detailResubmitInput}
                       value={resubmissionText}
                       onChangeText={setResubmissionText}
+                      onSubmitEditing={() => {
+                        if (!resubmittingDetail && resubmissionText.trim()) {
+                          resubmitSelectedSubmission();
+                        }
+                      }}
                       placeholder="Add the missing detail here."
                       placeholderTextColor="#8f908c"
                     />
@@ -2123,6 +2174,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 28,
     gap: 18
+  },
+  containerWithKeyboardBuffer: {
+    paddingBottom: 180
   },
   captureStage: {
     overflow: "hidden",
@@ -2442,9 +2496,12 @@ const styles = StyleSheet.create({
   },
   submitRow: {
     flexDirection: "row",
-    gap: 10
+    gap: 10,
+    alignItems: "stretch"
   },
   inlineButton: {
+    flexShrink: 1,
+    minWidth: 132,
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderRadius: 22,
@@ -2454,7 +2511,8 @@ const styles = StyleSheet.create({
   },
   inlineButtonText: {
     color: "#5e5894",
-    fontWeight: "800"
+    fontWeight: "800",
+    textAlign: "center"
   },
   submitButton: {
     flex: 1,
