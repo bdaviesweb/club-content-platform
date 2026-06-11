@@ -5,6 +5,10 @@ import {
   submissionEvents
 } from "../../../packages/shared/src/index.js";
 import { draftCaption, scoreRisk, summarizeReview } from "./fallback-review.js";
+import {
+  hasHermesReviewAgent,
+  runHermesReviewAgent
+} from "./hermes-review.js";
 import { hasOpenAI, runModeration, runStructuredReview } from "./openai.js";
 
 export function chooseApproverRole(submission) {
@@ -56,7 +60,7 @@ function riskLevelToScore(riskLevel) {
   }
 }
 
-async function buildReviewArtifacts(submission) {
+export async function buildReviewArtifacts(submission) {
   const buildFallbackArtifacts = () => {
     const fallbackRiskScore = scoreRisk(submission.raw_text || "");
     return {
@@ -84,40 +88,84 @@ async function buildReviewArtifacts(submission) {
     };
   };
 
+  const buildOpenAIArtifacts = async (summaryPrefix = "") => {
+    try {
+      const moderation = await runModeration(submission.raw_text || "");
+      const structured = await runStructuredReview({
+        rawText: submission.raw_text || "",
+        visibilityTarget: submission.visibility_target,
+        contentType: submission.content_type
+      });
+      const review = structured.review || {};
+      const riskScore = moderation.flagged
+        ? Math.max(riskLevelToScore(review.risk_level), 0.8)
+        : riskLevelToScore(review.risk_level);
+
+      return {
+        mode: "openai",
+        riskScore,
+        summary: `${summaryPrefix}${review.summary || "AI review completed."}`,
+        captionDraft:
+          review.caption_draft ||
+          draftCaption(submission.raw_text || "", submission.submitter_name),
+        moderation,
+        structured,
+        findings: Array.isArray(review.findings) ? review.findings : []
+      };
+    } catch (error) {
+      const fallback = buildFallbackArtifacts();
+      return {
+        ...fallback,
+        summary: `${fallback.summary} ${summaryPrefix}OpenAI review unavailable; local fallback used.`
+      };
+    }
+  };
+
+  if (hasHermesReviewAgent()) {
+    try {
+      const structured = await runHermesReviewAgent({
+        rawText: submission.raw_text || "",
+        visibilityTarget: submission.visibility_target,
+        contentType: submission.content_type,
+        submitterName: submission.submitter_name
+      });
+      const review = structured.review || {};
+      const riskScore = riskLevelToScore(review.risk_level);
+
+      return {
+        mode: "hermes",
+        riskScore,
+        summary: review.summary || "Hermes review completed.",
+        captionDraft:
+          review.caption_draft ||
+          draftCaption(submission.raw_text || "", submission.submitter_name),
+        moderation: {
+          model: structured.model,
+          flagged: riskScore >= reviewThresholds.highRisk,
+          categories: {},
+          categoryScores: {}
+        },
+        structured,
+        findings: Array.isArray(review.findings) ? review.findings : []
+      };
+    } catch (error) {
+      const fallback = buildFallbackArtifacts();
+      if (hasOpenAI()) {
+        return buildOpenAIArtifacts("Hermes review unavailable; ");
+      }
+
+      return {
+        ...fallback,
+        summary: `${fallback.summary} Hermes review unavailable; local fallback used.`
+      };
+    }
+  }
+
   if (!hasOpenAI()) {
     return buildFallbackArtifacts();
   }
 
-  try {
-    const moderation = await runModeration(submission.raw_text || "");
-    const structured = await runStructuredReview({
-      rawText: submission.raw_text || "",
-      visibilityTarget: submission.visibility_target,
-      contentType: submission.content_type
-    });
-    const review = structured.review || {};
-    const riskScore = moderation.flagged
-      ? Math.max(riskLevelToScore(review.risk_level), 0.8)
-      : riskLevelToScore(review.risk_level);
-
-    return {
-      mode: "openai",
-      riskScore,
-      summary: review.summary || "AI review completed.",
-      captionDraft:
-        review.caption_draft ||
-        draftCaption(submission.raw_text || "", submission.submitter_name),
-      moderation,
-      structured,
-      findings: Array.isArray(review.findings) ? review.findings : []
-    };
-  } catch (error) {
-    const fallback = buildFallbackArtifacts();
-    return {
-      ...fallback,
-      summary: `${fallback.summary} OpenAI review unavailable; local fallback used.`
-    };
-  }
+  return buildOpenAIArtifacts();
 }
 
 export async function processSubmissionCreated(client, eventRow) {
