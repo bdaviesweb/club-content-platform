@@ -10,6 +10,8 @@ import crypto from "node:crypto";
 const bucketName = process.env.S3_BUCKET || "club-content";
 const internalEndpoint = process.env.S3_ENDPOINT;
 const publicEndpoint = process.env.S3_PUBLIC_BASE_URL || internalEndpoint;
+const maxUploadFiles = 6;
+const allowedMediaTypes = new Set(["photo", "video"]);
 
 let internalClient;
 let signingClient;
@@ -53,7 +55,89 @@ export async function ensureBucket() {
 }
 
 function sanitizeFilename(filename = "upload.bin") {
-  return filename.replace(/[^a-zA-Z0-9._-]/g, "-");
+  const sanitized = String(filename || "upload.bin").replace(/[^a-zA-Z0-9._-]/g, "-");
+  return sanitized.replace(/^[.-]+|[.-]+$/g, "") || "upload.bin";
+}
+
+function sanitizePathSegment(value, fallback) {
+  const sanitized = String(value || fallback).replace(/[^a-zA-Z0-9._-]/g, "-");
+  return sanitized.replace(/^[.-]+|[.-]+$/g, "") || fallback;
+}
+
+function normalizeRequiredString(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+export function validateUploadRequest(body = {}) {
+  const clubSlug = normalizeRequiredString(body.clubSlug);
+
+  if (!clubSlug || !Array.isArray(body.files) || !body.files.length) {
+    return {
+      valid: false,
+      error: "clubSlug and a non-empty files array are required"
+    };
+  }
+
+  if (body.files.length > maxUploadFiles) {
+    return {
+      valid: false,
+      error: `At most ${maxUploadFiles} files can be signed at once`
+    };
+  }
+
+  const files = [];
+  for (const [index, file] of body.files.entries()) {
+    const mediaType = normalizeRequiredString(file?.mediaType).toLowerCase();
+    const mimeType = normalizeRequiredString(file?.mimeType).toLowerCase();
+    const filename = normalizeRequiredString(file?.filename);
+
+    if (!allowedMediaTypes.has(mediaType)) {
+      return {
+        valid: false,
+        error: `files[${index}].mediaType must be photo or video`
+      };
+    }
+
+    if (!mimeType || !mimeType.startsWith(`${mediaType === "photo" ? "image" : "video"}/`)) {
+      return {
+        valid: false,
+        error: `files[${index}].mimeType must match the media type`
+      };
+    }
+
+    if (!filename) {
+      return {
+        valid: false,
+        error: `files[${index}].filename is required`
+      };
+    }
+
+    files.push({ mediaType, mimeType, filename });
+  }
+
+  return {
+    valid: true,
+    value: {
+      clubSlug,
+      files
+    }
+  };
+}
+
+export function buildUploadObjectKey({
+  clubSlug,
+  filename,
+  timestamp = Date.now(),
+  id = crypto.randomUUID()
+}) {
+  const safeFilename = sanitizeFilename(filename);
+  const safeClubSlug = sanitizePathSegment(clubSlug, "unknown-club");
+
+  return [
+    "uploads",
+    safeClubSlug,
+    `${timestamp}-${id}-${safeFilename}`
+  ].join("/");
 }
 
 export async function createUploadPlan({
@@ -62,12 +146,7 @@ export async function createUploadPlan({
   mimeType,
   filename
 }) {
-  const safeFilename = sanitizeFilename(filename);
-  const objectKey = [
-    "uploads",
-    clubSlug || "unknown-club",
-    `${Date.now()}-${crypto.randomUUID()}-${safeFilename}`
-  ].join("/");
+  const objectKey = buildUploadObjectKey({ clubSlug, filename });
 
   const command = new PutObjectCommand({
     Bucket: bucketName,
