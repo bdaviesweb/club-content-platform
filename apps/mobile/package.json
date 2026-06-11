@@ -11,8 +11,8 @@
     "test": "node pushRegistration.test.js",
     "doctor": "npx expo-doctor",
     "export:ios": "npx expo export --platform ios --clear",
-    "testflight:build": "npx eas build --platform ios --profile production",
-    "testflight:submit": "npx eas submit --platform ios --profile production"
+    "testflight:build": "npx -y eas-cli@latest build --platform ios --profile production",
+    "testflight:submit": "npx -y eas-cli@latest submit --platform ios --profile production"
   },
   "dependencies": {
     "expo": "~54.0.35",
