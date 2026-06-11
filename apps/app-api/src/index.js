@@ -14,7 +14,11 @@ import {
   submissionEvents
 } from "../../../packages/shared/src/index.js";
 import { loadAuthorizedApprovalActor } from "./approval-authorization.js";
-import { buildPublicObjectUrl, createUploadPlan } from "./storage.js";
+import {
+  buildPublicObjectUrl,
+  createUploadPlan,
+  validateUploadRequest
+} from "./storage.js";
 import {
   maskPushToken,
   registerPushToken
@@ -357,15 +361,14 @@ async function handleCreateSubmission(req, res) {
 
 async function handleCreateUploadPlan(req, res) {
   const body = await readJson(req);
-  const { clubSlug, files } = body;
+  const validation = validateUploadRequest(body);
 
-  if (!clubSlug || !Array.isArray(files) || !files.length) {
-    sendJson(res, 400, {
-      error: "clubSlug and a non-empty files array are required"
-    });
+  if (!validation.valid) {
+    sendJson(res, 400, { error: validation.error });
     return;
   }
 
+  const { clubSlug, files } = validation.value;
   const plans = await Promise.all(
     files.map(async (file) =>
       createUploadPlan({
