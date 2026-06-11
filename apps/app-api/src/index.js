@@ -13,6 +13,7 @@ import {
   createAndDeliverNotification,
   submissionEvents
 } from "../../../packages/shared/src/index.js";
+import { loadAuthorizedApprovalActor } from "./approval-authorization.js";
 import { buildPublicObjectUrl, createUploadPlan } from "./storage.js";
 import {
   maskPushToken,
@@ -843,29 +844,25 @@ async function handleApprovalAction(req, res, approvalRequestId) {
   }
 
   const result = await withTransaction(async (client) => {
-    const approvalRequest = await client.query(
-      `
-      SELECT ar.*, s.club_id, s.id AS submission_id, s.submitted_by_user_id
-      FROM approval_requests ar
-      JOIN submissions s ON s.id = ar.submission_id
-      WHERE ar.id = $1
-      FOR UPDATE
-      `,
-      [approvalRequestId]
+    const authorization = await loadAuthorizedApprovalActor(
+      client,
+      approvalRequestId,
+      actedByEmail
     );
 
-    if (!approvalRequest.rowCount) {
+    if (!authorization.found) {
       return null;
     }
 
-    const actor = await client.query(
-      `SELECT id FROM users WHERE email = $1`,
-      [actedByEmail]
-    );
-
-    if (!actor.rowCount) {
-      throw new Error(`Unknown actedByEmail: ${actedByEmail}`);
+    if (!authorization.authorized) {
+      return {
+        authorizationError: true,
+        status: authorization.status,
+        error: authorization.error
+      };
     }
+
+    const { actor, approvalRequest } = authorization;
 
     const stateMap = {
       approve: "approved",
@@ -898,7 +895,7 @@ async function handleApprovalAction(req, res, approvalRequestId) {
       )
       VALUES ($1, $2, $3, $4)
       `,
-      [approvalRequestId, actor.rows[0].id, normalizedAction, notes || null]
+      [approvalRequestId, actor.id, normalizedAction, notes || null]
     );
 
     await client.query(
@@ -907,7 +904,7 @@ async function handleApprovalAction(req, res, approvalRequestId) {
       SET status = $2, updated_at = NOW()
       WHERE id = $1
       `,
-      [approvalRequest.rows[0].submission_id, submissionStatusMap[normalizedAction]]
+      [approvalRequest.submission_id, submissionStatusMap[normalizedAction]]
     );
 
     if (normalizedAction === "approve") {
@@ -917,7 +914,7 @@ async function handleApprovalAction(req, res, approvalRequestId) {
         VALUES ($1, $2, $3::jsonb)
         `,
         [
-          approvalRequest.rows[0].submission_id,
+          approvalRequest.submission_id,
           submissionEvents.approved,
           JSON.stringify({ approvalRequestId })
         ]
@@ -930,7 +927,7 @@ async function handleApprovalAction(req, res, approvalRequestId) {
       VALUES ($1, 'approval_request', $2, $3, $4::jsonb)
       `,
       [
-        actor.rows[0].id,
+        actor.id,
         approvalRequestId,
         normalizedAction,
         JSON.stringify({ notes: notes || null, reasonCode: reasonCode || null })
@@ -939,19 +936,19 @@ async function handleApprovalAction(req, res, approvalRequestId) {
 
     if (normalizedAction !== "approve") {
       await createAndDeliverNotification(client, {
-        userId: approvalRequest.rows[0].submitted_by_user_id,
+        userId: approvalRequest.submitted_by_user_id,
         type:
           normalizedAction === "reject"
             ? "submission_rejected"
             : "submission_changes_requested",
         payload: {
-          submissionId: approvalRequest.rows[0].submission_id,
+          submissionId: approvalRequest.submission_id,
           approvalRequestId,
           action: normalizedAction,
           notes: notes || null,
           reasonCode: reasonCode || null
         },
-        actorUserId: actor.rows[0].id
+        actorUserId: actor.id
       });
     }
 
@@ -960,6 +957,11 @@ async function handleApprovalAction(req, res, approvalRequestId) {
 
   if (!result) {
     sendNotFound(res);
+    return;
+  }
+
+  if (result.authorizationError) {
+    sendJson(res, result.status || 403, { error: result.error });
     return;
   }
 

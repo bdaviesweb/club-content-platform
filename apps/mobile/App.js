@@ -19,6 +19,7 @@ import {
 } from "react-native";
 
 const { registerPushToken } = require("./pushRegistration");
+const { buildMobileRolePolicy, submitterMode } = require("./rolePolicy");
 
 const defaultConfig = {
   apiBaseUrl:
@@ -28,7 +29,8 @@ const defaultConfig = {
   submitterEmail:
     process.env.EXPO_PUBLIC_SUBMITTER_EMAIL || "clubhqpro@gmail.com",
   reviewerEmail:
-    process.env.EXPO_PUBLIC_REVIEWER_EMAIL || "reviewer@demo-club.local"
+    process.env.EXPO_PUBLIC_REVIEWER_EMAIL || "reviewer@demo-club.local",
+  roleMode: process.env.EXPO_PUBLIC_MOBILE_ROLE || submitterMode
 };
 
 const progressStages = [
@@ -350,6 +352,7 @@ export default function App() {
   const [teamSlug, setTeamSlug] = useState(defaultConfig.teamSlug);
   const [submitterEmail, setSubmitterEmail] = useState(defaultConfig.submitterEmail);
   const [reviewerEmail, setReviewerEmail] = useState(defaultConfig.reviewerEmail);
+  const [roleMode, setRoleMode] = useState(defaultConfig.roleMode);
   const [caption, setCaption] = useState("");
   const [visibilityTarget, setVisibilityTarget] = useState("internal");
   const [asset, setAsset] = useState(null);
@@ -381,17 +384,27 @@ export default function App() {
   const [reviewActionInProgress, setReviewActionInProgress] = useState(false);
   const [reviewActionStatus, setReviewActionStatus] = useState("Pick a review item to get started.");
 
+  const roleAccess = useMemo(
+    () =>
+      buildMobileRolePolicy({
+        mode: roleMode,
+        submitterEmail,
+        reviewerEmail
+      }),
+    [roleMode, submitterEmail, reviewerEmail]
+  );
+
   const canSubmit = useMemo(() => {
-    return Boolean(asset && apiBaseUrl.trim() && clubSlug.trim() && submitterEmail.trim());
-  }, [asset, apiBaseUrl, clubSlug, submitterEmail]);
+    return Boolean(asset && apiBaseUrl.trim() && clubSlug.trim() && roleAccess.canSubmit);
+  }, [asset, apiBaseUrl, clubSlug, roleAccess.canSubmit]);
 
   const canLoadRecent = useMemo(() => {
-    return Boolean(apiBaseUrl.trim() && clubSlug.trim() && submitterEmail.trim());
-  }, [apiBaseUrl, clubSlug, submitterEmail]);
+    return Boolean(apiBaseUrl.trim() && clubSlug.trim() && roleAccess.canTrackSubmissions);
+  }, [apiBaseUrl, clubSlug, roleAccess.canTrackSubmissions]);
 
   const canReview = useMemo(() => {
-    return Boolean(apiBaseUrl.trim() && reviewerEmail.trim());
-  }, [apiBaseUrl, reviewerEmail]);
+    return Boolean(apiBaseUrl.trim() && roleAccess.canReview);
+  }, [apiBaseUrl, roleAccess.canReview]);
 
   const unreadNotificationCount = useMemo(() => {
     return notifications.filter((item) => !item.readAt).length;
@@ -413,6 +426,15 @@ export default function App() {
     );
   }, [selectedSubmissionDetail]);
 
+  useEffect(() => {
+    if (activeView !== "review" || roleAccess.showReviewTools) return;
+    setActiveView("post");
+    setSelectedSubmissionId(null);
+    setSelectedSubmissionDetail(null);
+    setReviewQueue([]);
+    resetReviewActionState();
+  }, [activeView, roleAccess.showReviewTools]);
+
   async function loadRecentSubmissions() {
     if (!canLoadRecent) {
       setRecentSubmissions([]);
@@ -425,7 +447,7 @@ export default function App() {
     try {
       const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
       const query = new URLSearchParams({
-        submitterEmail: submitterEmail.trim(),
+        submitterEmail: roleAccess.submitterEmail,
         clubSlug: clubSlug.trim(),
         limit: "8"
       });
@@ -454,7 +476,7 @@ export default function App() {
     try {
       const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
       const query = new URLSearchParams({
-        userEmail: submitterEmail.trim(),
+        userEmail: roleAccess.notificationEmail,
         limit: "8"
       });
       const response = await fetch(`${baseUrl}/notifications?${query.toString()}`);
@@ -494,7 +516,7 @@ export default function App() {
       const response = await fetch(`${baseUrl}/notifications/${notificationId}/read`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ userEmail: submitterEmail.trim() })
+        body: JSON.stringify({ userEmail: roleAccess.notificationEmail })
       });
       if (!response.ok) throw new Error(`Mark read failed: ${response.status}`);
       setNotifications((current) =>
@@ -557,7 +579,7 @@ export default function App() {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            submitterEmail: submitterEmail.trim(),
+            submitterEmail: roleAccess.submitterEmail,
             rawText: resubmissionText.trim(),
             visibilityTarget: selectedSubmissionDetail.visibility_target,
             media: resubmissionMedia
@@ -645,7 +667,7 @@ export default function App() {
       refreshStatusFeed();
     }, 20000);
     return () => clearInterval(intervalId);
-  }, [canLoadRecent, apiBaseUrl, clubSlug, teamSlug, submitterEmail]);
+  }, [canLoadRecent, apiBaseUrl, clubSlug, teamSlug, roleAccess.submitterEmail]);
 
   useEffect(() => {
     if (!canLoadRecent) {
@@ -658,7 +680,7 @@ export default function App() {
     async function registerForPush() {
       const result = await registerPushToken({
         apiBaseUrl: apiBaseUrl.trim(),
-        userEmail: submitterEmail.trim()
+        userEmail: roleAccess.notificationEmail
       });
 
       if (!isCurrent) return;
@@ -688,7 +710,7 @@ export default function App() {
     return () => {
       isCurrent = false;
     };
-  }, [canLoadRecent, apiBaseUrl, submitterEmail]);
+  }, [canLoadRecent, apiBaseUrl, roleAccess.notificationEmail]);
 
   useEffect(() => {
     if (!canReview) return;
@@ -698,7 +720,7 @@ export default function App() {
       loadReviewQueue();
     }, 20000);
     return () => clearInterval(intervalId);
-  }, [canReview, apiBaseUrl, reviewerEmail, activeView]);
+  }, [canReview, apiBaseUrl, roleAccess.reviewActorEmail, activeView]);
 
   async function loadReviewQueue() {
     if (!canReview) {
@@ -759,12 +781,18 @@ export default function App() {
   }
 
   async function openReviewItem(submissionId) {
+    if (!roleAccess.showReviewTools) return;
     setActiveView("review");
     await loadSubmissionDetail(submissionId);
     resetReviewActionState();
   }
 
   async function submitReviewAction() {
+    if (!roleAccess.canReview) {
+      Alert.alert("Reviewer mode required", "Switch this device to reviewer mode before approving posts.");
+      return;
+    }
+
     const approvalRequestId = selectedSubmissionDetail?.latestApprovalRequest?.id;
     if (!approvalRequestId) return;
 
@@ -788,7 +816,7 @@ export default function App() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           action: reviewAction,
-          actedByEmail: reviewerEmail.trim(),
+          actedByEmail: roleAccess.reviewActorEmail,
           notes: reviewAction === "approve" ? null : reviewActionNotes.trim(),
           reasonCode: reviewActionReasonCode
         })
@@ -926,7 +954,7 @@ export default function App() {
         body: JSON.stringify({
           clubSlug,
           teamSlug,
-          submitterEmail,
+          submitterEmail: roleAccess.submitterEmail,
           contentType,
           rawText: caption.trim(),
           visibilityTarget,
@@ -974,7 +1002,7 @@ export default function App() {
         <View style={styles.chromeBar}>
           <View>
             <Text style={styles.appName}>Club Content</Text>
-            <Text style={styles.appSubtitle}>Post fast. Track clearly.</Text>
+            <Text style={styles.appSubtitle}>{roleAccess.label} workspace</Text>
           </View>
           <Pressable style={styles.settingsButton} onPress={() => setSettingsVisible(true)}>
             <Text style={styles.settingsButtonText}>Settings</Text>
@@ -988,14 +1016,16 @@ export default function App() {
           >
             <Text style={[styles.segmentText, activeView === "post" && styles.segmentTextActive]}>Post</Text>
           </Pressable>
-          <Pressable
-            style={[styles.segmentButton, activeView === "review" && styles.segmentButtonActive]}
-            onPress={() => setActiveView("review")}
-          >
-            <Text style={[styles.segmentText, activeView === "review" && styles.segmentTextActive]}>
-              Review{reviewQueue.length ? ` (${reviewQueue.length})` : ""}
-            </Text>
-          </Pressable>
+          {roleAccess.showReviewTools ? (
+            <Pressable
+              style={[styles.segmentButton, activeView === "review" && styles.segmentButtonActive]}
+              onPress={() => setActiveView("review")}
+            >
+              <Text style={[styles.segmentText, activeView === "review" && styles.segmentTextActive]}>
+                Review{reviewQueue.length ? ` (${reviewQueue.length})` : ""}
+              </Text>
+            </Pressable>
+          ) : null}
           <Pressable
             style={[styles.segmentButton, activeView === "status" && styles.segmentButtonActive]}
             onPress={() => setActiveView("status")}
@@ -1190,7 +1220,7 @@ export default function App() {
                 ) : null}
               </View>
             </>
-          ) : activeView === "review" ? (
+          ) : activeView === "review" && roleAccess.showReviewTools ? (
             <>
               <View style={styles.statusHeroCard}>
                 <GlassLayer />
@@ -1218,7 +1248,7 @@ export default function App() {
                   </View>
                 </View>
                 <Text style={styles.reviewQueueHint}>
-                  {reviewerEmail.trim() ? `Signed in as ${reviewerEmail.trim()}.` : "Add your reviewer email in Settings to use this view."}
+                  {roleAccess.reviewActorEmail ? `Signed in as ${roleAccess.reviewActorEmail}.` : "Add your reviewer email in Settings to use this view."}
                 </Text>
               </View>
 
@@ -1515,11 +1545,43 @@ export default function App() {
             <View style={styles.sectionHeader}>
               <View>
                 <Text style={styles.sectionKicker}>Settings</Text>
-                <Text style={styles.sectionTitle}>Your posting setup</Text>
+                <Text style={styles.sectionTitle}>Your workspace setup</Text>
               </View>
               <Pressable onPress={() => setSettingsVisible(false)}>
                 <Text style={styles.closeButtonText}>Done</Text>
               </Pressable>
+            </View>
+
+            <View style={styles.settingsCard}>
+              <GlassLayer />
+              <Text style={styles.settingsLabel}>Device role</Text>
+              <View style={styles.audienceRow}>
+                {[
+                  { key: "submitter", label: "Submitter" },
+                  { key: "reviewer", label: "Reviewer" }
+                ].map((option) => (
+                  <Pressable
+                    key={option.key}
+                    style={[
+                      styles.audiencePill,
+                      roleAccess.mode === option.key && styles.audiencePillActive
+                    ]}
+                    onPress={() => setRoleMode(option.key)}
+                  >
+                    <Text
+                      style={[
+                        styles.audiencePillText,
+                        roleAccess.mode === option.key && styles.audiencePillTextActive
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={styles.advancedHelpText}>
+                Submitters post and track their own content. Reviewers approve or send content back.
+              </Text>
             </View>
 
             <View style={styles.settingsCard}>
@@ -1534,20 +1596,22 @@ export default function App() {
               />
             </View>
 
-            <View style={styles.settingsCard}>
-              <GlassLayer />
-              <Text style={styles.settingsLabel}>Reviewer email</Text>
-              <TextInput
-                autoCapitalize="none"
-                style={styles.input}
-                value={reviewerEmail}
-                onChangeText={setReviewerEmail}
-                placeholder="Reviewer email"
-              />
-              <Text style={styles.advancedHelpText}>
-                Used when you open the review tab on this device.
-              </Text>
-            </View>
+            {roleAccess.showReviewTools ? (
+              <View style={styles.settingsCard}>
+                <GlassLayer />
+                <Text style={styles.settingsLabel}>Reviewer email</Text>
+                <TextInput
+                  autoCapitalize="none"
+                  style={styles.input}
+                  value={reviewerEmail}
+                  onChangeText={setReviewerEmail}
+                  placeholder="Reviewer email"
+                />
+                <Text style={styles.advancedHelpText}>
+                  Used only for approval actions in reviewer mode.
+                </Text>
+              </View>
+            ) : null}
 
             <View style={styles.settingsCard}>
               <GlassLayer />
@@ -1768,7 +1832,7 @@ export default function App() {
                   </>
                 ) : null}
 
-                {activeView === "review" && selectedSubmissionDetail.latestApprovalRequest?.state === "pending" ? (
+                {activeView === "review" && roleAccess.canReview && selectedSubmissionDetail.latestApprovalRequest?.state === "pending" ? (
                   <View style={styles.reviewActionPanel}>
                     <Text style={styles.detailHeading}>Quick review</Text>
                     <Text style={styles.reviewActionTitle}>Pick the action, then keep moving.</Text>
