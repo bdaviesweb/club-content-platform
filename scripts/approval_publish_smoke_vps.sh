@@ -10,20 +10,42 @@ SUBMITTER_EMAIL="${SUBMITTER_EMAIL:-coach@demo-club.local}"
 REVIEWER_EMAIL="${REVIEWER_EMAIL:-comms@demo-club.local}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-300}"
 POLL_SECONDS="${POLL_SECONDS:-3}"
+SMOKE_MARKER="${SMOKE_MARKER:-approval-publish-smoke-$(date -u +%Y%m%dT%H%M%SZ)-${RANDOM}}"
 
-SMOKE_MARKER="approval-publish-smoke-$(date -u +%Y%m%dT%H%M%SZ)-${RANDOM}"
+shell_quote() {
+  printf "%q" "$1"
+}
 
-ssh "${REMOTE_HOST}" /bin/bash <<INNER
-set -euo pipefail
+if [[ "${CLUB_CONTENT_SMOKE_ON_VPS:-0}" != "1" ]]; then
+  current_dir="$(pwd -P)"
 
-cd '${REMOTE_DIR}'
+  if [[ "${current_dir}" != "${REMOTE_DIR}" || ! -f "${COMPOSE_FILE}" ]]; then
+    remote_dir_quoted="$(shell_quote "${REMOTE_DIR}")"
+    remote_command=$(
+      printf "cd %s && CLUB_CONTENT_SMOKE_ON_VPS=1 COMPOSE_FILE=%s CLUB_SLUG=%s TEAM_SLUG=%s SUBMITTER_EMAIL=%s REVIEWER_EMAIL=%s TIMEOUT_SECONDS=%s POLL_SECONDS=%s SMOKE_MARKER=%s bash -s" \
+        "${remote_dir_quoted}" \
+        "$(shell_quote "${COMPOSE_FILE}")" \
+        "$(shell_quote "${CLUB_SLUG}")" \
+        "$(shell_quote "${TEAM_SLUG}")" \
+        "$(shell_quote "${SUBMITTER_EMAIL}")" \
+        "$(shell_quote "${REVIEWER_EMAIL}")" \
+        "$(shell_quote "${TIMEOUT_SECONDS}")" \
+        "$(shell_quote "${POLL_SECONDS}")" \
+        "$(shell_quote "${SMOKE_MARKER}")"
+    )
+
+    exec ssh "${REMOTE_HOST}" "${remote_command}" < "$0"
+  fi
+
+  export CLUB_CONTENT_SMOKE_ON_VPS=1
+fi
 
 compose() {
-  docker compose -f '${COMPOSE_FILE}' "\$@" </dev/null
+  docker compose -f "${COMPOSE_FILE}" "$@" </dev/null
 }
 
 query_one() {
-  compose exec -T postgres psql -U club -d club_content -At -F '|' -c "\$1"
+  compose exec -T postgres psql -U club -d club_content -At -F '|' -c "$1"
 }
 
 echo "Checking API health..."
@@ -33,14 +55,14 @@ echo
 echo "Creating approval publish smoke submission: ${SMOKE_MARKER}"
 curl -fsS \
   -H "content-type: application/json" \
-  -d '{"clubSlug":"${CLUB_SLUG}","teamSlug":"${TEAM_SLUG}","submitterEmail":"${SUBMITTER_EMAIL}","contentType":"photo","visibilityTarget":"internal","rawText":"${SMOKE_MARKER}","media":[]}' \
+  -d '{"clubSlug":"'"${CLUB_SLUG}"'","teamSlug":"'"${TEAM_SLUG}"'","submitterEmail":"'"${SUBMITTER_EMAIL}"'","contentType":"photo","visibilityTarget":"internal","rawText":"'"${SMOKE_MARKER}"'","media":[]}' \
   http://localhost:4000/submissions >/dev/null
 
 submission_id=""
 approval_request_id=""
-deadline=\$((SECONDS + ${TIMEOUT_SECONDS}))
+deadline=$((SECONDS + TIMEOUT_SECONDS))
 while (( SECONDS < deadline )); do
-  row=\$(query_one "
+  row=$(query_one "
     SELECT
       s.id,
       s.status,
@@ -71,33 +93,33 @@ while (( SECONDS < deadline )); do
     LIMIT 1;
   ")
 
-  if [[ -n "\${row}" ]]; then
-    IFS='|' read -r submission_id status approval_request_id approval_state review_mode model summary processing_error <<< "\${row}"
+  if [[ -n "${row}" ]]; then
+    IFS='|' read -r submission_id status approval_request_id approval_state review_mode model summary processing_error <<< "${row}"
 
-    if [[ -n "\${processing_error}" ]]; then
-      echo "Worker failed before approval for submission \${submission_id}: \${processing_error}" >&2
+    if [[ -n "${processing_error}" ]]; then
+      echo "Worker failed before approval for submission ${submission_id}: ${processing_error}" >&2
       exit 1
     fi
 
-    if [[ -n "\${approval_request_id}" && "\${approval_state}" == "pending" ]]; then
+    if [[ -n "${approval_request_id}" && "${approval_state}" == "pending" ]]; then
       echo "Review ready."
-      echo "submission_id=\${submission_id}"
-      echo "approval_request_id=\${approval_request_id}"
-      echo "review_mode=\${review_mode}"
-      echo "model=\${model}"
-      echo "summary=\${summary}"
+      echo "submission_id=${submission_id}"
+      echo "approval_request_id=${approval_request_id}"
+      echo "review_mode=${review_mode}"
+      echo "model=${model}"
+      echo "summary=${summary}"
       break
     fi
 
-    echo "Waiting for approval request. status=\${status:-pending} review_mode=\${review_mode:-pending}"
+    echo "Waiting for approval request. status=${status:-pending} review_mode=${review_mode:-pending}"
   else
     echo "Waiting for smoke submission to appear..."
   fi
 
-  sleep '${POLL_SECONDS}'
+  sleep "${POLL_SECONDS}"
 done
 
-if [[ -z "\${approval_request_id}" ]]; then
+if [[ -z "${approval_request_id}" ]]; then
   echo "Timed out waiting for approval request on ${SMOKE_MARKER}." >&2
   exit 1
 fi
@@ -105,12 +127,12 @@ fi
 echo "Approving smoke submission..."
 curl -fsS \
   -H "content-type: application/json" \
-  -d '{"action":"approve","actedByEmail":"${REVIEWER_EMAIL}","notes":"Approval publish smoke."}' \
-  "http://localhost:4000/approval-requests/\${approval_request_id}/actions" >/dev/null
+  -d '{"action":"approve","actedByEmail":"'"${REVIEWER_EMAIL}"'","notes":"Approval publish smoke."}' \
+  "http://localhost:4000/approval-requests/${approval_request_id}/actions" >/dev/null
 
-deadline=\$((SECONDS + ${TIMEOUT_SECONDS}))
+deadline=$((SECONDS + TIMEOUT_SECONDS))
 while (( SECONDS < deadline )); do
-  row=\$(query_one "
+  row=$(query_one "
     SELECT
       s.status,
       COALESCE(ar.state::text, ''),
@@ -141,33 +163,32 @@ while (( SECONDS < deadline )); do
       ORDER BY created_at DESC
       LIMIT 1
     ) se ON TRUE
-    WHERE s.id = '\${submission_id}'
+    WHERE s.id = '${submission_id}'
     LIMIT 1;
   ")
 
-  IFS='|' read -r status approval_state publish_state result_summary external_post_id processing_error <<< "\${row}"
+  IFS='|' read -r status approval_state publish_state result_summary external_post_id processing_error <<< "${row}"
 
-  if [[ -n "\${processing_error}" ]]; then
-    echo "Worker failed after approval for submission \${submission_id}: \${processing_error}" >&2
+  if [[ -n "${processing_error}" ]]; then
+    echo "Worker failed after approval for submission ${submission_id}: ${processing_error}" >&2
     exit 1
   fi
 
-  if [[ "\${status}" == "published" && "\${approval_state}" == "approved" && "\${publish_state}" == "succeeded" && -n "\${external_post_id}" ]]; then
+  if [[ "${status}" == "published" && "${approval_state}" == "approved" && "${publish_state}" == "succeeded" && -n "${external_post_id}" ]]; then
     echo "Approval publish smoke passed."
-    echo "submission_id=\${submission_id}"
-    echo "approval_request_id=\${approval_request_id}"
-    echo "status=\${status}"
-    echo "approval_state=\${approval_state}"
-    echo "publish_state=\${publish_state}"
-    echo "external_post_id=\${external_post_id}"
-    echo "result_summary=\${result_summary}"
+    echo "submission_id=${submission_id}"
+    echo "approval_request_id=${approval_request_id}"
+    echo "status=${status}"
+    echo "approval_state=${approval_state}"
+    echo "publish_state=${publish_state}"
+    echo "external_post_id=${external_post_id}"
+    echo "result_summary=${result_summary}"
     exit 0
   fi
 
-  echo "Waiting for publish. status=\${status:-pending} approval_state=\${approval_state:-pending} publish_state=\${publish_state:-pending}"
-  sleep '${POLL_SECONDS}'
+  echo "Waiting for publish. status=${status:-pending} approval_state=${approval_state:-pending} publish_state=${publish_state:-pending}"
+  sleep "${POLL_SECONDS}"
 done
 
-echo "Timed out waiting for publish on submission \${submission_id}." >&2
+echo "Timed out waiting for publish on submission ${submission_id}." >&2
 exit 1
-INNER
