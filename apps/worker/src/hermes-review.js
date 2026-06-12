@@ -36,6 +36,17 @@ function normalizeRiskLevel(value) {
 }
 
 function normalizeConfidence(value) {
+  const label = normalizeOptionalString(value).toLowerCase();
+  if (label === "high") {
+    return 0.9;
+  }
+  if (label === "medium") {
+    return 0.65;
+  }
+  if (label === "low") {
+    return 0.35;
+  }
+
   const number = Number(value);
   if (!Number.isFinite(number)) {
     return 0.75;

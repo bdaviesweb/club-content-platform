@@ -140,17 +140,18 @@ test("normalizes Ollama generate review responses", () => {
     {
       response: JSON.stringify({
         risk_level: "low",
-        confidence: 0.86,
+        confidence: "medium",
         summary: "Safe team update.",
         caption_draft: "Great training session today.",
         findings: []
       })
     },
-    "qwen3:4b-instruct"
+    "llama3.2:3b-instruct-q4_K_M"
   );
 
-  assert.equal(result.model, "qwen3:4b-instruct");
+  assert.equal(result.model, "llama3.2:3b-instruct-q4_K_M");
   assert.equal(result.review.risk_level, "low");
+  assert.equal(result.review.confidence, 0.65);
   assert.equal(result.review.caption_draft, "Great training session today.");
 });
 
