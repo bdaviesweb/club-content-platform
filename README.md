@@ -275,6 +275,10 @@ seeded demo club/team. On startup it will:
 8. Open `http://localhost:3001` to use the admin review console.
 9. If `ADMIN_BASIC_AUTH_USER` and `ADMIN_BASIC_AUTH_PASSWORD` are set, the review console requires HTTP Basic Auth.
 
+On the VPS, run `TIMEOUT_SECONDS=300 ./scripts/approval_publish_smoke_vps.sh`
+after review or publishing changes to verify the full submission, AI review,
+approval, and internal publish chain.
+
 If `HERMES_REVIEW_AGENT_URL` is set, the worker sends new submissions to the
 configured AI review provider first. The deployed VPS can use local Ollama for a
 free, reliable review path:
