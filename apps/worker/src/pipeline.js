@@ -66,6 +66,11 @@ function buildPublishFailureSummary(error) {
   return `Publishing failed: ${message}`;
 }
 
+function buildReviewFallbackReason(provider, error) {
+  const message = error?.message || "unknown error";
+  return `${provider} review unavailable: ${message}`;
+}
+
 export async function buildReviewArtifacts(submission) {
   const buildFallbackArtifacts = () => {
     const fallbackRiskScore = scoreRisk(submission.raw_text || "");
@@ -120,9 +125,11 @@ export async function buildReviewArtifacts(submission) {
       };
     } catch (error) {
       const fallback = buildFallbackArtifacts();
+      const fallbackReason = buildReviewFallbackReason("OpenAI", error);
       return {
         ...fallback,
-        summary: `${fallback.summary} ${summaryPrefix}OpenAI review unavailable; local fallback used.`
+        fallbackReason,
+        summary: `${fallback.summary} ${summaryPrefix}${fallbackReason}; local fallback used.`
       };
     }
   };
@@ -156,13 +163,15 @@ export async function buildReviewArtifacts(submission) {
       };
     } catch (error) {
       const fallback = buildFallbackArtifacts();
+      const fallbackReason = buildReviewFallbackReason("Hermes", error);
       if (hasOpenAI()) {
-        return buildOpenAIArtifacts("Hermes review unavailable; ");
+        return buildOpenAIArtifacts(`${fallbackReason}; `);
       }
 
       return {
         ...fallback,
-        summary: `${fallback.summary} Hermes review unavailable; local fallback used.`
+        fallbackReason,
+        summary: `${fallback.summary} ${fallbackReason}; local fallback used.`
       };
     }
   }
@@ -248,7 +257,8 @@ export async function processSubmissionCreated(client, eventRow) {
         riskScore: reviewArtifacts.riskScore,
         rawText: submission.raw_text || "",
         moderation: reviewArtifacts.moderation,
-        structuredReview: reviewArtifacts.structured?.review || null
+        structuredReview: reviewArtifacts.structured?.review || null,
+        fallbackReason: reviewArtifacts.fallbackReason || null
       })
     ]
   );

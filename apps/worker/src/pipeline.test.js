@@ -75,6 +75,62 @@ test("builds review artifacts from Hermes when the agent is configured", async (
   }
 });
 
+test("records Hermes fallback reasons in review artifacts", async () => {
+  const originalUrl = process.env.HERMES_REVIEW_AGENT_URL;
+  const originalMode = process.env.HERMES_REVIEW_AGENT_MODE;
+  const originalApiKey = process.env.HERMES_REVIEW_AGENT_API_KEY;
+  const originalFetch = globalThis.fetch;
+
+  process.env.HERMES_REVIEW_AGENT_URL = "https://hermes.example.test/v1/responses";
+  process.env.HERMES_REVIEW_AGENT_MODE = "responses_api";
+  process.env.HERMES_REVIEW_AGENT_API_KEY = "secret";
+  globalThis.fetch = async () => ({
+    ok: true,
+    async json() {
+      return {
+        output_text:
+          "Error code: 402 - Prompt tokens limit exceeded: 27882 > 24585"
+      };
+    }
+  });
+
+  try {
+    const artifacts = await buildReviewArtifacts({
+      raw_text: "Simple team update.",
+      visibility_target: "internal",
+      content_type: "photo",
+      submitter_name: "Coach"
+    });
+
+    assert.equal(artifacts.mode, "fallback");
+    assert.match(
+      artifacts.fallbackReason,
+      /Hermes review unavailable: Hermes Responses API returned invalid review JSON/
+    );
+    assert.match(artifacts.summary, /Prompt tokens limit exceeded/);
+  } finally {
+    if (originalUrl === undefined) {
+      delete process.env.HERMES_REVIEW_AGENT_URL;
+    } else {
+      process.env.HERMES_REVIEW_AGENT_URL = originalUrl;
+    }
+
+    if (originalMode === undefined) {
+      delete process.env.HERMES_REVIEW_AGENT_MODE;
+    } else {
+      process.env.HERMES_REVIEW_AGENT_MODE = originalMode;
+    }
+
+    if (originalApiKey === undefined) {
+      delete process.env.HERMES_REVIEW_AGENT_API_KEY;
+    } else {
+      process.env.HERMES_REVIEW_AGENT_API_KEY = originalApiKey;
+    }
+
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("publishes approved submissions through the destination adapter", async () => {
   const queries = [];
   const notifications = [];
