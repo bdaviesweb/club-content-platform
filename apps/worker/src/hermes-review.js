@@ -97,6 +97,10 @@ function extractResponsesOutputText(payload = {}) {
     .trim();
 }
 
+function summarizeOutputText(value) {
+  return normalizeOptionalString(value).replace(/\s+/g, " ").slice(0, 220);
+}
+
 export function normalizeHermesResponsesApiResponse(payload = {}) {
   const outputText = extractResponsesOutputText(payload);
   if (!outputText) {
@@ -107,7 +111,9 @@ export function normalizeHermesResponsesApiResponse(payload = {}) {
   try {
     review = JSON.parse(outputText);
   } catch (error) {
-    throw new Error("Hermes Responses API returned invalid review JSON");
+    throw new Error(
+      `Hermes Responses API returned invalid review JSON: ${summarizeOutputText(outputText)}`
+    );
   }
 
   return normalizeHermesReviewResponse({

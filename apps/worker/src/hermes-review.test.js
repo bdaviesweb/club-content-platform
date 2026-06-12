@@ -134,6 +134,17 @@ test("normalizes Hermes Responses API output text", () => {
   assert.equal(result.review.findings[0].type, "privacy");
 });
 
+test("surfaces non-JSON Hermes Responses API output", () => {
+  assert.throws(
+    () =>
+      normalizeHermesResponsesApiResponse({
+        output_text:
+          "Error code: 402 - Prompt tokens limit exceeded: 27882 > 24585"
+      }),
+    /invalid review JSON: Error code: 402 - Prompt tokens limit exceeded/
+  );
+});
+
 test("posts review prompts to Hermes Responses API mode", async () => {
   const calls = [];
   const result = await runHermesReviewAgent(
