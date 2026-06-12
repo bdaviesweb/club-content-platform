@@ -975,7 +975,11 @@ async function handleApprovalAction(req, res, approvalRequestId) {
       });
     }
 
-    return { approvalRequestId, action: normalizedAction };
+    return {
+      approvalRequestId,
+      submissionId: approvalRequest.submission_id,
+      action: normalizedAction
+    };
   });
 
   if (!result) {

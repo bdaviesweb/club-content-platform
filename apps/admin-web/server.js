@@ -1773,6 +1773,39 @@ async function renderHome(activeId) {
         });
       }
 
+      async function waitForPublish(submissionId, status) {
+        if (!submissionId) {
+          status.textContent = 'Approved. Publish is running in the background.';
+          return true;
+        }
+
+        for (let attempt = 0; attempt < 10; attempt += 1) {
+          const response = await fetch('/ui/submissions/' + encodeURIComponent(submissionId));
+          if (!response.ok) {
+            status.textContent = 'Approved. Could not confirm publish yet.';
+            return true;
+          }
+
+          const submission = await response.json();
+          if (submission.status === 'published' && submission.publishedPost) {
+            status.textContent = 'Published to ' + submission.publishedPost.destinationName + '. Moving to the next item...';
+            return true;
+          }
+
+          if (submission.status === 'publish_failed') {
+            status.textContent = 'Approved, but publishing failed. Check Workflow Recovery.';
+            setButtonsDisabled(false);
+            return false;
+          }
+
+          status.textContent = 'Approved. Waiting for publish...';
+          await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        }
+
+        status.textContent = 'Approved. Publish is still processing; moving to the next item...';
+        return true;
+      }
+
       async function submitDecision(approvalRequestId) {
         const actedByEmail = document.getElementById('actedByEmail').value.trim();
         const notes = document.getElementById('notes').value.trim();
@@ -1814,11 +1847,17 @@ async function renderHome(activeId) {
         }
 
         showActionFeedback(selectedAction);
-        status.textContent = selectedAction === 'approve'
-          ? 'Approved. Moving to the next item...'
-          : selectedAction === 'request_changes'
+        if (selectedAction === 'approve') {
+          status.textContent = 'Approved. Waiting for publish...';
+          const shouldContinue = await waitForPublish(payload.submissionId, status);
+          if (!shouldContinue) {
+            return;
+          }
+        } else {
+          status.textContent = selectedAction === 'request_changes'
             ? 'Sent back. Moving to the next item...'
             : 'Rejected. Moving to the next item...';
+        }
 
         window.setTimeout(() => {
           window.location.href = nextQueueTarget(approvalRequestId);
@@ -1971,6 +2010,14 @@ const server = http.createServer(async (req, res) => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body)
       });
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(payload));
+      return;
+    }
+
+    if (req.method === "GET" && /^\/ui\/submissions\/[^/]+$/.test(url.pathname)) {
+      const submissionId = url.pathname.split("/")[3];
+      const payload = await fetchJson(`/submissions/${submissionId}`);
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify(payload));
       return;
