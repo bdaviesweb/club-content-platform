@@ -273,12 +273,33 @@ seeded demo club/team. On startup it will:
 8. Open `http://localhost:3001` to use the admin review console.
 9. If `ADMIN_BASIC_AUTH_USER` and `ADMIN_BASIC_AUTH_PASSWORD` are set, the review console requires HTTP Basic Auth.
 
-If `OPENAI_API_KEY` is set, the worker uses:
+If `HERMES_REVIEW_AGENT_URL` is set, the worker sends new submissions to that
+Hermes review agent first. The request body is:
+
+```json
+{
+  "agent": "club-content-review-agent",
+  "version": "0.1.0",
+  "input": {
+    "rawText": "Submission caption text",
+    "visibilityTarget": "internal",
+    "contentType": "photo",
+    "submitterName": "Demo Coach"
+  }
+}
+```
+
+The agent response may return the review fields at the top level, under
+`review`, or under `output`. The worker reads `risk_level`, `confidence`,
+`summary`, `caption_draft`, `review_required_reason`, and `findings`.
+
+If Hermes is not configured and `OPENAI_API_KEY` is set, the worker uses:
 
 - `POST /v1/moderations` for safety classification
 - `POST /v1/responses` for structured review and caption drafting
 
-If no API key is set, the worker falls back to local rule-based review so the flow still works in dev.
+If neither provider is configured, the worker falls back to local rule-based
+review so the flow still works in dev.
 
 ## Workflow Recovery
 
