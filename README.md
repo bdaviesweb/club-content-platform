@@ -67,7 +67,7 @@ Useful scripts:
 - `./scripts/deploy_vps.sh` - bootstrap or force-sync the repo to the VPS
 - `./scripts/update_vps.sh` - normal day-to-day flow after pushing to GitHub
 - `./scripts/smoke_vps.sh` - check VPS API health and approval queue from your Mac
-- `./scripts/hermes_smoke_vps.sh` - submit a sample post and verify the worker records `reviewMode: "hermes"`
+- `./scripts/hermes_smoke_vps.sh` - submit a sample post and verify the worker records AI review output
 
 Recommended routine:
 
@@ -75,7 +75,7 @@ Recommended routine:
 2. commit and push to GitHub
 3. run `./scripts/update_vps.sh`
 4. run `./scripts/smoke_vps.sh`
-5. run `./scripts/hermes_smoke_vps.sh` after Hermes review-agent changes or VPS env updates
+5. run `./scripts/hermes_smoke_vps.sh` after AI review changes or VPS env updates
 
 ## API Endpoints
 
@@ -275,9 +275,24 @@ seeded demo club/team. On startup it will:
 8. Open `http://localhost:3001` to use the admin review console.
 9. If `ADMIN_BASIC_AUTH_USER` and `ADMIN_BASIC_AUTH_PASSWORD` are set, the review console requires HTTP Basic Auth.
 
-If `HERMES_REVIEW_AGENT_URL` is set, the worker sends new submissions to Hermes
-first. The default `HERMES_REVIEW_AGENT_MODE=review_agent` expects a custom
-review endpoint with this request body:
+If `HERMES_REVIEW_AGENT_URL` is set, the worker sends new submissions to the
+configured AI review provider first. The deployed VPS can use local Ollama for a
+free, reliable review path:
+
+```env
+HERMES_REVIEW_AGENT_URL=http://172.21.0.1:11434/api/generate
+HERMES_REVIEW_AGENT_MODE=ollama_generate
+HERMES_REVIEW_AGENT_NAME=qwen3:4b-instruct
+HERMES_REVIEW_AGENT_NUM_CTX=8192
+HERMES_REVIEW_AGENT_NUM_PREDICT=320
+```
+
+The `172.21.0.1` address is the Docker bridge host address used by the worker
+container to reach Ollama on the VPS. The worker sends a JSON-format generation
+request and normalizes the returned review JSON.
+
+The default `HERMES_REVIEW_AGENT_MODE=review_agent` expects a custom review
+endpoint with this request body:
 
 ```json
 {
