@@ -6,6 +6,8 @@ COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.vps.yml}"
 BRANCH="${BRANCH:-main}"
 RUN_APPROVAL_PUBLISH_SMOKE="${RUN_APPROVAL_PUBLISH_SMOKE:-0}"
 SMOKE_TIMEOUT_SECONDS="${SMOKE_TIMEOUT_SECONDS:-300}"
+HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-60}"
+HEALTH_POLL_SECONDS="${HEALTH_POLL_SECONDS:-2}"
 
 cd "${REPO_DIR}"
 
@@ -22,9 +24,25 @@ echo "Rebuilding and starting VPS stack"
 docker compose -f "${COMPOSE_FILE}" up --build -d
 
 echo "Health check"
-curl -fsS http://localhost:4000/health
+deadline=$((SECONDS + HEALTH_TIMEOUT_SECONDS))
+until curl -fsS http://localhost:4000/health; do
+  if (( SECONDS >= deadline )); then
+    echo "API health check timed out after ${HEALTH_TIMEOUT_SECONDS}s." >&2
+    exit 1
+  fi
+  echo "Waiting for API health..."
+  sleep "${HEALTH_POLL_SECONDS}"
+done
 printf '\n---\n'
-curl -fsS http://localhost:4000/approvals/queue
+deadline=$((SECONDS + HEALTH_TIMEOUT_SECONDS))
+until curl -fsS http://localhost:4000/approvals/queue; do
+  if (( SECONDS >= deadline )); then
+    echo "Approval queue check timed out after ${HEALTH_TIMEOUT_SECONDS}s." >&2
+    exit 1
+  fi
+  echo "Waiting for approval queue..."
+  sleep "${HEALTH_POLL_SECONDS}"
+done
 
 if [ "${RUN_APPROVAL_PUBLISH_SMOKE}" = "1" ]; then
   echo
