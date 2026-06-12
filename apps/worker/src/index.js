@@ -12,7 +12,8 @@ const handlers = {
   [submissionEvents.created]: processSubmissionCreated,
   [submissionEvents.approved]: processSubmissionApproved,
   [submissionEvents.approvalRequested]: async () => {},
-  [submissionEvents.published]: async () => {}
+  [submissionEvents.published]: async () => {},
+  [submissionEvents.publishFailed]: async () => {}
 };
 
 async function pollOnce() {

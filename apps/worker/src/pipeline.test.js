@@ -182,3 +182,76 @@ test("publishes approved submissions through the destination adapter", async () 
     }
   ]);
 });
+
+test("records publish failures when the destination adapter fails", async () => {
+  const queries = [];
+  const submission = {
+    id: "submission-1",
+    club_id: "club-1",
+    submitted_by_user_id: "user-1"
+  };
+  const destination = {
+    id: "destination-1",
+    destination_type: "internal_feed",
+    name: "Internal Club Feed",
+    config: { mode: "internal" }
+  };
+  const client = {
+    async query(sql, params = []) {
+      queries.push({ sql, params });
+
+      if (sql.includes("FROM submissions s")) {
+        return { rowCount: 1, rows: [submission] };
+      }
+
+      if (sql.includes("FROM publishing_destinations")) {
+        return { rowCount: 1, rows: [destination] };
+      }
+
+      return { rowCount: 1, rows: [] };
+    }
+  };
+
+  await processSubmissionApproved(
+    client,
+    { submission_id: submission.id },
+    {
+      async publishImpl() {
+        throw new Error("Destination API timed out");
+      }
+    }
+  );
+
+  assert.ok(
+    queries.some(
+      ({ sql, params }) =>
+        sql.includes("INSERT INTO publishing_jobs") &&
+        sql.includes("'failed'") &&
+        params[2] === "Publishing failed: Destination API timed out"
+    )
+  );
+  assert.ok(
+    queries.some(
+      ({ sql, params }) =>
+        sql.includes("UPDATE submissions") &&
+        sql.includes("publish_failed") &&
+        params[0] === "submission-1"
+    )
+  );
+  assert.ok(
+    queries.some(
+      ({ sql, params }) =>
+        sql.includes("INSERT INTO submission_events") &&
+        params[1] === "submission.publish.failed" &&
+        JSON.parse(params[2]).error === "Destination API timed out"
+    )
+  );
+  assert.equal(
+    queries.some(({ sql }) => sql.includes("INSERT INTO published_posts")),
+    false
+  );
+  assert.equal(
+    queries.some(({ sql }) => sql.includes("INSERT INTO notifications")),
+    false
+  );
+});

@@ -61,6 +61,11 @@ function riskLevelToScore(riskLevel) {
   }
 }
 
+function buildPublishFailureSummary(error) {
+  const message = error?.message || "Unknown publishing failure";
+  return `Publishing failed: ${message}`;
+}
+
 export async function buildReviewArtifacts(submission) {
   const buildFallbackArtifacts = () => {
     const fallbackRiskScore = scoreRisk(submission.raw_text || "");
@@ -375,10 +380,56 @@ export async function processSubmissionApproved(
     throw new Error("Internal publishing destination not configured");
   }
 
-  const publishResult = await publishImpl({
-    submission,
-    destination: destination.rows[0]
-  });
+  const publishDestination = destination.rows[0];
+  let publishResult;
+  try {
+    publishResult = await publishImpl({
+      submission,
+      destination: publishDestination
+    });
+  } catch (error) {
+    const resultSummary = buildPublishFailureSummary(error);
+    await client.query(
+      `
+      INSERT INTO publishing_jobs (
+        submission_id,
+        destination_id,
+        state,
+        attempt_count,
+        result_summary
+      )
+      VALUES ($1, $2, 'failed', 1, $3)
+      `,
+      [submission.id, publishDestination.id, resultSummary]
+    );
+
+    await client.query(
+      `
+      UPDATE submissions
+      SET status = 'publish_failed', updated_at = NOW()
+      WHERE id = $1
+      `,
+      [submission.id]
+    );
+
+    await client.query(
+      `
+      INSERT INTO submission_events (submission_id, event_name, payload)
+      VALUES ($1, $2, $3::jsonb)
+      `,
+      [
+        submission.id,
+        submissionEvents.publishFailed,
+        JSON.stringify({
+          destinationType: publishDestination.destination_type,
+          destinationName: publishDestination.name,
+          error: error?.message || "Unknown publishing failure"
+        })
+      ]
+    );
+
+    return;
+  }
 
   await client.query(
     `
@@ -393,7 +444,7 @@ export async function processSubmissionApproved(
     `,
     [
       submission.id,
-      destination.rows[0].id,
+      publishDestination.id,
       publishResult.resultSummary,
       publishResult.externalReference
     ]
@@ -408,7 +459,7 @@ export async function processSubmissionApproved(
     )
     VALUES ($1, $2, $3)
     `,
-    [submission.id, destination.rows[0].id, publishResult.externalPostId]
+    [submission.id, publishDestination.id, publishResult.externalPostId]
   );
 
   await client.query(
