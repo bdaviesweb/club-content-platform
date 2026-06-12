@@ -10,6 +10,7 @@ import {
   runHermesReviewAgent
 } from "./hermes-review.js";
 import { hasOpenAI, runModeration, runStructuredReview } from "./openai.js";
+import { publishToDestination } from "./publishing.js";
 
 export function chooseApproverRole(submission) {
   if (
@@ -339,7 +340,11 @@ export async function processSubmissionCreated(client, eventRow) {
   });
 }
 
-export async function processSubmissionApproved(client, eventRow) {
+export async function processSubmissionApproved(
+  client,
+  eventRow,
+  { publishImpl = publishToDestination } = {}
+) {
   const submissionResult = await client.query(
     `
     SELECT s.*
@@ -357,9 +362,9 @@ export async function processSubmissionApproved(client, eventRow) {
 
   const destination = await client.query(
     `
-    SELECT id
+    SELECT id, destination_type, name, config
     FROM publishing_destinations
-    WHERE club_id = $1 AND destination_type = $2
+    WHERE club_id = $1 AND destination_type = $2 AND is_active = TRUE
     ORDER BY created_at ASC
     LIMIT 1
     `,
@@ -370,17 +375,28 @@ export async function processSubmissionApproved(client, eventRow) {
     throw new Error("Internal publishing destination not configured");
   }
 
+  const publishResult = await publishImpl({
+    submission,
+    destination: destination.rows[0]
+  });
+
   await client.query(
     `
     INSERT INTO publishing_jobs (
       submission_id,
       destination_id,
       state,
-      result_summary
+      result_summary,
+      external_reference
     )
-    VALUES ($1, $2, 'succeeded', 'Published to internal feed by worker')
+    VALUES ($1, $2, 'succeeded', $3, $4)
     `,
-    [submission.id, destination.rows[0].id]
+    [
+      submission.id,
+      destination.rows[0].id,
+      publishResult.resultSummary,
+      publishResult.externalReference
+    ]
   );
 
   await client.query(
@@ -392,7 +408,7 @@ export async function processSubmissionApproved(client, eventRow) {
     )
     VALUES ($1, $2, $3)
     `,
-    [submission.id, destination.rows[0].id, `internal:${submission.id}`]
+    [submission.id, destination.rows[0].id, publishResult.externalPostId]
   );
 
   await client.query(
@@ -412,7 +428,10 @@ export async function processSubmissionApproved(client, eventRow) {
     [
       submission.id,
       submissionEvents.published,
-      JSON.stringify({ destinationType: internalDestinationType })
+      JSON.stringify({
+        destinationType: publishResult.destinationType,
+        destinationName: publishResult.destinationName
+      })
     ]
   );
 
@@ -422,7 +441,8 @@ export async function processSubmissionApproved(client, eventRow) {
     payload: {
       submissionId: submission.id,
       status: "published",
-      destinationType: internalDestinationType
+      destinationType: publishResult.destinationType,
+      destinationName: publishResult.destinationName
     }
   });
 }
