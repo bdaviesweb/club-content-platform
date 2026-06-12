@@ -773,7 +773,27 @@ async function handleApprovalRequestDetail(res, approvalRequestId) {
               'resultStatus', rr.result_status,
               'confidence', rr.confidence,
               'summary', rr.summary,
-              'createdAt', rr.created_at
+              'rawOutput', rr.raw_output_json,
+              'createdAt', rr.created_at,
+              'findings',
+              COALESCE(
+                (
+                  SELECT json_agg(
+                    jsonb_build_object(
+                      'id', rf.id,
+                      'type', rf.finding_type,
+                      'severity', rf.severity,
+                      'message', rf.message,
+                      'metadata', rf.metadata,
+                      'createdAt', rf.created_at
+                    )
+                    ORDER BY rf.created_at ASC
+                  )
+                  FROM review_findings rf
+                  WHERE rf.review_run_id = rr.id
+                ),
+                '[]'::json
+              )
             )
             ORDER BY rr.created_at DESC
           )
