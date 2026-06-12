@@ -97,8 +97,25 @@ function extractResponsesOutputText(payload = {}) {
     .trim();
 }
 
+function stripJsonFence(value) {
+  const text = normalizeOptionalString(value);
+  const match = text.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return match ? match[1].trim() : text;
+}
+
 function summarizeOutputText(value) {
   return normalizeOptionalString(value).replace(/\s+/g, " ").slice(0, 220);
+}
+
+function parseReviewJson(outputText, providerName) {
+  const normalized = stripJsonFence(outputText);
+  try {
+    return JSON.parse(normalized);
+  } catch (error) {
+    throw new Error(
+      `${providerName} returned invalid review JSON: ${summarizeOutputText(outputText)}`
+    );
+  }
 }
 
 export function normalizeHermesResponsesApiResponse(payload = {}) {
@@ -107,19 +124,26 @@ export function normalizeHermesResponsesApiResponse(payload = {}) {
     throw new Error("Hermes Responses API returned no output text");
   }
 
-  let review;
-  try {
-    review = JSON.parse(outputText);
-  } catch (error) {
-    throw new Error(
-      `Hermes Responses API returned invalid review JSON: ${summarizeOutputText(outputText)}`
-    );
-  }
+  const review = parseReviewJson(outputText, "Hermes Responses API");
 
   return normalizeHermesReviewResponse({
     id: payload.id,
     model: payload.model,
     review,
+    raw: payload
+  });
+}
+
+export function normalizeOllamaGenerateResponse(payload = {}, model = getDefaultAgentName()) {
+  const outputText = normalizeOptionalString(payload.response);
+  if (!outputText) {
+    throw new Error("Ollama review returned no response text");
+  }
+
+  return normalizeHermesReviewResponse({
+    id: payload.id,
+    model: payload.model || model,
+    review: parseReviewJson(outputText, "Ollama review"),
     raw: payload
   });
 }
@@ -177,7 +201,39 @@ export async function runHermesReviewAgent(
     headers.authorization = `Bearer ${apiKey}`;
   }
 
-  if (normalizeOptionalString(agentMode).toLowerCase() === "responses_api") {
+  const normalizedAgentMode = normalizeOptionalString(agentMode).toLowerCase();
+
+  if (normalizedAgentMode === "ollama_generate") {
+    const response = await fetchImpl(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model: agentName,
+        prompt: buildReviewPrompt({
+          rawText,
+          visibilityTarget,
+          contentType,
+          submitterName
+        }),
+        stream: false,
+        format: "json",
+        options: {
+          temperature: 0,
+          num_ctx: Number(process.env.HERMES_REVIEW_AGENT_NUM_CTX || 8192),
+          num_predict: Number(process.env.HERMES_REVIEW_AGENT_NUM_PREDICT || 320)
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Ollama review failed: ${response.status} ${text}`);
+    }
+
+    return normalizeOllamaGenerateResponse(await response.json(), agentName);
+  }
+
+  if (normalizedAgentMode === "responses_api") {
     const response = await fetchImpl(endpoint, {
       method: "POST",
       headers,
