@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   normalizeHermesResponsesApiResponse,
   normalizeHermesReviewResponse,
+  normalizeOllamaGenerateResponse,
   runHermesReviewAgent
 } from "./hermes-review.js";
 
@@ -134,6 +135,35 @@ test("normalizes Hermes Responses API output text", () => {
   assert.equal(result.review.findings[0].type, "privacy");
 });
 
+test("normalizes Ollama generate review responses", () => {
+  const result = normalizeOllamaGenerateResponse(
+    {
+      response: JSON.stringify({
+        risk_level: "low",
+        confidence: 0.86,
+        summary: "Safe team update.",
+        caption_draft: "Great training session today.",
+        findings: []
+      })
+    },
+    "qwen3:4b-instruct"
+  );
+
+  assert.equal(result.model, "qwen3:4b-instruct");
+  assert.equal(result.review.risk_level, "low");
+  assert.equal(result.review.caption_draft, "Great training session today.");
+});
+
+test("accepts fenced JSON from review providers", () => {
+  const result = normalizeOllamaGenerateResponse({
+    response:
+      '```json\n{"risk_level":"medium","confidence":0.7,"summary":"Needs privacy check.","caption_draft":"Team update","findings":[]}\n```'
+  });
+
+  assert.equal(result.review.risk_level, "medium");
+  assert.equal(result.review.summary, "Needs privacy check.");
+});
+
 test("surfaces non-JSON Hermes Responses API output", () => {
   assert.throws(
     () =>
@@ -143,6 +173,52 @@ test("surfaces non-JSON Hermes Responses API output", () => {
       }),
     /invalid review JSON: Error code: 402 - Prompt tokens limit exceeded/
   );
+});
+
+test("posts review prompts to Ollama generate mode", async () => {
+  const calls = [];
+  const result = await runHermesReviewAgent(
+    {
+      rawText: "Great goal from kickoff.",
+      visibilityTarget: "internal",
+      contentType: "photo",
+      submitterName: "Coach"
+    },
+    {
+      agentUrl: "http://ollama.local/api/generate",
+      agentName: "qwen3:4b-instruct",
+      agentMode: "ollama_generate",
+      async fetchImpl(url, options) {
+        calls.push({ url, options });
+        return {
+          ok: true,
+          async json() {
+            return {
+              response: JSON.stringify({
+                risk_level: "low",
+                confidence: 0.9,
+                summary: "Safe for standard review.",
+                caption_draft: "Great goal from kickoff.",
+                findings: []
+              })
+            };
+          }
+        };
+      }
+    }
+  );
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "http://ollama.local/api/generate");
+
+  const body = JSON.parse(calls[0].options.body);
+  assert.equal(body.model, "qwen3:4b-instruct");
+  assert.equal(body.stream, false);
+  assert.equal(body.format, "json");
+  assert.equal(body.options.temperature, 0);
+  assert.match(body.prompt, /Return only valid JSON/);
+  assert.match(body.prompt, /Visibility target: internal/);
+  assert.equal(result.review.risk_level, "low");
 });
 
 test("posts review prompts to Hermes Responses API mode", async () => {
