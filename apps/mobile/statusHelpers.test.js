@@ -1,0 +1,53 @@
+const assert = require("node:assert/strict");
+const test = require("node:test");
+
+const {
+  countStatuses,
+  formatStatusLabel,
+  getProgressStageState,
+  getStatusTone,
+  normalizeSubmissionStatus,
+  summarizeSubmissionProgress
+} = require("./statusHelpers");
+
+test("normalizes backend workflow statuses for mobile copy", () => {
+  assert.equal(normalizeSubmissionStatus("received"), "submitted");
+  assert.equal(normalizeSubmissionStatus("approved_internal"), "approved");
+  assert.equal(formatStatusLabel("received"), "Received");
+  assert.equal(formatStatusLabel("approved_internal"), "Approved");
+});
+
+test("explains publish failures without exposing backend state names", () => {
+  assert.equal(formatStatusLabel("publish_failed"), "Publish Needs Help");
+  assert.equal(getStatusTone("publish_failed"), "attention");
+  assert.equal(
+    summarizeSubmissionProgress({ status: "publish_failed" }),
+    "Approved, but publishing needs admin follow-up."
+  );
+});
+
+test("counts statuses using the mobile-facing workflow buckets", () => {
+  assert.deepEqual(
+    countStatuses([
+      { status: "received" },
+      { status: "needs_human_review" },
+      { status: "approved_internal" },
+      { status: "published" },
+      { status: "publish_failed" }
+    ]),
+    {
+      total: 5,
+      published: 1,
+      inReview: 1,
+      needsAttention: 1
+    }
+  );
+});
+
+test("maps workflow-only statuses onto the progress rail", () => {
+  assert.equal(getProgressStageState("approved_internal", "submitted"), "complete");
+  assert.equal(getProgressStageState("approved_internal", "approved"), "current");
+  assert.equal(getProgressStageState("publish_failed", "needs_human_review"), "complete");
+  assert.equal(getProgressStageState("publish_failed", "approved"), "current");
+  assert.equal(getProgressStageState("publish_failed", "published"), "pending");
+});

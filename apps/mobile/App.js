@@ -23,6 +23,14 @@ import {
 
 const { registerPushToken } = require("./pushRegistration");
 const { buildMobileRolePolicy, submitterMode } = require("./rolePolicy");
+const {
+  countStatuses,
+  formatStatusLabel,
+  getProgressStageState,
+  getStatusTone,
+  progressStages,
+  summarizeSubmissionProgress
+} = require("./statusHelpers");
 
 const defaultConfig = {
   apiBaseUrl:
@@ -35,13 +43,6 @@ const defaultConfig = {
     process.env.EXPO_PUBLIC_REVIEWER_EMAIL || "reviewer@demo-club.local",
   roleMode: process.env.EXPO_PUBLIC_MOBILE_ROLE || submitterMode
 };
-
-const progressStages = [
-  { key: "submitted", label: "Received" },
-  { key: "needs_human_review", label: "Review" },
-  { key: "approved", label: "Approved" },
-  { key: "published", label: "Posted" }
-];
 
 function normalizeApiBaseUrl(value) {
   return String(value || "").replace(/\/+$/, "");
@@ -58,40 +59,6 @@ function formatNotificationLabel(type) {
   return String(type || "update")
     .replaceAll("_", " ")
     .replace(/\b\w/g, (character) => character.toUpperCase());
-}
-
-function formatStatusLabel(value) {
-  const normalized = String(value || "submitted").toLowerCase();
-  switch (normalized) {
-    case "submitted":
-      return "Received";
-    case "needs_human_review":
-      return "In Review";
-    case "approved":
-      return "Approved";
-    case "published":
-      return "Posted";
-    case "rejected":
-      return "Not Approved";
-    case "changes_requested":
-      return "Needs Changes";
-    case "needs_metadata":
-      return "Needs Detail";
-    default:
-      return normalized
-        .replaceAll("_", " ")
-        .replace(/\b\w/g, (character) => character.toUpperCase());
-  }
-}
-
-function getStatusTone(value) {
-  const normalized = String(value || "submitted").toLowerCase();
-  if (["published", "approved"].includes(normalized)) return "success";
-  if (["rejected", "changes_requested", "needs_metadata"].includes(normalized)) {
-    return "attention";
-  }
-  if (normalized === "needs_human_review") return "info";
-  return "neutral";
 }
 
 function formatVisibilityLabel(value) {
@@ -116,18 +83,6 @@ function formatRiskScoreLabel(value) {
   if (score >= 0.75) return "High review concern";
   if (score >= 0.35) return "Moderate review concern";
   return "Low review concern";
-}
-
-function summarizeSubmissionProgress(item) {
-  const status = String(item?.status || "").toLowerCase();
-  if (status === "published") return "Approved and shared to the club feed.";
-  if (status === "approved") return "Approved and waiting for publishing.";
-  if (status === "rejected") return "Stopped in review.";
-  if (status === "changes_requested" || status === "needs_metadata") {
-    return "Needs an update before it can move forward.";
-  }
-  if (status === "needs_human_review") return "A reviewer is looking at it now.";
-  return "Captured and waiting to enter review.";
 }
 
 function buildNotificationBody(item) {
@@ -293,39 +248,6 @@ const reviewReasonSets = {
     }
   ]
 };
-
-function countStatuses(items) {
-  return items.reduce(
-    (accumulator, item) => {
-      const status = String(item?.status || "submitted").toLowerCase();
-      accumulator.total += 1;
-      if (status === "published") accumulator.published += 1;
-      if (status === "needs_human_review") accumulator.inReview += 1;
-      if (["changes_requested", "needs_metadata", "rejected"].includes(status)) {
-        accumulator.needsAttention += 1;
-      }
-      return accumulator;
-    },
-    { total: 0, published: 0, inReview: 0, needsAttention: 0 }
-  );
-}
-
-function getProgressStageState(status, stageKey) {
-  const normalized = String(status || "submitted").toLowerCase();
-  const stageIndex = progressStages.findIndex((item) => item.key === stageKey);
-  const currentIndex = progressStages.findIndex((item) => item.key === normalized);
-
-  if (["changes_requested", "needs_metadata", "rejected"].includes(normalized)) {
-    if (stageKey === "submitted") return "complete";
-    if (stageKey === "needs_human_review") return "current";
-    return "pending";
-  }
-  if (stageIndex === currentIndex) return "current";
-  if (stageIndex !== -1 && currentIndex !== -1 && stageIndex < currentIndex) {
-    return "complete";
-  }
-  return "pending";
-}
 
 function normalizePickedAsset(asset) {
   if (!asset) return null;
