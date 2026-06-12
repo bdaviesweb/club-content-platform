@@ -18,7 +18,7 @@ set -euo pipefail
 cd '${REMOTE_DIR}'
 
 compose() {
-  docker compose -f '${COMPOSE_FILE}' "\$@"
+  docker compose -f '${COMPOSE_FILE}' "\$@" </dev/null
 }
 
 echo "Checking API health..."
