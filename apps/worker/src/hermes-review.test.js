@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  normalizeHermesResponsesApiResponse,
   normalizeHermesReviewResponse,
   runHermesReviewAgent
 } from "./hermes-review.js";
@@ -93,6 +94,102 @@ test("posts the submission to the configured Hermes review agent", async () => {
   });
   assert.equal(result.review.risk_level, "low");
   assert.equal(result.review.caption_draft, "Great goal from kickoff.");
+});
+
+test("normalizes Hermes Responses API output text", () => {
+  const result = normalizeHermesResponsesApiResponse({
+    id: "resp-1",
+    model: "general-coding",
+    output: [
+      {
+        type: "message",
+        role: "assistant",
+        content: [
+          {
+            type: "output_text",
+            text: JSON.stringify({
+              risk_level: "medium",
+              confidence: 0.72,
+              summary: "Needs a privacy check.",
+              caption_draft: "Team update",
+              review_required_reason: "Contact detail",
+              findings: [
+                {
+                  type: "privacy",
+                  severity: "medium",
+                  message: "Contains contact info."
+                }
+              ]
+            })
+          }
+        ]
+      }
+    ]
+  });
+
+  assert.equal(result.responseId, "resp-1");
+  assert.equal(result.model, "general-coding");
+  assert.equal(result.review.risk_level, "medium");
+  assert.equal(result.review.caption_draft, "Team update");
+  assert.equal(result.review.findings[0].type, "privacy");
+});
+
+test("posts review prompts to Hermes Responses API mode", async () => {
+  const calls = [];
+  const result = await runHermesReviewAgent(
+    {
+      rawText: "Player shared a phone number after the match.",
+      visibilityTarget: "public",
+      contentType: "photo",
+      submitterName: "Coach"
+    },
+    {
+      agentUrl: "http://hermes.local/v1/responses",
+      agentName: "general-coding",
+      agentMode: "responses_api",
+      apiKey: "secret",
+      async fetchImpl(url, options) {
+        calls.push({ url, options });
+        return {
+          ok: true,
+          async json() {
+            return {
+              id: "resp-1",
+              model: "general-coding",
+              output: [
+                {
+                  content: [
+                    {
+                      text: JSON.stringify({
+                        risk_level: "high",
+                        confidence: 0.91,
+                        summary: "Contact detail requires review.",
+                        caption_draft: "Player update",
+                        review_required_reason: "Privacy risk",
+                        findings: []
+                      })
+                    }
+                  ]
+                }
+              ]
+            };
+          }
+        };
+      }
+    }
+  );
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "http://hermes.local/v1/responses");
+  assert.equal(calls[0].options.headers.authorization, "Bearer secret");
+
+  const body = JSON.parse(calls[0].options.body);
+  assert.equal(body.model, "general-coding");
+  assert.equal(body.store, false);
+  assert.match(body.input, /Return only valid JSON/);
+  assert.match(body.input, /Visibility target: public/);
+  assert.match(body.input, /Submission text: Player shared a phone number/);
+  assert.equal(result.review.risk_level, "high");
 });
 
 test("surfaces Hermes agent HTTP failures", async () => {

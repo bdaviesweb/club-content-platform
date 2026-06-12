@@ -275,8 +275,9 @@ seeded demo club/team. On startup it will:
 8. Open `http://localhost:3001` to use the admin review console.
 9. If `ADMIN_BASIC_AUTH_USER` and `ADMIN_BASIC_AUTH_PASSWORD` are set, the review console requires HTTP Basic Auth.
 
-If `HERMES_REVIEW_AGENT_URL` is set, the worker sends new submissions to that
-Hermes review agent first. The request body is:
+If `HERMES_REVIEW_AGENT_URL` is set, the worker sends new submissions to Hermes
+first. The default `HERMES_REVIEW_AGENT_MODE=review_agent` expects a custom
+review endpoint with this request body:
 
 ```json
 {
@@ -294,6 +295,12 @@ Hermes review agent first. The request body is:
 The agent response may return the review fields at the top level, under
 `review`, or under `output`. The worker reads `risk_level`, `confidence`,
 `summary`, `caption_draft`, `review_required_reason`, and `findings`.
+
+For the Hermes gateway's OpenAI-compatible API, set
+`HERMES_REVIEW_AGENT_MODE=responses_api`, point `HERMES_REVIEW_AGENT_URL` at
+`/v1/responses`, set `HERMES_REVIEW_AGENT_NAME` to the Hermes model/profile
+name, and set `HERMES_REVIEW_AGENT_API_KEY` to the gateway `API_SERVER_KEY`.
+The worker will send a review prompt and normalize the returned JSON.
 
 If Hermes is not configured and `OPENAI_API_KEY` is set, the worker uses:
 
