@@ -3,5 +3,8 @@ set -euo pipefail
 
 REMOTE_HOST="${REMOTE_HOST:-hermes-dev}"
 REMOTE_DIR="${REMOTE_DIR:-/srv/repos/projects/club-content-platform}"
+RUN_APPROVAL_PUBLISH_SMOKE="${RUN_APPROVAL_PUBLISH_SMOKE:-0}"
+SMOKE_TIMEOUT_SECONDS="${SMOKE_TIMEOUT_SECONDS:-300}"
 
-ssh "${REMOTE_HOST}" "REPO_DIR='${REMOTE_DIR}' bash '${REMOTE_DIR}/scripts/pull_and_restart_vps.sh'"
+ssh "${REMOTE_HOST}" \
+  "REPO_DIR='${REMOTE_DIR}' RUN_APPROVAL_PUBLISH_SMOKE='${RUN_APPROVAL_PUBLISH_SMOKE}' SMOKE_TIMEOUT_SECONDS='${SMOKE_TIMEOUT_SECONDS}' bash '${REMOTE_DIR}/scripts/pull_and_restart_vps.sh'"
