@@ -245,6 +245,59 @@ CREATE TABLE audit_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE gym_visit_profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_key TEXT NOT NULL UNIQUE,
+  display_name TEXT NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE gym_locations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID NOT NULL REFERENCES gym_visit_profiles(id) ON DELETE CASCADE,
+  slug TEXT NOT NULL,
+  name TEXT NOT NULL,
+  latitude NUMERIC(10,7) NOT NULL,
+  longitude NUMERIC(10,7) NOT NULL,
+  radius_meters INTEGER NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (profile_id, slug)
+);
+
+CREATE TABLE gym_visit_attempts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID REFERENCES gym_visit_profiles(id) ON DELETE SET NULL,
+  gym_location_id UUID REFERENCES gym_locations(id) ON DELETE SET NULL,
+  device_label TEXT,
+  shortcut_run_id TEXT,
+  occurred_at TIMESTAMPTZ NOT NULL,
+  received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  latitude NUMERIC(10,7) NOT NULL,
+  longitude NUMERIC(10,7) NOT NULL,
+  accuracy_meters NUMERIC(8,2),
+  distance_meters INTEGER,
+  accepted BOOLEAN NOT NULL DEFAULT FALSE,
+  rejection_reason TEXT,
+  optum_action_state TEXT NOT NULL DEFAULT 'not_requested',
+  metadata JSONB NOT NULL DEFAULT '{}'::JSONB
+);
+
+CREATE TABLE gym_visits (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID NOT NULL REFERENCES gym_visit_profiles(id) ON DELETE CASCADE,
+  gym_location_id UUID NOT NULL REFERENCES gym_locations(id) ON DELETE CASCADE,
+  visit_attempt_id UUID NOT NULL UNIQUE REFERENCES gym_visit_attempts(id) ON DELETE CASCADE,
+  occurred_at TIMESTAMPTZ NOT NULL,
+  device_label TEXT,
+  shortcut_run_id TEXT,
+  optum_action_state TEXT NOT NULL DEFAULT 'pending_phone_confirmation',
+  optum_result TEXT,
+  optum_result_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE INDEX idx_submissions_club_status ON submissions(club_id, status);
 CREATE INDEX idx_submission_media_submission_id ON submission_media(submission_id);
 CREATE INDEX idx_review_runs_submission_id ON review_runs(submission_id);
@@ -253,3 +306,5 @@ CREATE INDEX idx_approval_requests_approver_state ON approval_requests(approver_
 CREATE INDEX idx_submission_events_processed_at ON submission_events(processed_at, created_at);
 CREATE INDEX idx_publishing_jobs_submission_id ON publishing_jobs(submission_id);
 CREATE INDEX idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX idx_gym_visit_attempts_profile_received ON gym_visit_attempts(profile_id, received_at DESC);
+CREATE INDEX idx_gym_visits_profile_gym_occurred ON gym_visits(profile_id, gym_location_id, occurred_at DESC);

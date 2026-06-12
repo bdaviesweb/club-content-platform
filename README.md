@@ -95,6 +95,56 @@ Recommended routine:
 - `GET /feed/internal`
 - `GET /workflow-events?status=failed|pending|all`
 - `POST /workflow-events/:id/retry`
+- `POST /gym-visits/check-in`
+- `POST /gym-visits/optum-result`
+- `GET /gym-visits/me/recent`
+
+### Hermes Gym Visit Check-In
+
+The gym visit endpoints are a private Hermes profile for validating real gym arrivals from an
+iPhone Shortcut. The backend records the visit and returns the next Optum action for the phone.
+It does not fake location, store HealthSafe credentials, or submit to Optum through private APIs.
+
+Required VPS env:
+
+- `GYM_VISITS_ENABLED=true`
+- `GYM_VISIT_PROFILE_KEY=<private-profile-key>`
+- `GYM_VISIT_PROFILE_NAME=<private display name>`
+- `GYM_VISIT_SHORTCUT_TOKEN_HASH=<sha256 hex of the shortcut bearer token>`
+- `GYM_VISIT_GYM_LATITUDE=<gym latitude>`
+- `GYM_VISIT_GYM_LONGITUDE=<gym longitude>`
+- `GYM_VISIT_GYM_NAME=Anytime Fitness`
+- `GYM_VISIT_GYM_SLUG=anytime-fitness`
+
+Optional env:
+
+- `GYM_VISIT_ALLOWED_RADIUS_METERS=150`
+- `GYM_VISIT_MIN_REPEAT_HOURS=12`
+- `GYM_VISIT_MAX_CLOCK_SKEW_MINUTES=10`
+- `OPTUM_AUTOCHECKIN_MODE=assist-only`
+
+Example iPhone Shortcut request:
+
+```sh
+curl -X POST https://clubcontent-api.davmn.net/gym-visits/check-in \
+  -H "authorization: Bearer <shortcut-token>" \
+  -H "content-type: application/json" \
+  -d '{
+    "profileKey": "<private-profile-key>",
+    "occurredAt": "2026-06-12T12:00:00.000Z",
+    "deviceLabel": "Robert iPhone",
+    "shortcutRunId": "optional-shortcut-run-id",
+    "location": {
+      "latitude": 44.9804,
+      "longitude": -93.2704,
+      "accuracyMeters": 12
+    }
+  }'
+```
+
+Accepted visits return `optum.action: "open_optum_on_phone"` for the Shortcut to open Optum
+Engage on the iPhone. The Shortcut can then report back with `POST /gym-visits/optum-result`
+using `result` values of `succeeded`, `manual_required`, or `failed`.
 
 ### Example Submission Payload
 

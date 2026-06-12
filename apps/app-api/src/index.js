@@ -23,6 +23,11 @@ import {
   maskPushToken,
   registerPushToken
 } from "./push-tokens.js";
+import {
+  listRecentGymVisits,
+  recordOptumResult,
+  registerGymVisit
+} from "./gym-visits.js";
 
 const port = Number(process.env.API_PORT || 4000);
 const publicAppName = process.env.PUBLIC_PRODUCT_NAME || "Club Content";
@@ -1399,6 +1404,38 @@ async function handleRetryWorkflowEvent(req, res, eventId) {
   sendJson(res, 200, result);
 }
 
+async function handleGymVisitCheckIn(req, res) {
+  const body = await readJson(req);
+  const result = await registerGymVisit({
+    body,
+    authorization: req.headers.authorization,
+    withTransaction
+  });
+
+  sendJson(res, result.status, result.payload);
+}
+
+async function handleGymVisitOptumResult(req, res) {
+  const body = await readJson(req);
+  const result = await recordOptumResult({
+    body,
+    authorization: req.headers.authorization,
+    withTransaction
+  });
+
+  sendJson(res, result.status, result.payload);
+}
+
+async function handleRecentGymVisits(req, res, query) {
+  const result = await listRecentGymVisits({
+    authorization: req.headers.authorization,
+    limit: query.get("limit") || 10,
+    pool: getPool()
+  });
+
+  sendJson(res, result.status, result.payload);
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = parseUrl(req);
@@ -1479,6 +1516,21 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/notification-delivery/status") {
       handleNotificationDeliveryStatus(res);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/gym-visits/check-in") {
+      await handleGymVisitCheckIn(req, res);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/gym-visits/optum-result") {
+      await handleGymVisitOptumResult(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/gym-visits/me/recent") {
+      await handleRecentGymVisits(req, res, url.searchParams);
       return;
     }
 
