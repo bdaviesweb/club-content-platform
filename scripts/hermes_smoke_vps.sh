@@ -25,7 +25,7 @@ echo "Checking API health..."
 curl -fsS http://localhost:4000/health
 echo
 
-echo "Checking Hermes worker configuration..."
+echo "Checking AI review worker configuration..."
 hermes_url=\$(compose exec -T worker printenv HERMES_REVIEW_AGENT_URL || true)
 if [[ -z "\${hermes_url}" ]]; then
   echo "HERMES_REVIEW_AGENT_URL is not set in the worker container." >&2
@@ -77,7 +77,7 @@ while (( SECONDS < deadline )); do
     fi
 
     if [[ "\${review_mode}" == "hermes" ]]; then
-      echo "Hermes smoke passed."
+      echo "AI review smoke passed."
       echo "submission_id=\${submission_id}"
       echo "status=\${status}"
       echo "review_mode=\${review_mode}"
@@ -86,7 +86,7 @@ while (( SECONDS < deadline )); do
       exit 0
     fi
 
-    echo "Waiting for Hermes review. status=\${status:-pending} review_mode=\${review_mode:-pending}"
+    echo "Waiting for AI review. status=\${status:-pending} review_mode=\${review_mode:-pending}"
   else
     echo "Waiting for smoke submission to appear..."
   fi
@@ -94,6 +94,6 @@ while (( SECONDS < deadline )); do
   sleep '${POLL_SECONDS}'
 done
 
-echo "Timed out waiting for Hermes review mode on ${SMOKE_MARKER}." >&2
+echo "Timed out waiting for AI review mode on ${SMOKE_MARKER}." >&2
 exit 1
 INNER
