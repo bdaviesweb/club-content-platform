@@ -67,6 +67,7 @@ Useful scripts:
 - `./scripts/deploy_vps.sh` - bootstrap or force-sync the repo to the VPS
 - `./scripts/update_vps.sh` - normal day-to-day flow after pushing to GitHub
 - `./scripts/smoke_vps.sh` - check VPS API health and approval queue from your Mac
+- `./scripts/hermes_smoke_vps.sh` - submit a sample post and verify the worker records `reviewMode: "hermes"`
 
 Recommended routine:
 
@@ -74,6 +75,7 @@ Recommended routine:
 2. commit and push to GitHub
 3. run `./scripts/update_vps.sh`
 4. run `./scripts/smoke_vps.sh`
+5. run `./scripts/hermes_smoke_vps.sh` after Hermes review-agent changes or VPS env updates
 
 ## API Endpoints
 
