@@ -62,6 +62,15 @@ function riskBand(riskScore) {
   return { label: "Low concern", className: "tone-low" };
 }
 
+function formatPercent(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return "n/a";
+  }
+
+  return `${Math.round(Math.max(0, Math.min(number, 1)) * 100)}%`;
+}
+
 function recommendationFor(detail) {
   const score = Number(detail.risk_score || 0);
   const latestReview = detail.review_runs[0];
@@ -579,6 +588,66 @@ function layout(content, title = "Club Content Ops") {
       }
       .summary-item strong,
       .history-item strong { display: block; margin-bottom: 6px; }
+      .ai-review-card {
+        border-color: rgba(48, 94, 122, 0.24);
+        background:
+          linear-gradient(180deg, rgba(244, 249, 252, 0.94), rgba(255, 255, 255, 0.92));
+      }
+      .ai-review-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 12px;
+      }
+      .ai-review-metric {
+        padding: 12px;
+        border-radius: 16px;
+        border: 1px solid rgba(222,206,179,0.9);
+        background: rgba(255,255,255,0.72);
+        min-width: 0;
+      }
+      .ai-review-metric span {
+        display: block;
+        color: var(--muted);
+        font-size: 0.76rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .ai-review-metric strong {
+        display: block;
+        margin-top: 5px;
+        overflow-wrap: anywhere;
+      }
+      .finding-list {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .finding-row {
+        display: grid;
+        gap: 6px;
+        padding: 12px;
+        border-radius: 16px;
+        border: 1px solid rgba(222,206,179,0.9);
+        background: rgba(255,255,255,0.76);
+      }
+      .finding-row header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .fallback-note {
+        margin-top: 12px;
+        padding: 12px;
+        border-radius: 16px;
+        border: 1px solid rgba(155, 97, 27, 0.24);
+        background: var(--amber-soft);
+        color: var(--amber);
+        line-height: 1.45;
+      }
       details.disclosure {
         border: 1px solid var(--line);
         border-radius: 18px;
@@ -837,6 +906,9 @@ function layout(content, title = "Club Content Ops") {
         .content-copy {
           font-size: 1.08rem;
         }
+        .ai-review-grid {
+          grid-template-columns: 1fr;
+        }
         .media-hero {
           padding: 12px;
           min-height: auto;
@@ -1035,6 +1107,71 @@ function renderReviewSignals(detail) {
     .join("");
 }
 
+function renderAiReviewPanel(detail) {
+  const latestReview = detail.review_runs[0];
+  if (!latestReview) {
+    return `<div class="stage-card ai-review-card" style="margin-top:14px;">
+      <div class="section-label">AI review</div>
+      <p class="subtle">No AI review has been recorded for this item yet.</p>
+    </div>`;
+  }
+
+  const rawOutput = latestReview.rawOutput || {};
+  const structuredReview = rawOutput.structuredReview || {};
+  const fallbackReason = rawOutput.fallbackReason;
+  const reviewRequiredReason =
+    structuredReview.review_required_reason ||
+    structuredReview.reviewRequiredReason ||
+    detail.routing_decision?.rationale ||
+    null;
+  const findings = Array.isArray(latestReview.findings) ? latestReview.findings : [];
+
+  const findingMarkup = findings.length
+    ? `<div class="finding-list">
+        ${findings
+          .map(
+            (finding) => `<div class="finding-row">
+              <header>
+                <strong>${escapeHtml(formatLabel(finding.type || "finding"))}</strong>
+                ${renderStatusBadge(formatLabel(finding.severity || "medium"), finding.severity === "high" ? "alert" : finding.severity === "low" ? "good" : "review")}
+              </header>
+              <p class="subtle">${escapeHtml(finding.message || "No finding detail recorded.")}</p>
+            </div>`
+          )
+          .join("")}
+      </div>`
+    : `<p class="subtle" style="margin-top:12px;">No specific findings were recorded.</p>`;
+
+  return `<div class="stage-card ai-review-card" style="margin-top:14px;">
+    <div class="header-row" style="justify-content:space-between;">
+      <div>
+        <div class="section-label">AI review</div>
+        <h3>${escapeHtml(latestReview.summary || "Review completed.")}</h3>
+      </div>
+      ${renderStatusBadge(formatLabel(latestReview.resultStatus || "reviewed"), latestReview.resultStatus === "passed" ? "good" : "review")}
+    </div>
+
+    <div class="ai-review-grid">
+      <div class="ai-review-metric">
+        <span>Model</span>
+        <strong>${escapeHtml(latestReview.model || "n/a")}</strong>
+      </div>
+      <div class="ai-review-metric">
+        <span>Confidence</span>
+        <strong>${escapeHtml(formatPercent(latestReview.confidence))}</strong>
+      </div>
+      <div class="ai-review-metric">
+        <span>Risk score</span>
+        <strong>${escapeHtml(formatPercent(rawOutput.riskScore ?? detail.risk_score))}</strong>
+      </div>
+    </div>
+
+    ${reviewRequiredReason ? `<p style="margin-top:12px; line-height:1.45;">${escapeHtml(reviewRequiredReason)}</p>` : ""}
+    ${fallbackReason ? `<div class="fallback-note"><strong>Fallback used</strong><p style="margin-top:6px;">${escapeHtml(fallbackReason)}</p></div>` : ""}
+    ${findingMarkup}
+  </div>`;
+}
+
 function renderActionHistory(detail) {
   if (!detail.approval_actions.length) {
     return `<p class="subtle">No prior reviewer actions on this request.</p>`;
@@ -1158,10 +1295,7 @@ function renderCenterStage(detail, recommendation, queueIds) {
         </div>
       </div>
 
-      <div class="stage-card" style="margin-top:14px;">
-        <div class="section-label">Why this was suggested</div>
-        <p style="margin-top:8px; line-height:1.55;">${escapeHtml(detail.review_runs[0]?.summary || detail.routing_decision?.rationale || recommendation.explainer || "No summary recorded.")}</p>
-      </div>
+      ${renderAiReviewPanel(detail)}
 
       ${renderDecisionDock(detail, queueIds, recommendation)}
     </div>
