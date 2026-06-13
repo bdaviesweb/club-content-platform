@@ -1034,7 +1034,12 @@ async function handleInternalFeed(res, searchParams = new URLSearchParams()) {
     smokeFilter.values
   );
 
-  sendJson(res, 200, { items: result.rows });
+  sendJson(res, 200, {
+    items: result.rows.map((item) => ({
+      ...item,
+      media: enrichMediaCollection(item.media)
+    }))
+  });
 }
 
 async function handleNotifications(res, searchParams) {
