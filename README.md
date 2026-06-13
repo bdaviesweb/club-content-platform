@@ -70,6 +70,7 @@ Useful scripts:
 - `./scripts/hermes_smoke_vps.sh` - submit a sample post, verify AI review output, and remove the sample from the active review queue
 - `./scripts/cleanup_smoke_approvals_vps.sh` - list old pending smoke approvals; use `APPLY=1` to move them out of the active queue
 - `RUN_APPROVAL_PUBLISH_SMOKE=1 ./scripts/update_vps.sh` - update the VPS and verify submit, AI review, approval, and internal publishing
+- `DETACH=1 RUN_APPROVAL_PUBLISH_SMOKE=1 ./scripts/update_vps.sh` - run a long VPS update in the background and print the log path
 
 Recommended routine:
 
