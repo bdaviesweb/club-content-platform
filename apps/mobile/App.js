@@ -313,6 +313,7 @@ export default function App() {
   const [clubFeedItems, setClubFeedItems] = useState([]);
   const [loadingClubFeed, setLoadingClubFeed] = useState(false);
   const [clubFeedError, setClubFeedError] = useState("");
+  const [failedClubFeedImages, setFailedClubFeedImages] = useState({});
   const [notifications, setNotifications] = useState([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [notificationsError, setNotificationsError] = useState("");
@@ -476,6 +477,7 @@ export default function App() {
       if (!response.ok) throw new Error(`Club feed failed: ${response.status}`);
       const payload = await response.json();
       setClubFeedItems(Array.isArray(payload.items) ? payload.items : []);
+      setFailedClubFeedImages({});
     } catch (error) {
       setClubFeedError(error.message || "Could not load club feed");
       setStatus(error.message || "Could not load club feed");
@@ -1511,6 +1513,8 @@ export default function App() {
                   clubFeedItems.map((item, index) => {
                     const primaryMedia = item.media?.[0];
                     const isVideo = String(primaryMedia?.mimeType || "").startsWith("video/");
+                    const mediaStatusKey = primaryMedia?.previewUrl || `${item.id}-primary-media`;
+                    const imageFailed = Boolean(failedClubFeedImages[mediaStatusKey]);
                     return (
                       <View key={item.id} style={[styles.feedCard, index === 0 && styles.feedCardFeatured]}>
                         <GlassLayer />
@@ -1525,8 +1529,29 @@ export default function App() {
                                 source={{ uri: primaryMedia.previewUrl }}
                                 style={styles.clubFeedImage}
                                 resizeMode="cover"
+                                onLoad={() =>
+                                  setFailedClubFeedImages((current) => {
+                                    if (!current[mediaStatusKey]) return current;
+                                    const next = { ...current };
+                                    delete next[mediaStatusKey];
+                                    return next;
+                                  })
+                                }
+                                onError={() => {
+                                  setFailedClubFeedImages((current) => ({
+                                    ...current,
+                                    [mediaStatusKey]: true
+                                  }));
+                                  setStatus("Feed image could not load. Refresh the feed or check the media URL in Settings.");
+                                }}
                               />
                             )}
+                            {imageFailed ? (
+                              <View style={styles.clubFeedImageFallback}>
+                                <Text style={styles.clubFeedImageFallbackTitle}>Image unavailable</Text>
+                                <Text style={styles.clubFeedImageFallbackCopy}>Refresh the feed to try again.</Text>
+                              </View>
+                            ) : null}
                           </View>
                         ) : null}
                         <View style={styles.statusBadgeRow}>
@@ -3133,6 +3158,25 @@ const styles = StyleSheet.create({
   clubFeedImage: {
     width: "100%",
     height: "100%"
+  },
+  clubFeedImageFallback: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    padding: 18,
+    backgroundColor: "rgba(50, 43, 95, 0.84)"
+  },
+  clubFeedImageFallbackTitle: {
+    color: "#fffdf8",
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  clubFeedImageFallbackCopy: {
+    color: "rgba(255, 253, 248, 0.82)",
+    fontSize: 12,
+    fontWeight: "700",
+    textAlign: "center"
   },
   clubFeedVideoPreview: {
     width: "100%",
