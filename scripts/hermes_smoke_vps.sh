@@ -7,8 +7,10 @@ COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.vps.yml}"
 CLUB_SLUG="${CLUB_SLUG:-demo-soccer-club}"
 TEAM_SLUG="${TEAM_SLUG:-u14-girls}"
 SUBMITTER_EMAIL="${SUBMITTER_EMAIL:-coach@demo-club.local}"
+REVIEWER_EMAIL="${REVIEWER_EMAIL:-comms@demo-club.local}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-90}"
 POLL_SECONDS="${POLL_SECONDS:-3}"
+CLEANUP_APPROVAL="${CLEANUP_APPROVAL:-1}"
 
 SMOKE_MARKER="hermes-smoke-$(date -u +%Y%m%dT%H%M%SZ)-${RANDOM}"
 
@@ -44,11 +46,14 @@ while (( SECONDS < deadline )); do
     SELECT
       s.id,
       s.status,
+      COALESCE(ar.id::text, ''),
+      COALESCE(ar.state::text, ''),
       COALESCE(s.routing_decision->>'reviewMode', ''),
       COALESCE(rr.model, ''),
       COALESCE(rr.summary, ''),
       COALESCE(se.processing_error, '')
     FROM submissions s
+    LEFT JOIN approval_requests ar ON ar.submission_id = s.id
     LEFT JOIN LATERAL (
       SELECT model, summary
       FROM review_runs
@@ -69,24 +74,37 @@ while (( SECONDS < deadline )); do
   ")
 
   if [[ -n "\${row}" ]]; then
-    IFS='|' read -r submission_id status review_mode model summary processing_error <<< "\${row}"
+    IFS='|' read -r submission_id status approval_request_id approval_state review_mode model summary processing_error <<< "\${row}"
 
     if [[ -n "\${processing_error}" ]]; then
       echo "Worker failed for submission \${submission_id}: \${processing_error}" >&2
       exit 1
     fi
 
-    if [[ "\${review_mode}" == "hermes" ]]; then
+    if [[ "\${review_mode}" == "hermes" && ( '${CLEANUP_APPROVAL}' != "1" || -n "\${approval_request_id}" ) ]]; then
       echo "AI review smoke passed."
       echo "submission_id=\${submission_id}"
       echo "status=\${status}"
+      echo "approval_request_id=\${approval_request_id}"
+      echo "approval_state=\${approval_state}"
       echo "review_mode=\${review_mode}"
       echo "model=\${model}"
       echo "summary=\${summary}"
+
+      if [[ '${CLEANUP_APPROVAL}' == "1" ]]; then
+        echo "Cleaning up smoke approval request..."
+        curl -fsS \
+          -H "content-type: application/json" \
+          -d '{"action":"request_changes","actedByEmail":"${REVIEWER_EMAIL}","notes":"AI review smoke cleanup."}' \
+          "http://localhost:4000/approval-requests/\${approval_request_id}/actions" >/dev/null
+        echo "cleanup_action=request_changes"
+      else
+        echo "cleanup_action=skipped"
+      fi
       exit 0
     fi
 
-    echo "Waiting for AI review. status=\${status:-pending} review_mode=\${review_mode:-pending}"
+    echo "Waiting for AI review. status=\${status:-pending} review_mode=\${review_mode:-pending} approval_request_id=\${approval_request_id:-pending}"
   else
     echo "Waiting for smoke submission to appear..."
   fi

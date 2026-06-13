@@ -67,7 +67,7 @@ Useful scripts:
 - `./scripts/deploy_vps.sh` - bootstrap or force-sync the repo to the VPS
 - `./scripts/update_vps.sh` - normal day-to-day flow after pushing to GitHub
 - `./scripts/smoke_vps.sh` - check VPS API health and approval queue from your Mac
-- `./scripts/hermes_smoke_vps.sh` - submit a sample post and verify the worker records AI review output
+- `./scripts/hermes_smoke_vps.sh` - submit a sample post, verify AI review output, and remove the sample from the active review queue
 - `RUN_APPROVAL_PUBLISH_SMOKE=1 ./scripts/update_vps.sh` - update the VPS and verify submit, AI review, approval, and internal publishing
 
 Recommended routine:
@@ -78,6 +78,9 @@ Recommended routine:
 4. run `./scripts/smoke_vps.sh`
 5. run `./scripts/hermes_smoke_vps.sh` after AI review changes or VPS env updates
 6. run `RUN_APPROVAL_PUBLISH_SMOKE=1 ./scripts/update_vps.sh` after approval, publishing, or full workflow changes
+
+Set `CLEANUP_APPROVAL=0` on `./scripts/hermes_smoke_vps.sh` when you want the
+generated AI review item to stay in the approval queue for manual inspection.
 
 ## API Endpoints
 
