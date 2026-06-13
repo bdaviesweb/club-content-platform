@@ -1,0 +1,111 @@
+# Mobile QA Checklist
+
+Use this checklist before a TestFlight build or when validating a new mobile workflow change.
+
+## Preflight
+
+- Confirm the installed app points at the expected API host in Settings > Build info.
+- Record Settings > Build info:
+  - Version:
+  - Build:
+  - API:
+  - Role:
+  - Bundle:
+  - EAS project:
+  - Runtime:
+- Confirm the public API is healthy:
+
+```sh
+curl -fsS https://clubcontent-api.davmn.net/health
+```
+
+- Run the public API golden-path smoke when approval, publishing, notifications, or review behavior changed:
+
+```sh
+TIMEOUT_SECONDS=300 ./scripts/mobile_qa_public_api_smoke.sh
+```
+
+Expected result: the script creates a smoke submission, waits for AI review, approves it, and confirms it reaches `published` with a succeeded publishing job.
+
+If the script waits for review until timeout, check whether the worker is processing events:
+
+```sh
+curl -fsS 'https://clubcontent-api.davmn.net/workflow-events?status=pending'
+curl -fsS 'https://clubcontent-api.davmn.net/workflow-events?status=failed'
+```
+
+`submission.created` events stuck in `pending` usually mean the API is reachable but the worker is not currently consuming the queue. Restart or inspect the VPS worker before continuing mobile QA.
+
+If you need the deeper VPS/database smoke and SSH is healthy, run:
+
+```sh
+TIMEOUT_SECONDS=300 ./scripts/approval_publish_smoke_vps.sh
+```
+
+## Submitter Mode
+
+- Open Settings.
+- Set Device role to `Submitter`.
+- Confirm Build info shows the public API host and expected role.
+- Pick a photo or video.
+- Enter a short caption with a real score, opponent, or club moment.
+- Submit the post.
+- Confirm the app shows a successful submission state.
+- Open Status.
+- Confirm the newest post appears with:
+  - status copy that matches the workflow state
+  - progress rail
+  - media count
+  - notification updates when available
+
+## Reviewer Mode
+
+- Open Settings.
+- Set Device role to `Reviewer`.
+- Confirm reviewer email is set.
+- Open Review.
+- Confirm pending review items load.
+- Open the first queue item.
+- Confirm the detail sheet shows:
+  - submitted media preview or fallback
+  - latest review summary
+  - approval controls
+- Approve the item.
+- Confirm the app checks the publish result.
+- Confirm the Review tab shows a `Last approved` card when the item reaches the internal feed.
+- Confirm `Share post`, `Open detail`, and `Open feed` actions work from the `Last approved` card.
+
+## Feed And Published Detail
+
+- Open Feed.
+- Confirm the approved post appears in the internal feed.
+- Confirm image media shows a preview when available.
+- Confirm video media uses the video fallback state.
+- Open Status.
+- Tap a published item.
+- Confirm the published detail panel shows:
+  - final caption
+  - destination
+  - published timestamp
+  - share action
+- Trigger Share post and confirm the native share sheet opens.
+
+## Pass Criteria
+
+- Submitter can create and track a post without changing advanced settings.
+- Reviewer can approve a post and see where it published.
+- Internal feed shows non-smoke published posts by default.
+- Published detail can be shared.
+- Settings > Build info is enough to identify the tested build and API.
+
+## Notes
+
+- Smoke-generated posts are hidden from `/feed/internal` by default.
+- Use `/feed/internal?includeSmoke=1` only when checking smoke artifacts directly.
+- If the approval queue contains old smoke items, run:
+
+```sh
+./scripts/cleanup_smoke_approvals_vps.sh
+```
+
+Then re-run with `APPLY=1` only when you intend to move smoke approvals out of the active queue.

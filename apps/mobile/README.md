@@ -23,6 +23,9 @@ Install mobile dependencies from the repo root, then:
 
 This app is now configured for EAS Build and EAS Submit.
 
+Before cutting a TestFlight build, run the mobile QA checklist in
+`apps/mobile/QA_CHECKLIST.md`.
+
 Relevant files:
 
 - `app.config.js`
