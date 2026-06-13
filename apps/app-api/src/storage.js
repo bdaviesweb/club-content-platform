@@ -1,5 +1,6 @@
 import {
   CreateBucketCommand,
+  GetObjectCommand,
   HeadBucketCommand,
   PutObjectCommand,
   S3Client
@@ -172,8 +173,27 @@ export async function createUploadPlan({
   };
 }
 
+export async function getStoredObject(objectKey) {
+  const command = new GetObjectCommand({
+    Bucket: bucketName,
+    Key: objectKey
+  });
+
+  return getInternalS3Client().send(command);
+}
+
 export function buildPublicObjectUrl(objectKey) {
-  if (!publicEndpoint || !objectKey) {
+  if (!objectKey) {
+    return null;
+  }
+
+  const publicAppUrl = process.env.PUBLIC_APP_URL || process.env.API_PUBLIC_BASE_URL || "";
+  if (publicAppUrl) {
+    const base = String(publicAppUrl).replace(/\/+$/, "");
+    return `${base}/media/preview?key=${encodeURIComponent(objectKey)}`;
+  }
+
+  if (!publicEndpoint) {
     return null;
   }
 
@@ -182,6 +202,5 @@ export function buildPublicObjectUrl(objectKey) {
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/");
-
   return `${base}/${encodeURIComponent(bucketName)}/${encodedKey}`;
 }

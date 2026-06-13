@@ -1813,37 +1813,42 @@ export default function App() {
               </Pressable>
             </View>
 
-            <View style={styles.settingsCard}>
-              <GlassLayer />
-              <Text style={styles.settingsLabel}>Device role</Text>
-              <View style={styles.audienceRow}>
-                {[
-                  { key: "submitter", label: "Submitter" },
-                  { key: "reviewer", label: "Reviewer" }
-                ].map((option) => (
-                  <Pressable
-                    key={option.key}
-                    style={[
-                      styles.audiencePill,
-                      roleAccess.mode === option.key && styles.audiencePillActive
-                    ]}
-                    onPress={() => setRoleMode(option.key)}
-                  >
-                    <Text
+            <ScrollView
+              style={styles.settingsScroll}
+              contentContainerStyle={styles.settingsScrollContent}
+              showsVerticalScrollIndicator
+            >
+              <View style={styles.settingsCard}>
+                <GlassLayer />
+                <Text style={styles.settingsLabel}>Device role</Text>
+                <View style={styles.audienceRow}>
+                  {[
+                    { key: "submitter", label: "Submitter" },
+                    { key: "reviewer", label: "Reviewer" }
+                  ].map((option) => (
+                    <Pressable
+                      key={option.key}
                       style={[
-                        styles.audiencePillText,
-                        roleAccess.mode === option.key && styles.audiencePillTextActive
+                        styles.audiencePill,
+                        roleAccess.mode === option.key && styles.audiencePillActive
                       ]}
+                      onPress={() => setRoleMode(option.key)}
                     >
-                      {option.label}
-                    </Text>
-                  </Pressable>
-                ))}
+                      <Text
+                        style={[
+                          styles.audiencePillText,
+                          roleAccess.mode === option.key && styles.audiencePillTextActive
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <Text style={styles.advancedHelpText}>
+                  Submitters post and track their own content. Reviewers approve or send content back.
+                </Text>
               </View>
-              <Text style={styles.advancedHelpText}>
-                Submitters post and track their own content. Reviewers approve or send content back.
-              </Text>
-            </View>
 
             <View style={styles.settingsCard}>
               <GlassLayer />
@@ -1964,6 +1969,7 @@ export default function App() {
                 Use this when checking TestFlight builds so everyone is looking at the same app, API, and role.
               </Text>
             </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -3231,6 +3237,13 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.62)",
     overflow: "hidden",
     position: "relative"
+  },
+  settingsScroll: {
+    flexGrow: 0
+  },
+  settingsScrollContent: {
+    gap: 12,
+    paddingBottom: 12
   },
   settingsLabel: {
     color: "#7369a2",

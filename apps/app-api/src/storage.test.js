@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildPublicObjectUrl,
   buildUploadObjectKey,
   validateUploadRequest
 } from "./storage.js";
@@ -105,4 +106,22 @@ test("builds sanitized upload object keys", () => {
     objectKey,
     "uploads/demo-club/123-fixed-id-goal-photo-.jpg"
   );
+});
+
+test("builds API media preview URLs when public app URL is configured", () => {
+  const originalPublicAppUrl = process.env.PUBLIC_APP_URL;
+  process.env.PUBLIC_APP_URL = "https://clubcontent-api.davmn.net";
+
+  try {
+    assert.equal(
+      buildPublicObjectUrl("uploads/demo club/photo 1.jpg"),
+      "https://clubcontent-api.davmn.net/media/preview?key=uploads%2Fdemo%20club%2Fphoto%201.jpg"
+    );
+  } finally {
+    if (originalPublicAppUrl === undefined) {
+      delete process.env.PUBLIC_APP_URL;
+    } else {
+      process.env.PUBLIC_APP_URL = originalPublicAppUrl;
+    }
+  }
 });
