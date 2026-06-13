@@ -15,6 +15,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -107,6 +108,24 @@ function buildNotificationMeta(item) {
   if (item?.payload?.status) meta.push(formatStatusLabel(item.payload.status));
   if (item?.deliveryStatus) meta.push(formatNotificationLabel(item.deliveryStatus));
   return meta.join(" · ");
+}
+
+function buildPublishedShareMessage(submission) {
+  const caption =
+    submission?.caption_draft?.trim() ||
+    submission?.raw_text?.trim() ||
+    "Club update";
+  const destination = submission?.publishedPost?.destinationName || "the club feed";
+  const publishedAt = submission?.publishedPost?.publishedAt
+    ? formatSubmittedAt(submission.publishedPost.publishedAt)
+    : null;
+  const mediaUrl = submission?.media?.find((item) => item.previewUrl)?.previewUrl;
+  const lines = [caption, "", `Published to ${destination}.`];
+
+  if (publishedAt) lines.push(`Published ${publishedAt}.`);
+  if (mediaUrl) lines.push(mediaUrl);
+
+  return lines.join("\n");
 }
 
 function fixPromptForReasonCode(reasonCode) {
@@ -462,6 +481,22 @@ export default function App() {
       Alert.alert("Detail unavailable", error.message || "Unknown error");
     } finally {
       setLoadingDetail(false);
+    }
+  }
+
+  async function sharePublishedSubmission(submission = selectedSubmissionDetail) {
+    if (!submission?.publishedPost) {
+      Alert.alert("Not published yet", "This post has not reached the club feed yet.");
+      return;
+    }
+
+    try {
+      await Share.share({
+        message: buildPublishedShareMessage(submission),
+        title: submission.caption_draft || submission.raw_text || "Club update"
+      });
+    } catch (error) {
+      Alert.alert("Share unavailable", error.message || "Could not open sharing.");
     }
   }
 
@@ -1525,6 +1560,23 @@ export default function App() {
                       <View style={styles.metaChip}><Text style={styles.metaChipText}>{formatVisibilityLabel(latestSubmission.visibility_target)}</Text></View>
                       <View style={styles.metaChip}><Text style={styles.metaChipText}>{formatMediaCountLabel(latestSubmission.media_count)}</Text></View>
                     </View>
+
+                    {latestSubmission.status === "published" ? (
+                      <View style={styles.publishedActionRow}>
+                        <Pressable
+                          style={styles.publishedPrimaryButton}
+                          onPress={() => loadSubmissionDetail(latestSubmission.id)}
+                        >
+                          <Text style={styles.publishedPrimaryButtonText}>View published post</Text>
+                        </Pressable>
+                        <Pressable
+                          style={styles.publishedSecondaryButton}
+                          onPress={() => setActiveView("feed")}
+                        >
+                          <Text style={styles.publishedSecondaryButtonText}>Open feed</Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
                   </View>
                 ) : loadingRecent ? (
                   <Text style={styles.emptyStateText}>Loading your latest post…</Text>
@@ -1571,6 +1623,9 @@ export default function App() {
                       </View>
                       <Text style={styles.feedHeadline}>{item.raw_text?.trim() || "No caption provided"}</Text>
                       <Text style={styles.feedSupport}>{summarizeSubmissionProgress(item)}</Text>
+                      {item.status === "published" ? (
+                        <Text style={styles.feedPublishedHint}>Tap to view the finished club post.</Text>
+                      ) : null}
                     </Pressable>
                   ))
                 ) : loadingRecent ? (
@@ -2114,11 +2169,54 @@ export default function App() {
                 ) : null}
 
                 {selectedSubmissionDetail.publishedPost ? (
-                  <>
-                    <Text style={styles.detailHeading}>Publishing</Text>
-                    <Text style={styles.detailBody}>Published to {selectedSubmissionDetail.publishedPost.destinationName}</Text>
-                    <Text style={styles.detailBody}>{formatSubmittedAt(selectedSubmissionDetail.publishedPost.publishedAt)}</Text>
-                  </>
+                  <View style={styles.publishedDetailCard}>
+                    <View style={styles.publishedDetailHeader}>
+                      <View>
+                        <Text style={styles.publishedDetailKicker}>Published post</Text>
+                        <Text style={styles.publishedDetailTitle}>Ready for families</Text>
+                      </View>
+                      <View style={[styles.statusBadge, styles.statusBadgeSuccess]}>
+                        <Text style={[styles.statusBadgeText, styles.statusBadgeTextSuccess]}>Live</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.publishedCaption}>
+                      {selectedSubmissionDetail.caption_draft?.trim() ||
+                        selectedSubmissionDetail.raw_text?.trim() ||
+                        "No caption provided"}
+                    </Text>
+                    <View style={styles.publishedMetaGrid}>
+                      <View style={styles.publishedMetaItem}>
+                        <Text style={styles.publishedMetaLabel}>Destination</Text>
+                        <Text style={styles.publishedMetaValue}>
+                          {selectedSubmissionDetail.publishedPost.destinationName}
+                        </Text>
+                      </View>
+                      <View style={styles.publishedMetaItem}>
+                        <Text style={styles.publishedMetaLabel}>Published</Text>
+                        <Text style={styles.publishedMetaValue}>
+                          {formatSubmittedAt(selectedSubmissionDetail.publishedPost.publishedAt)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.publishedActionRow}>
+                      <Pressable
+                        style={styles.publishedPrimaryButton}
+                        onPress={() => sharePublishedSubmission(selectedSubmissionDetail)}
+                      >
+                        <Text style={styles.publishedPrimaryButtonText}>Share post</Text>
+                      </Pressable>
+                      <Pressable
+                        style={styles.publishedSecondaryButton}
+                        onPress={() => {
+                          setSelectedSubmissionId(null);
+                          setSelectedSubmissionDetail(null);
+                          setActiveView("feed");
+                        }}
+                      >
+                        <Text style={styles.publishedSecondaryButtonText}>Open feed</Text>
+                      </Pressable>
+                    </View>
+                  </View>
                 ) : null}
               </ScrollView>
             )}
@@ -2789,6 +2887,11 @@ const styles = StyleSheet.create({
     color: "#656185",
     lineHeight: 21
   },
+  feedPublishedHint: {
+    color: "#5b52ba",
+    fontWeight: "800",
+    lineHeight: 20
+  },
   progressTrack: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -3089,6 +3192,97 @@ const styles = StyleSheet.create({
     color: "#4d5651",
     lineHeight: 21,
     marginTop: 6
+  },
+  publishedDetailCard: {
+    marginTop: 16,
+    borderRadius: 22,
+    padding: 16,
+    gap: 12,
+    backgroundColor: "rgba(255,255,255,0.74)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.82)"
+  },
+  publishedDetailHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12
+  },
+  publishedDetailKicker: {
+    color: "#6f66a3",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 1.1,
+    textTransform: "uppercase"
+  },
+  publishedDetailTitle: {
+    color: "#11261f",
+    fontSize: 20,
+    lineHeight: 23,
+    fontWeight: "800",
+    marginTop: 3
+  },
+  publishedCaption: {
+    color: "#2a2451",
+    fontSize: 18,
+    lineHeight: 23,
+    fontWeight: "800"
+  },
+  publishedMetaGrid: {
+    gap: 10
+  },
+  publishedMetaItem: {
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: "rgba(244,242,255,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(91,82,186,0.10)"
+  },
+  publishedMetaLabel: {
+    color: "#756fa0",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1,
+    textTransform: "uppercase"
+  },
+  publishedMetaValue: {
+    color: "#2a2451",
+    fontWeight: "800",
+    marginTop: 4,
+    lineHeight: 20
+  },
+  publishedActionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 2
+  },
+  publishedPrimaryButton: {
+    flexGrow: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 999,
+    backgroundColor: "#6d63cf",
+    alignItems: "center"
+  },
+  publishedPrimaryButtonText: {
+    color: "#f8f7ff",
+    fontWeight: "800"
+  },
+  publishedSecondaryButton: {
+    flexGrow: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 999,
+    backgroundColor: "rgba(91, 82, 186, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(91, 82, 186, 0.18)",
+    alignItems: "center"
+  },
+  publishedSecondaryButtonText: {
+    color: "#4f46a6",
+    fontWeight: "800"
   },
   detailSupportCallout: {
     marginTop: 10,
