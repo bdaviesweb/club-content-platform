@@ -68,6 +68,7 @@ Useful scripts:
 - `./scripts/update_vps.sh` - normal day-to-day flow after pushing to GitHub
 - `./scripts/smoke_vps.sh` - check VPS API health and approval queue from your Mac
 - `./scripts/hermes_smoke_vps.sh` - submit a sample post, verify AI review output, and remove the sample from the active review queue
+- `./scripts/cleanup_smoke_approvals_vps.sh` - list old pending smoke approvals; use `APPLY=1` to move them out of the active queue
 - `RUN_APPROVAL_PUBLISH_SMOKE=1 ./scripts/update_vps.sh` - update the VPS and verify submit, AI review, approval, and internal publishing
 
 Recommended routine:
