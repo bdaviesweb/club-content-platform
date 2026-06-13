@@ -17,6 +17,7 @@ import { loadAuthorizedApprovalActor } from "./approval-authorization.js";
 import {
   buildPublicObjectUrl,
   createUploadPlan,
+  getStoredObject,
   validateUploadRequest
 } from "./storage.js";
 import {
@@ -65,6 +66,17 @@ function sendHtml(res, status, html) {
     "content-type": "text/html; charset=utf-8"
   });
   res.end(html);
+}
+
+function sendBinary(res, status, body, headers = {}) {
+  res.writeHead(status, headers);
+
+  if (body?.pipe) {
+    body.pipe(res);
+    return;
+  }
+
+  res.end(body);
 }
 
 function normalizeOptionalString(value) {
@@ -382,6 +394,25 @@ async function handleCreateUploadPlan(req, res) {
   );
 
   sendJson(res, 200, { uploads: plans });
+}
+
+async function handleMediaPreview(res, searchParams) {
+  const objectKey = searchParams.get("key");
+
+  if (!objectKey || !objectKey.startsWith("uploads/")) {
+    sendJson(res, 400, { error: "A valid media key is required" });
+    return;
+  }
+
+  try {
+    const object = await getStoredObject(objectKey);
+    sendBinary(res, 200, object.Body, {
+      "content-type": object.ContentType || "application/octet-stream",
+      "cache-control": "public, max-age=300"
+    });
+  } catch (error) {
+    sendNotFound(res);
+  }
 }
 
 async function handleGetSubmission(res, submissionId) {
@@ -1451,6 +1482,11 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "POST" && url.pathname === "/uploads/sign") {
       await handleCreateUploadPlan(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/media/preview") {
+      await handleMediaPreview(res, url.searchParams);
       return;
     }
 
