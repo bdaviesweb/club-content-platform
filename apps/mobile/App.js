@@ -1,3 +1,4 @@
+import Constants from "expo-constants";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
@@ -368,6 +369,18 @@ export default function App() {
 
   const submissionStats = useMemo(() => countStatuses(recentSubmissions), [recentSubmissions]);
   const latestSubmission = recentSubmissions[0] || null;
+  const appBuildInfo = useMemo(() => {
+    const expoConfig = Constants.expoConfig || {};
+    const easProjectId = expoConfig.extra?.eas?.projectId || "not configured";
+    return {
+      appName: expoConfig.name || "Club Content",
+      appVersion: Constants.nativeAppVersion || expoConfig.version || "0.1.0",
+      buildNumber: Constants.nativeBuildVersion || "development",
+      bundleIdentifier: expoConfig.ios?.bundleIdentifier || "com.hermes.clubcontent",
+      easProjectId,
+      executionEnvironment: Constants.executionEnvironment || "unknown"
+    };
+  }, []);
   const latestStatusSummary = latestSubmission
     ? summarizeSubmissionProgress(latestSubmission)
     : "Your first post will show review and publish status here.";
@@ -1919,6 +1932,38 @@ export default function App() {
                 </Text>
               </View>
             ) : null}
+
+            <View style={styles.settingsCard}>
+              <GlassLayer />
+              <View style={styles.buildInfoHeader}>
+                <View>
+                  <Text style={styles.settingsLabel}>Build info</Text>
+                  <Text style={styles.buildInfoTitle}>{appBuildInfo.appName}</Text>
+                </View>
+                <View style={styles.inlineMetaPill}>
+                  <Text style={styles.inlineMetaPillText}>QA</Text>
+                </View>
+              </View>
+              <View style={styles.buildInfoGrid}>
+                {[
+                  { label: "Version", value: appBuildInfo.appVersion },
+                  { label: "Build", value: appBuildInfo.buildNumber },
+                  { label: "API", value: normalizeApiBaseUrl(apiBaseUrl) || "not set" },
+                  { label: "Role", value: roleAccess.mode },
+                  { label: "Bundle", value: appBuildInfo.bundleIdentifier },
+                  { label: "EAS project", value: appBuildInfo.easProjectId },
+                  { label: "Runtime", value: appBuildInfo.executionEnvironment }
+                ].map((item) => (
+                  <View key={item.label} style={styles.buildInfoRow}>
+                    <Text style={styles.buildInfoLabel}>{item.label}</Text>
+                    <Text selectable style={styles.buildInfoValue}>{item.value}</Text>
+                  </View>
+                ))}
+              </View>
+              <Text style={styles.advancedHelpText}>
+                Use this when checking TestFlight builds so everyone is looking at the same app, API, and role.
+              </Text>
+            </View>
           </View>
         </View>
       </Modal>
@@ -3193,6 +3238,44 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textTransform: "uppercase",
     letterSpacing: 1.2
+  },
+  buildInfoHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12
+  },
+  buildInfoTitle: {
+    color: "#2a2451",
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: "800",
+    marginTop: 4
+  },
+  buildInfoGrid: {
+    gap: 8
+  },
+  buildInfoRow: {
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "rgba(244,242,255,0.66)",
+    borderWidth: 1,
+    borderColor: "rgba(91,82,186,0.10)",
+    gap: 4
+  },
+  buildInfoLabel: {
+    color: "#756fa0",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1,
+    textTransform: "uppercase"
+  },
+  buildInfoValue: {
+    color: "#2a2451",
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "700"
   },
   advancedToggle: {
     borderRadius: 22,
