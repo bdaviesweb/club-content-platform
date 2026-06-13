@@ -2,6 +2,9 @@
 
 Use this checklist before a TestFlight build or when validating a new mobile workflow change.
 
+For a specific build, create or update a dated QA run file under `apps/mobile/qa-runs/`
+so the device results stay tied to the exact TestFlight build.
+
 ## Preflight
 
 - Confirm the installed app points at the expected API host in Settings > Build info.
