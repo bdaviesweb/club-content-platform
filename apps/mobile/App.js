@@ -286,6 +286,9 @@ export default function App() {
   const [recentSubmissions, setRecentSubmissions] = useState([]);
   const [loadingRecent, setLoadingRecent] = useState(false);
   const [recentError, setRecentError] = useState("");
+  const [clubFeedItems, setClubFeedItems] = useState([]);
+  const [loadingClubFeed, setLoadingClubFeed] = useState(false);
+  const [clubFeedError, setClubFeedError] = useState("");
   const [notifications, setNotifications] = useState([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [notificationsError, setNotificationsError] = useState("");
@@ -326,6 +329,10 @@ export default function App() {
   const canLoadRecent = useMemo(() => {
     return Boolean(apiBaseUrl.trim() && clubSlug.trim() && roleAccess.canTrackSubmissions);
   }, [apiBaseUrl, clubSlug, roleAccess.canTrackSubmissions]);
+
+  const canLoadClubFeed = useMemo(() => {
+    return Boolean(apiBaseUrl.trim());
+  }, [apiBaseUrl]);
 
   const canReview = useMemo(() => {
     return Boolean(apiBaseUrl.trim() && roleAccess.canReview);
@@ -416,6 +423,29 @@ export default function App() {
     }
   }
 
+  async function loadClubFeed() {
+    if (!canLoadClubFeed) {
+      setClubFeedItems([]);
+      return;
+    }
+
+    setLoadingClubFeed(true);
+    setClubFeedError("");
+
+    try {
+      const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
+      const response = await fetch(`${baseUrl}/feed/internal`);
+      if (!response.ok) throw new Error(`Club feed failed: ${response.status}`);
+      const payload = await response.json();
+      setClubFeedItems(Array.isArray(payload.items) ? payload.items : []);
+    } catch (error) {
+      setClubFeedError(error.message || "Could not load club feed");
+      setStatus(error.message || "Could not load club feed");
+    } finally {
+      setLoadingClubFeed(false);
+    }
+  }
+
   async function loadSubmissionDetail(submissionId) {
     setLoadingDetail(true);
     try {
@@ -455,7 +485,7 @@ export default function App() {
   }
 
   async function refreshStatusFeed() {
-    await Promise.all([loadRecentSubmissions(), loadNotifications()]);
+    await Promise.all([loadRecentSubmissions(), loadNotifications(), loadClubFeed()]);
   }
 
   async function resubmitSelectedSubmission() {
@@ -587,13 +617,13 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (!canLoadRecent) return;
+    if (!canLoadRecent && !canLoadClubFeed) return;
     refreshStatusFeed();
     const intervalId = setInterval(() => {
       refreshStatusFeed();
     }, 20000);
     return () => clearInterval(intervalId);
-  }, [canLoadRecent, apiBaseUrl, clubSlug, teamSlug, roleAccess.submitterEmail]);
+  }, [canLoadRecent, canLoadClubFeed, apiBaseUrl, clubSlug, teamSlug, roleAccess.submitterEmail]);
 
   useEffect(() => {
     if (!canLoadRecent) {
@@ -966,6 +996,14 @@ export default function App() {
             </Pressable>
           ) : null}
           <Pressable
+            style={[styles.segmentButton, activeView === "feed" && styles.segmentButtonActive]}
+            onPress={() => setActiveView("feed")}
+          >
+            <Text style={[styles.segmentText, activeView === "feed" && styles.segmentTextActive]}>
+              Feed
+            </Text>
+          </Pressable>
+          <Pressable
             style={[styles.segmentButton, activeView === "status" && styles.segmentButtonActive]}
             onPress={() => setActiveView("status")}
           >
@@ -1167,9 +1205,16 @@ export default function App() {
                 </Text>
                 <Text style={styles.miniStatusBody}>{latestStatusSummary}</Text>
                 {latestSubmission ? (
-                  <Pressable style={styles.inlineStatusLink} onPress={() => setActiveView("status")}>
-                    <Text style={styles.inlineStatusLinkText}>Open status feed</Text>
-                  </Pressable>
+                  <View style={styles.inlineStatusActions}>
+                    <Pressable style={styles.inlineStatusLink} onPress={() => setActiveView("status")}>
+                      <Text style={styles.inlineStatusLinkText}>Open status feed</Text>
+                    </Pressable>
+                    {latestSubmission.status === "published" ? (
+                      <Pressable style={styles.inlineStatusLink} onPress={() => setActiveView("feed")}>
+                        <Text style={styles.inlineStatusLinkText}>Open club feed</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
                 ) : null}
               </View>
             </>
@@ -1275,6 +1320,103 @@ export default function App() {
                   </Text>
                 </View>
               ) : null}
+            </>
+          ) : activeView === "feed" ? (
+            <>
+              <View style={styles.statusHeroCard}>
+                <GlassLayer />
+                <Text style={styles.statusHeroKicker}>Club feed</Text>
+                <Text style={styles.statusHeroTitle}>Approved posts, ready to share.</Text>
+                <Text style={styles.statusHeroBody}>
+                  This is what made it through review and into the internal club feed.
+                </Text>
+                <View style={styles.statusSummaryRow}>
+                  <View style={styles.statusSummaryPill}>
+                    <Text style={styles.statusSummaryValue}>{clubFeedItems.length}</Text>
+                    <Text style={styles.statusSummaryLabel}>Posted</Text>
+                  </View>
+                  <View style={styles.statusSummaryPill}>
+                    <Text style={styles.statusSummaryValue}>
+                      {clubFeedItems.filter((item) => item.media?.length).length}
+                    </Text>
+                    <Text style={styles.statusSummaryLabel}>With media</Text>
+                  </View>
+                  <View style={styles.statusSummaryPill}>
+                    <Text style={styles.statusSummaryValue}>Live</Text>
+                    <Text style={styles.statusSummaryLabel}>Feed</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.sectionBlock}>
+                <View style={styles.sectionHeader}>
+                  <View>
+                    <Text style={styles.sectionKicker}>Internal feed</Text>
+                    <Text style={styles.sectionTitle}>Latest club posts</Text>
+                  </View>
+                  <Pressable style={styles.topGhostButton} onPress={loadClubFeed}>
+                    <Text style={styles.topGhostButtonText}>
+                      {loadingClubFeed ? "Loading" : "Refresh"}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {clubFeedItems.length ? (
+                  clubFeedItems.map((item, index) => {
+                    const primaryMedia = item.media?.[0];
+                    const isVideo = String(primaryMedia?.mimeType || "").startsWith("video/");
+                    return (
+                      <View key={item.id} style={[styles.feedCard, index === 0 && styles.feedCardFeatured]}>
+                        <GlassLayer />
+                        {primaryMedia?.previewUrl ? (
+                          <View style={styles.clubFeedMediaFrame}>
+                            {isVideo ? (
+                              <View style={styles.clubFeedVideoPreview}>
+                                <Text style={styles.clubFeedVideoText}>Video</Text>
+                              </View>
+                            ) : (
+                              <Image
+                                source={{ uri: primaryMedia.previewUrl }}
+                                style={styles.clubFeedImage}
+                                resizeMode="cover"
+                              />
+                            )}
+                          </View>
+                        ) : null}
+                        <View style={styles.statusBadgeRow}>
+                          <View style={[styles.statusBadge, styles.statusBadgeSuccess]}>
+                            <Text style={[styles.statusBadgeText, styles.statusBadgeTextSuccess]}>Posted</Text>
+                          </View>
+                          <Text style={styles.feedTime}>{formatSubmittedAt(item.published_at)}</Text>
+                        </View>
+                        <Text style={styles.feedHeadline}>{item.caption_draft || item.raw_text?.trim() || "No caption provided"}</Text>
+                        <Text style={styles.feedSupport}>
+                          Published to {item.destination_name || "the internal feed"}.
+                        </Text>
+                        <View style={styles.metaChipRow}>
+                          <View style={styles.metaChip}>
+                            <Text style={styles.metaChipText}>{formatContentTypeLabel(item.content_type)}</Text>
+                          </View>
+                          <View style={styles.metaChip}>
+                            <Text style={styles.metaChipText}>{formatVisibilityLabel(item.visibility_target)}</Text>
+                          </View>
+                          {item.media?.length ? (
+                            <View style={styles.metaChip}>
+                              <Text style={styles.metaChipText}>{formatMediaCountLabel(item.media.length)}</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                      </View>
+                    );
+                  })
+                ) : loadingClubFeed ? (
+                  <Text style={styles.emptyStateText}>Loading the club feed...</Text>
+                ) : clubFeedError ? (
+                  <Text style={styles.errorStateText}>{clubFeedError}</Text>
+                ) : (
+                  <Text style={styles.emptyStateText}>Approved club posts will show here.</Text>
+                )}
+              </View>
             </>
           ) : (
             <>
@@ -2069,12 +2211,13 @@ const styles = StyleSheet.create({
   },
   segmentRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
     paddingHorizontal: 20,
     paddingBottom: 10
   },
   segmentButton: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.40)",
@@ -2487,6 +2630,11 @@ const styles = StyleSheet.create({
     color: "#666286",
     lineHeight: 21
   },
+  inlineStatusActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 14
+  },
   inlineStatusLink: {
     alignSelf: "flex-start",
     marginTop: 4
@@ -2710,6 +2858,32 @@ const styles = StyleSheet.create({
   },
   feedCardFeatured: {
     backgroundColor: "rgba(255,255,255,0.52)"
+  },
+  clubFeedMediaFrame: {
+    width: "100%",
+    aspectRatio: 1.45,
+    borderRadius: 18,
+    overflow: "hidden",
+    backgroundColor: "rgba(55, 48, 108, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.48)"
+  },
+  clubFeedImage: {
+    width: "100%",
+    height: "100%"
+  },
+  clubFeedVideoPreview: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(50, 43, 95, 0.78)"
+  },
+  clubFeedVideoText: {
+    color: "#fffdf8",
+    fontWeight: "900",
+    letterSpacing: 1.1,
+    textTransform: "uppercase"
   },
   notificationCard: {
     backgroundColor: "rgba(255,255,255,0.40)",
