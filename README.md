@@ -99,6 +99,7 @@ generated AI review item to stay in the approval queue for manual inspection.
 - `GET /notification-delivery/status`
 - `POST /notifications/:id/read`
 - `GET /feed/internal`
+- `GET /feed/internal?includeSmoke=1` to include smoke-generated internal posts
 - `GET /workflow-events?status=failed|pending|all`
 - `POST /workflow-events/:id/retry`
 
