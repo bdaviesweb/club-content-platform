@@ -128,6 +128,10 @@ function buildPublishedShareMessage(submission) {
   return lines.join("\n");
 }
 
+function wait(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 function fixPromptForReasonCode(reasonCode) {
   switch (String(reasonCode || "").toLowerCase()) {
     case "score_details":
@@ -330,6 +334,7 @@ export default function App() {
   const [reviewActionEditorVisible, setReviewActionEditorVisible] = useState(false);
   const [reviewActionInProgress, setReviewActionInProgress] = useState(false);
   const [reviewActionStatus, setReviewActionStatus] = useState("Pick a review item to get started.");
+  const [lastReviewedPublishedSubmission, setLastReviewedPublishedSubmission] = useState(null);
 
   const roleAccess = useMemo(
     () =>
@@ -383,6 +388,7 @@ export default function App() {
     setSelectedSubmissionId(null);
     setSelectedSubmissionDetail(null);
     setReviewQueue([]);
+    setLastReviewedPublishedSubmission(null);
     resetReviewActionState();
   }, [activeView, roleAccess.showReviewTools]);
 
@@ -465,23 +471,41 @@ export default function App() {
     }
   }
 
+  async function fetchSubmissionDetail(submissionId) {
+    const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
+    const response = await fetch(`${baseUrl}/submissions/${submissionId}`);
+    if (!response.ok) throw new Error(`Submission detail failed: ${response.status}`);
+    return response.json();
+  }
+
   async function loadSubmissionDetail(submissionId) {
     setLoadingDetail(true);
     try {
-      const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
-      const response = await fetch(`${baseUrl}/submissions/${submissionId}`);
-      if (!response.ok) throw new Error(`Submission detail failed: ${response.status}`);
-      const payload = await response.json();
+      const payload = await fetchSubmissionDetail(submissionId);
       setSelectedSubmissionDetail(payload);
       setSelectedSubmissionId(submissionId);
       setResubmissionText(payload.raw_text || "");
       setResubmissionAsset(null);
+      return payload;
     } catch (error) {
       setStatus(error.message || "Could not load submission detail");
       Alert.alert("Detail unavailable", error.message || "Unknown error");
+      return null;
     } finally {
       setLoadingDetail(false);
     }
+  }
+
+  async function waitForPublishedSubmission(submissionId) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const detail = await fetchSubmissionDetail(submissionId);
+      if (detail?.publishedPost || detail?.status === "published") {
+        return detail;
+      }
+      await wait(900);
+    }
+
+    return fetchSubmissionDetail(submissionId);
   }
 
   async function sharePublishedSubmission(submission = selectedSubmissionDetail) {
@@ -796,10 +820,12 @@ export default function App() {
     Keyboard.dismiss();
     try {
       const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
+      const reviewedSubmissionId = selectedSubmissionDetail.id;
+      const submittedAction = reviewAction;
       const actionLabel =
-        reviewAction === "approve"
+        submittedAction === "approve"
           ? "Approved"
-          : reviewAction === "request_changes"
+          : submittedAction === "request_changes"
             ? "Sent back for changes"
             : "Rejected";
 
@@ -816,10 +842,34 @@ export default function App() {
 
       if (!response.ok) throw new Error("Review action failed: " + response.status);
 
-      setReviewActionStatus(actionLabel + ". Loading the next item...");
+      setReviewActionStatus(
+        submittedAction === "approve"
+          ? "Approved. Checking the publish result..."
+          : actionLabel + ". Loading the next item..."
+      );
       await refreshStatusFeed();
+      let reviewedDetail = null;
+
+      if (submittedAction === "approve") {
+        try {
+          reviewedDetail = await waitForPublishedSubmission(reviewedSubmissionId);
+          if (reviewedDetail?.publishedPost) {
+            setLastReviewedPublishedSubmission(reviewedDetail);
+            setReviewActionStatus(
+              `Published to ${reviewedDetail.publishedPost.destinationName}. Loading the next item...`
+            );
+          } else {
+            setReviewActionStatus("Approved. Publishing is still finishing in the background.");
+          }
+        } catch (confirmationError) {
+          setReviewActionStatus("Approved. Could not confirm publishing yet.");
+        }
+      } else {
+        setLastReviewedPublishedSubmission(null);
+      }
+
       const items = await loadReviewQueue();
-      const nextItem = items.find((item) => item.submission_id !== selectedSubmissionDetail.id) || items[0] || null;
+      const nextItem = items.find((item) => item.submission_id !== reviewedSubmissionId) || items[0] || null;
 
       if (nextItem?.submission_id) {
         await loadSubmissionDetail(nextItem.submission_id);
@@ -832,9 +882,11 @@ export default function App() {
 
       Alert.alert(
         actionLabel,
-        reviewAction === "approve"
-          ? "It is moving forward."
-          : reviewAction === "request_changes"
+        submittedAction === "approve"
+          ? reviewedDetail?.publishedPost
+            ? `Published to ${reviewedDetail.publishedPost.destinationName}.`
+            : "It is moving forward."
+          : submittedAction === "request_changes"
             ? "The submitter will see your note."
             : "The submitter will be notified."
       );
@@ -1284,6 +1336,52 @@ export default function App() {
                   {roleAccess.reviewActorEmail ? `Signed in as ${roleAccess.reviewActorEmail}.` : "Add your reviewer email in Settings to use this view."}
                 </Text>
               </View>
+
+              {lastReviewedPublishedSubmission?.publishedPost ? (
+                <View style={styles.reviewerPublishedCard}>
+                  <GlassLayer />
+                  <View style={styles.publishedDetailHeader}>
+                    <View>
+                      <Text style={styles.publishedDetailKicker}>Last approved</Text>
+                      <Text style={styles.publishedDetailTitle}>Published to feed</Text>
+                    </View>
+                    <View style={[styles.statusBadge, styles.statusBadgeSuccess]}>
+                      <Text style={[styles.statusBadgeText, styles.statusBadgeTextSuccess]}>Live</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.publishedCaption}>
+                    {lastReviewedPublishedSubmission.caption_draft?.trim() ||
+                      lastReviewedPublishedSubmission.raw_text?.trim() ||
+                      "No caption provided"}
+                  </Text>
+                  <Text style={styles.feedSupport}>
+                    {lastReviewedPublishedSubmission.publishedPost.destinationName} · {formatSubmittedAt(lastReviewedPublishedSubmission.publishedPost.publishedAt)}
+                  </Text>
+                  <View style={styles.publishedActionRow}>
+                    <Pressable
+                      style={styles.publishedPrimaryButton}
+                      onPress={() => sharePublishedSubmission(lastReviewedPublishedSubmission)}
+                    >
+                      <Text style={styles.publishedPrimaryButtonText}>Share post</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.publishedSecondaryButton}
+                      onPress={() => {
+                        setSelectedSubmissionDetail(lastReviewedPublishedSubmission);
+                        setSelectedSubmissionId(lastReviewedPublishedSubmission.id);
+                      }}
+                    >
+                      <Text style={styles.publishedSecondaryButtonText}>Open detail</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.publishedSecondaryButton}
+                      onPress={() => setActiveView("feed")}
+                    >
+                      <Text style={styles.publishedSecondaryButtonText}>Open feed</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : null}
 
               <View style={styles.sectionBlock}>
                 <View style={styles.sectionHeader}>
@@ -2804,6 +2902,16 @@ const styles = StyleSheet.create({
     color: "#5d5a80",
     lineHeight: 20,
     marginTop: 2
+  },
+  reviewerPublishedCard: {
+    backgroundColor: "rgba(255,255,255,0.48)",
+    borderRadius: 26,
+    padding: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.66)",
+    position: "relative",
+    overflow: "hidden"
   },
   sectionBlock: {
     gap: 12
