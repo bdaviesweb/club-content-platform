@@ -23,6 +23,7 @@ import {
   maskPushToken,
   registerPushToken
 } from "./push-tokens.js";
+import { buildInternalFeedSmokeFilter } from "./feedFilters.js";
 
 const port = Number(process.env.API_PORT || 4000);
 const publicAppName = process.env.PUBLIC_PRODUCT_NAME || "Club Content";
@@ -995,7 +996,9 @@ async function handleApprovalAction(req, res, approvalRequestId) {
   sendJson(res, 200, result);
 }
 
-async function handleInternalFeed(res) {
+async function handleInternalFeed(res, searchParams = new URLSearchParams()) {
+  const includeSmoke = searchParams.get("includeSmoke") === "1";
+  const smokeFilter = buildInternalFeedSmokeFilter(includeSmoke);
   const result = await getPool().query(
     `
     SELECT
@@ -1022,10 +1025,13 @@ async function handleInternalFeed(res) {
     JOIN submissions s ON s.id = pp.submission_id
     JOIN publishing_destinations pd ON pd.id = pp.destination_id
     LEFT JOIN submission_media sm ON sm.submission_id = s.id
+    WHERE TRUE
+      ${smokeFilter.clause}
     GROUP BY pp.id, s.id, pd.id
     ORDER BY pp.published_at DESC
     LIMIT 50
-    `
+    `,
+    smokeFilter.values
   );
 
   sendJson(res, 200, { items: result.rows });
@@ -1516,7 +1522,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/feed/internal") {
-      await handleInternalFeed(res);
+      await handleInternalFeed(res, url.searchParams);
       return;
     }
 
