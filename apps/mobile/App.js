@@ -15,6 +15,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   Share,
   StyleSheet,
@@ -314,6 +315,7 @@ export default function App() {
   const [loadingClubFeed, setLoadingClubFeed] = useState(false);
   const [clubFeedError, setClubFeedError] = useState("");
   const [failedClubFeedImages, setFailedClubFeedImages] = useState({});
+  const [refreshingView, setRefreshingView] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [notificationsError, setNotificationsError] = useState("");
@@ -560,6 +562,30 @@ export default function App() {
 
   async function refreshStatusFeed() {
     await Promise.all([loadRecentSubmissions(), loadNotifications(), loadClubFeed()]);
+  }
+
+  async function refreshActiveView() {
+    setRefreshingView(true);
+    try {
+      if (activeView === "feed") {
+        await loadClubFeed();
+        return;
+      }
+
+      if (activeView === "review") {
+        await loadReviewQueue();
+        return;
+      }
+
+      if (activeView === "status") {
+        await refreshStatusFeed();
+        return;
+      }
+
+      await refreshStatusFeed();
+    } finally {
+      setRefreshingView(false);
+    }
   }
 
   async function resubmitSelectedSubmission() {
@@ -1119,6 +1145,13 @@ export default function App() {
           automaticallyAdjustKeyboardInsets
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshingView}
+              onRefresh={refreshActiveView}
+              tintColor="#37306c"
+            />
+          }
           contentContainerStyle={[
             styles.container,
             asset && styles.containerWithKeyboardBuffer
