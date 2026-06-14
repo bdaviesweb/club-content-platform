@@ -138,10 +138,17 @@ async function enrichFeedMediaAsset(item) {
 
 async function enrichFeedMediaCollection(items) {
   if (!Array.isArray(items)) {
-    return [];
+    return {
+      displayableMedia: [],
+      unavailableMedia: []
+    };
   }
 
-  return Promise.all(items.map(enrichFeedMediaAsset));
+  const enrichedItems = await Promise.all(items.map(enrichFeedMediaAsset));
+  return {
+    displayableMedia: enrichedItems.filter((item) => item?.previewUrl),
+    unavailableMedia: enrichedItems.filter((item) => item && !item.previewUrl)
+  };
 }
 
 function renderPublicPage({ title, eyebrow, body }) {
@@ -1102,10 +1109,20 @@ async function handleInternalFeed(res, searchParams = new URLSearchParams()) {
     smokeFilter.values
   );
 
-  const items = await Promise.all(result.rows.map(async (item) => ({
+  const items = await Promise.all(result.rows.map(async (item) => {
+    const media = await enrichFeedMediaCollection(item.media);
+
+    return {
       ...item,
-      media: await enrichFeedMediaCollection(item.media)
-    })));
+      media: media.displayableMedia,
+      unavailable_media_count: media.unavailableMedia.length,
+      unavailable_media_reasons: media.unavailableMedia.map((mediaItem) => ({
+        objectKey: mediaItem.objectKey,
+        mimeType: mediaItem.mimeType,
+        reason: mediaItem.previewUnavailableReason || "unavailable"
+      }))
+    };
+  }));
 
   sendJson(res, 200, { items });
 }
