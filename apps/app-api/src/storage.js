@@ -2,6 +2,7 @@ import {
   CreateBucketCommand,
   GetObjectCommand,
   HeadBucketCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client
 } from "@aws-sdk/client-s3";
@@ -13,6 +14,12 @@ const internalEndpoint = process.env.S3_ENDPOINT;
 const publicEndpoint = process.env.S3_PUBLIC_BASE_URL || internalEndpoint;
 const maxUploadFiles = 6;
 const allowedMediaTypes = new Set(["photo", "video"]);
+const displayablePhotoMimeTypes = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp"
+]);
 
 let internalClient;
 let signingClient;
@@ -106,6 +113,13 @@ export function validateUploadRequest(body = {}) {
       };
     }
 
+    if (mediaType === "photo" && !displayablePhotoMimeTypes.has(mimeType)) {
+      return {
+        valid: false,
+        error: `files[${index}].mimeType must be image/jpeg, image/png, or image/webp for photos`
+      };
+    }
+
     if (!filename) {
       return {
         valid: false,
@@ -180,6 +194,20 @@ export async function getStoredObject(objectKey) {
   });
 
   return getInternalS3Client().send(command);
+}
+
+export async function getStoredObjectMetadata(objectKey) {
+  const command = new HeadObjectCommand({
+    Bucket: bucketName,
+    Key: objectKey
+  });
+
+  return getInternalS3Client().send(command);
+}
+
+export function isDisplayPreviewMimeType(mimeType) {
+  const normalized = normalizeRequiredString(mimeType).toLowerCase();
+  return normalized.startsWith("video/") || displayablePhotoMimeTypes.has(normalized);
 }
 
 export function buildPublicObjectUrl(objectKey) {

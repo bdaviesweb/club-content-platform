@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildPublicObjectUrl,
   buildUploadObjectKey,
+  isDisplayPreviewMimeType,
   validateUploadRequest
 } from "./storage.js";
 
@@ -76,6 +77,17 @@ test("rejects unsupported media and mismatched mime types", () => {
       error: "files[0].mimeType must match the media type"
     }
   );
+
+  assert.deepEqual(
+    validateUploadRequest({
+      clubSlug: "demo",
+      files: [{ mediaType: "photo", mimeType: "image/heic", filename: "sideline.heic" }]
+    }),
+    {
+      valid: false,
+      error: "files[0].mimeType must be image/jpeg, image/png, or image/webp for photos"
+    }
+  );
 });
 
 test("limits the number of files signed in one request", () => {
@@ -124,4 +136,11 @@ test("builds API media preview URLs when public app URL is configured", () => {
       process.env.PUBLIC_APP_URL = originalPublicAppUrl;
     }
   }
+});
+
+test("identifies feed-displayable preview mime types", () => {
+  assert.equal(isDisplayPreviewMimeType("image/jpeg"), true);
+  assert.equal(isDisplayPreviewMimeType(" image/png "), true);
+  assert.equal(isDisplayPreviewMimeType("video/mp4"), true);
+  assert.equal(isDisplayPreviewMimeType("image/heic"), false);
 });

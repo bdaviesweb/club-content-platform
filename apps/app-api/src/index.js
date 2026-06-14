@@ -18,6 +18,8 @@ import {
   buildPublicObjectUrl,
   createUploadPlan,
   getStoredObject,
+  getStoredObjectMetadata,
+  isDisplayPreviewMimeType,
   validateUploadRequest
 } from "./storage.js";
 import {
@@ -105,6 +107,41 @@ function enrichMediaCollection(items) {
   }
 
   return items.map(enrichMediaAsset);
+}
+
+async function enrichFeedMediaAsset(item) {
+  const enriched = enrichMediaAsset(item);
+
+  if (!enriched?.previewUrl) {
+    return enriched;
+  }
+
+  if (!isDisplayPreviewMimeType(enriched.mimeType)) {
+    return {
+      ...enriched,
+      previewUrl: null,
+      previewUnavailableReason: "unsupported_format"
+    };
+  }
+
+  try {
+    await getStoredObjectMetadata(enriched.objectKey);
+    return enriched;
+  } catch (_error) {
+    return {
+      ...enriched,
+      previewUrl: null,
+      previewUnavailableReason: "missing_media"
+    };
+  }
+}
+
+async function enrichFeedMediaCollection(items) {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return Promise.all(items.map(enrichFeedMediaAsset));
 }
 
 function renderPublicPage({ title, eyebrow, body }) {
@@ -1065,12 +1102,12 @@ async function handleInternalFeed(res, searchParams = new URLSearchParams()) {
     smokeFilter.values
   );
 
-  sendJson(res, 200, {
-    items: result.rows.map((item) => ({
+  const items = await Promise.all(result.rows.map(async (item) => ({
       ...item,
-      media: enrichMediaCollection(item.media)
-    }))
-  });
+      media: await enrichFeedMediaCollection(item.media)
+    })));
+
+  sendJson(res, 200, { items });
 }
 
 async function handleNotifications(res, searchParams) {
