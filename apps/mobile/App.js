@@ -582,7 +582,7 @@ export default function App() {
               {
                 filename: resubmissionAsset.name,
                 mimeType: resubmissionAsset.mimeType || "application/octet-stream",
-                mediaType: contentType === "video" ? "video" : "image"
+                mediaType: contentType
               }
             ]
           })
@@ -1001,7 +1001,7 @@ export default function App() {
             {
               filename: asset.name,
               mimeType: asset.mimeType || "application/octet-stream",
-              mediaType: contentType === "video" ? "video" : "image"
+              mediaType: contentType
             }
           ]
         })
