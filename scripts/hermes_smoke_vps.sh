@@ -49,6 +49,9 @@ while (( SECONDS < deadline )); do
       COALESCE(ar.id::text, ''),
       COALESCE(ar.state::text, ''),
       COALESCE(s.routing_decision->>'reviewMode', ''),
+      COALESCE(s.routing_decision->>'routingSource', ''),
+      COALESCE(s.routing_decision->>'approverRole', ''),
+      COALESCE(s.routing_decision->>'localFallbackApproverRole', ''),
       COALESCE(rr.model, ''),
       COALESCE(rr.summary, ''),
       COALESCE(se.processing_error, '')
@@ -74,20 +77,23 @@ while (( SECONDS < deadline )); do
   ")
 
   if [[ -n "\${row}" ]]; then
-    IFS='|' read -r submission_id status approval_request_id approval_state review_mode model summary processing_error <<< "\${row}"
+    IFS='|' read -r submission_id status approval_request_id approval_state review_mode routing_source approver_role local_fallback_approver_role model summary processing_error <<< "\${row}"
 
     if [[ -n "\${processing_error}" ]]; then
       echo "Worker failed for submission \${submission_id}: \${processing_error}" >&2
       exit 1
     fi
 
-    if [[ "\${review_mode}" == "hermes" && ( '${CLEANUP_APPROVAL}' != "1" || -n "\${approval_request_id}" ) ]]; then
+    if [[ "\${review_mode}" == "hermes" && "\${routing_source}" == "hermes_agent" && ( '${CLEANUP_APPROVAL}' != "1" || -n "\${approval_request_id}" ) ]]; then
       echo "AI review smoke passed."
       echo "submission_id=\${submission_id}"
       echo "status=\${status}"
       echo "approval_request_id=\${approval_request_id}"
       echo "approval_state=\${approval_state}"
       echo "review_mode=\${review_mode}"
+      echo "routing_source=\${routing_source}"
+      echo "approver_role=\${approver_role}"
+      echo "local_fallback_approver_role=\${local_fallback_approver_role}"
       echo "model=\${model}"
       echo "summary=\${summary}"
 
@@ -104,7 +110,7 @@ while (( SECONDS < deadline )); do
       exit 0
     fi
 
-    echo "Waiting for AI review. status=\${status:-pending} review_mode=\${review_mode:-pending} approval_request_id=\${approval_request_id:-pending}"
+    echo "Waiting for AI review. status=\${status:-pending} review_mode=\${review_mode:-pending} routing_source=\${routing_source:-pending} approval_request_id=\${approval_request_id:-pending}"
   else
     echo "Waiting for smoke submission to appear..."
   fi
@@ -112,6 +118,6 @@ while (( SECONDS < deadline )); do
   sleep '${POLL_SECONDS}'
 done
 
-echo "Timed out waiting for AI review mode on ${SMOKE_MARKER}." >&2
+echo "Timed out waiting for Hermes agent routing on ${SMOKE_MARKER}." >&2
 exit 1
 INNER
