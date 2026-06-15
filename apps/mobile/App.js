@@ -28,6 +28,10 @@ const { registerPushToken } = require("./pushRegistration");
 const { buildMobileRolePolicy, submitterMode } = require("./rolePolicy");
 const { getClubFeedImagePreviewUrls } = require("./feedMedia");
 const {
+  formatLastUpdatedLabel,
+  getRefreshButtonLabel
+} = require("./refreshFeedback");
+const {
   countStatuses,
   formatStatusLabel,
   getProgressStageState,
@@ -326,6 +330,7 @@ export default function App() {
   const [clubFeedError, setClubFeedError] = useState("");
   const [failedClubFeedImages, setFailedClubFeedImages] = useState({});
   const [refreshingView, setRefreshingView] = useState(false);
+  const [clubFeedLastRefreshedAt, setClubFeedLastRefreshedAt] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [notificationsError, setNotificationsError] = useState("");
@@ -497,6 +502,7 @@ export default function App() {
 
       setClubFeedItems(nextItems);
       setFailedClubFeedImages({});
+      setClubFeedLastRefreshedAt(new Date().toISOString());
     } catch (error) {
       setClubFeedError(error.message || "Could not load club feed");
       setStatus(error.message || "Could not load club feed");
@@ -1552,11 +1558,25 @@ export default function App() {
                     <Text style={styles.sectionKicker}>Internal feed</Text>
                     <Text style={styles.sectionTitle}>Latest club posts</Text>
                   </View>
-                  <Pressable style={styles.topGhostButton} onPress={loadClubFeed}>
+                  <Pressable
+                    style={styles.topGhostButton}
+                    onPress={activeView === "feed" ? refreshActiveView : loadClubFeed}
+                  >
                     <Text style={styles.topGhostButtonText}>
-                      {loadingClubFeed ? "Loading" : "Refresh"}
+                      {getRefreshButtonLabel(loadingClubFeed || refreshingView)}
                     </Text>
                   </Pressable>
+                </View>
+                <View style={styles.refreshFeedbackRow}>
+                  <Text style={styles.refreshFeedbackText}>
+                    {formatLastUpdatedLabel(clubFeedLastRefreshedAt)}
+                  </Text>
+                  {loadingClubFeed || refreshingView ? (
+                    <View style={styles.refreshFeedbackPill}>
+                      <ActivityIndicator color="#5b52ba" size="small" />
+                      <Text style={styles.refreshFeedbackPillText}>Checking feed</Text>
+                    </View>
+                  ) : null}
                 </View>
 
                 {clubFeedItems.length ? (
@@ -3060,6 +3080,35 @@ const styles = StyleSheet.create({
     lineHeight: 28,
     color: "#2a2451",
     fontWeight: "800"
+  },
+  refreshFeedbackRow: {
+    minHeight: 34,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    flexWrap: "wrap"
+  },
+  refreshFeedbackText: {
+    color: "#6d6698",
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  refreshFeedbackPill: {
+    minHeight: 30,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.48)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.58)"
+  },
+  refreshFeedbackPillText: {
+    color: "#5b52ba",
+    fontSize: 12,
+    fontWeight: "900"
   },
   unreadBadge: {
     color: "#5b52ba",
