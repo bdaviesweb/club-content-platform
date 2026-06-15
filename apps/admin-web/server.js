@@ -1119,6 +1119,7 @@ function renderAiReviewPanel(detail) {
   const rawOutput = latestReview.rawOutput || {};
   const structuredReview = rawOutput.structuredReview || {};
   const fallbackReason = rawOutput.fallbackReason;
+  const routingDecision = detail.routing_decision || {};
   const reviewRequiredReason =
     structuredReview.review_required_reason ||
     structuredReview.reviewRequiredReason ||
@@ -1163,6 +1164,14 @@ function renderAiReviewPanel(detail) {
       <div class="ai-review-metric">
         <span>Risk score</span>
         <strong>${escapeHtml(formatPercent(rawOutput.riskScore ?? detail.risk_score))}</strong>
+      </div>
+      <div class="ai-review-metric">
+        <span>Routing source</span>
+        <strong>${escapeHtml(routingDecision.routingSource || "local_rules")}</strong>
+      </div>
+      <div class="ai-review-metric">
+        <span>Routed approver</span>
+        <strong>${escapeHtml(routingDecision.approverRole || detail.approver_role || "n/a")}</strong>
       </div>
     </div>
 
@@ -1310,7 +1319,8 @@ function renderCenterStage(detail, recommendation, queueIds) {
         </div>
         <div class="signal-list">
           <div class="signal-card">
-            <strong>Routing rationale</strong>
+            <strong>Routing decision</strong>
+            <p style="margin-top:8px; line-height:1.45;">${escapeHtml(detail.routing_decision?.routingSource || "local_rules")} routed this to ${escapeHtml(detail.routing_decision?.approverRole || detail.approver_role || "n/a")}.</p>
             <p style="margin-top:8px; line-height:1.45;">${escapeHtml(detail.routing_decision?.rationale || "No routing rationale recorded.")}</p>
           </div>
           <div class="signal-card">
