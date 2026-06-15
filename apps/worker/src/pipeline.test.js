@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildReviewArtifacts,
+  processSubmissionCreated,
   processSubmissionApproved
 } from "./pipeline.js";
 
@@ -119,6 +120,142 @@ test("records Hermes fallback reasons in review artifacts", async () => {
       delete process.env.HERMES_REVIEW_AGENT_MODE;
     } else {
       process.env.HERMES_REVIEW_AGENT_MODE = originalMode;
+    }
+
+    if (originalApiKey === undefined) {
+      delete process.env.HERMES_REVIEW_AGENT_API_KEY;
+    } else {
+      process.env.HERMES_REVIEW_AGENT_API_KEY = originalApiKey;
+    }
+
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("routes approval requests with the Hermes agent decision", async () => {
+  const originalUrl = process.env.HERMES_REVIEW_AGENT_URL;
+  const originalApiKey = process.env.HERMES_REVIEW_AGENT_API_KEY;
+  const originalFetch = globalThis.fetch;
+  const queries = [];
+  const submission = {
+    id: "submission-1",
+    club_id: "club-1",
+    submitted_by_user_id: "submitter-1",
+    raw_text: "Player may need a medical check after the match.",
+    visibility_target: "internal",
+    content_type: "photo",
+    submitter_name: "Coach"
+  };
+
+  process.env.HERMES_REVIEW_AGENT_URL = "https://hermes.example.test/review";
+  process.env.HERMES_REVIEW_AGENT_API_KEY = "secret";
+  globalThis.fetch = async () => ({
+    ok: true,
+    async json() {
+      return {
+        id: "run-1",
+        model: "hermes-v1",
+        review: {
+          risk_level: "medium",
+          confidence: 0.82,
+          summary: "Medical detail should go to admin review.",
+          caption_draft: "Team update from today's match.",
+          review_required_reason: "Medical detail",
+          routing_decision: {
+            approver_role: "club_admin",
+            rationale: "Medical context needs senior club review."
+          },
+          findings: [
+            {
+              type: "safety",
+              severity: "medium",
+              message: "Mentions a possible medical check."
+            }
+          ]
+        }
+      };
+    }
+  });
+
+  const client = {
+    async query(sql, params = []) {
+      queries.push({ sql, params });
+
+      if (sql.includes("FROM submissions s")) {
+        return { rowCount: 1, rows: [submission] };
+      }
+
+      if (sql.includes("INSERT INTO review_runs")) {
+        return { rowCount: 1, rows: [{ id: "review-run-1" }] };
+      }
+
+      if (sql.includes("FROM memberships")) {
+        return { rowCount: 1, rows: [{ id: "approver-1" }] };
+      }
+
+      if (sql.includes("INSERT INTO notifications")) {
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              id: "notification-1",
+              user_id: params[0],
+              type: params[1],
+              payload: JSON.parse(params[2]),
+              created_at: new Date().toISOString()
+            }
+          ]
+        };
+      }
+
+      if (sql.includes("SELECT email, full_name")) {
+        return {
+          rowCount: 1,
+          rows: [{ email: "submitter@example.test", full_name: "Submitter" }]
+        };
+      }
+
+      if (sql.includes("WITH latest_push_state")) {
+        return { rowCount: 0, rows: [] };
+      }
+
+      return { rowCount: 1, rows: [] };
+    }
+  };
+
+  try {
+    await processSubmissionCreated(client, { submission_id: submission.id });
+
+    const update = queries.find(({ sql }) => sql.includes("routing_decision"));
+    const routingDecision = JSON.parse(update.params[3]);
+    assert.equal(routingDecision.approverRole, "club_admin");
+    assert.equal(routingDecision.reviewMode, "hermes");
+    assert.equal(routingDecision.routingSource, "hermes_agent");
+    assert.equal(
+      routingDecision.agentRationale,
+      "Medical context needs senior club review."
+    );
+
+    assert.ok(
+      queries.some(
+        ({ sql, params }) =>
+          sql.includes("INSERT INTO approval_requests") &&
+          params[2] === "club_admin"
+      )
+    );
+    assert.ok(
+      queries.some(
+        ({ sql, params }) =>
+          sql.includes("INSERT INTO submission_events") &&
+          params[1] === "submission.approval.requested" &&
+          JSON.parse(params[2]).originallyRequestedRole === "club_admin"
+      )
+    );
+  } finally {
+    if (originalUrl === undefined) {
+      delete process.env.HERMES_REVIEW_AGENT_URL;
+    } else {
+      process.env.HERMES_REVIEW_AGENT_URL = originalUrl;
     }
 
     if (originalApiKey === undefined) {

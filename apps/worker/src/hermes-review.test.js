@@ -18,6 +18,10 @@ test("normalizes Hermes review responses", () => {
       summary: "Sensitive detail needs review.",
       captionDraft: "Clean caption",
       reviewRequiredReason: "Privacy risk",
+      routingDecision: {
+        approverRole: "club_admin",
+        rationale: "Needs senior review."
+      },
       findings: [
         {
           type: "privacy",
@@ -36,6 +40,10 @@ test("normalizes Hermes review responses", () => {
     summary: "Sensitive detail needs review.",
     caption_draft: "Clean caption",
     review_required_reason: "Privacy risk",
+    routing_decision: {
+      approver_role: "club_admin",
+      rationale: "Needs senior review."
+    },
     findings: [
       {
         type: "privacy",
@@ -44,6 +52,18 @@ test("normalizes Hermes review responses", () => {
       }
     ]
   });
+});
+
+test("drops unsupported Hermes routing roles", () => {
+  const result = normalizeHermesReviewResponse({
+    review: {
+      risk_level: "low",
+      approver_role: "team_manager",
+      summary: "Safe enough for normal review."
+    }
+  });
+
+  assert.equal(result.review.routing_decision, null);
 });
 
 test("posts the submission to the configured Hermes review agent", async () => {
