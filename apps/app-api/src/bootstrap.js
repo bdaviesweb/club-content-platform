@@ -13,25 +13,25 @@ const defaultClubSeed = {
   submitterName: "Demo Coach"
 };
 
-function getClubSeed() {
+export function getClubSeed(env = process.env) {
   return {
-    slug: process.env.DEMO_CLUB_SLUG || defaultClubSeed.slug,
-    name: process.env.DEMO_CLUB_NAME || defaultClubSeed.name,
-    teamSlug: process.env.DEMO_TEAM_SLUG || defaultClubSeed.teamSlug,
-    teamName: process.env.DEMO_TEAM_NAME || defaultClubSeed.teamName,
+    slug: env.DEMO_CLUB_SLUG || defaultClubSeed.slug,
+    name: env.DEMO_CLUB_NAME || defaultClubSeed.name,
+    teamSlug: env.DEMO_TEAM_SLUG || defaultClubSeed.teamSlug,
+    teamName: env.DEMO_TEAM_NAME || defaultClubSeed.teamName,
     approverEmail:
-      process.env.DEMO_REVIEWER_EMAIL ||
-      process.env.DEMO_APPROVER_EMAIL ||
+      env.DEMO_REVIEWER_EMAIL ||
+      env.DEMO_APPROVER_EMAIL ||
       defaultClubSeed.approverEmail,
     approverName:
-      process.env.DEMO_REVIEWER_NAME ||
-      process.env.DEMO_APPROVER_NAME ||
+      env.DEMO_REVIEWER_NAME ||
+      env.DEMO_APPROVER_NAME ||
       defaultClubSeed.approverName,
     submitterEmail:
-      process.env.DEMO_SUBMITTER_EMAIL ||
-      process.env.EXPO_PUBLIC_SUBMITTER_EMAIL ||
+      env.DEMO_SUBMITTER_EMAIL ||
+      env.EXPO_PUBLIC_SUBMITTER_EMAIL ||
       defaultClubSeed.submitterEmail,
-    submitterName: process.env.DEMO_SUBMITTER_NAME || defaultClubSeed.submitterName
+    submitterName: env.DEMO_SUBMITTER_NAME || defaultClubSeed.submitterName
   };
 }
 
