@@ -1,12 +1,13 @@
 function formatLastUpdatedLabel(value) {
-  if (!value) return "Not refreshed yet";
+  if (!value) return "Not checked yet";
 
   const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "Not refreshed yet";
+  if (Number.isNaN(date.getTime())) return "Not checked yet";
 
-  return `Updated ${date.toLocaleTimeString([], {
+  return `Checked ${date.toLocaleTimeString([], {
     hour: "numeric",
-    minute: "2-digit"
+    minute: "2-digit",
+    second: "2-digit"
   })}`;
 }
 
