@@ -28,6 +28,7 @@ const { registerPushToken } = require("./pushRegistration");
 const { buildMobileRolePolicy, submitterMode } = require("./rolePolicy");
 const { getClubFeedImagePreviewUrls } = require("./feedMedia");
 const { uploadSelectedAsset } = require("./mediaUpload");
+const { buildApiError } = require("./apiErrors");
 const {
   formatLastUpdatedLabel,
   getRefreshButtonLabel
@@ -49,7 +50,7 @@ const defaultConfig = {
   submitterEmail:
     process.env.EXPO_PUBLIC_SUBMITTER_EMAIL || "coach@demo-club.local",
   reviewerEmail:
-    process.env.EXPO_PUBLIC_REVIEWER_EMAIL || "reviewer@demo-club.local",
+    process.env.EXPO_PUBLIC_REVIEWER_EMAIL || "comms@demo-club.local",
   roleMode: process.env.EXPO_PUBLIC_MOBILE_ROLE || submitterMode
 };
 
@@ -909,7 +910,7 @@ export default function App() {
         })
       });
 
-      if (!response.ok) throw new Error("Review action failed: " + response.status);
+      if (!response.ok) throw await buildApiError(response, "Review action failed");
 
       setReviewActionStatus(
         submittedAction === "approve"
