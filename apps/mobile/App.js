@@ -26,6 +26,7 @@ import {
 
 const { registerPushToken } = require("./pushRegistration");
 const { buildMobileRolePolicy, submitterMode } = require("./rolePolicy");
+const { getClubFeedImagePreviewUrls } = require("./feedMedia");
 const {
   countStatuses,
   formatStatusLabel,
@@ -132,6 +133,15 @@ function buildPublishedShareMessage(submission) {
 
 function wait(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function prefetchWithTimeout(uri, timeoutMilliseconds = 2500) {
+  if (!uri) return false;
+
+  return Promise.race([
+    Image.prefetch(uri),
+    wait(timeoutMilliseconds).then(() => false)
+  ]);
 }
 
 function fixPromptForReasonCode(reasonCode) {
@@ -478,7 +488,14 @@ export default function App() {
       const response = await fetch(`${baseUrl}/feed/internal`);
       if (!response.ok) throw new Error(`Club feed failed: ${response.status}`);
       const payload = await response.json();
-      setClubFeedItems(Array.isArray(payload.items) ? payload.items : []);
+      const nextItems = Array.isArray(payload.items) ? payload.items : [];
+      const imagePreviewUrls = getClubFeedImagePreviewUrls(nextItems);
+
+      await Promise.allSettled(
+        imagePreviewUrls.map((previewUrl) => prefetchWithTimeout(previewUrl))
+      );
+
+      setClubFeedItems(nextItems);
       setFailedClubFeedImages({});
     } catch (error) {
       setClubFeedError(error.message || "Could not load club feed");
