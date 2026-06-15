@@ -23,6 +23,31 @@ export function chooseApproverRole(submission) {
   return "team_manager";
 }
 
+function chooseRoutingDecision(submission, reviewArtifacts) {
+  const localApproverRole = chooseApproverRole({
+    visibility_target: submission.visibility_target,
+    risk_score: reviewArtifacts.riskScore
+  });
+  const agentRouting = reviewArtifacts.structured?.review?.routing_decision;
+
+  if (reviewArtifacts.mode === "hermes" && agentRouting?.approver_role) {
+    return {
+      approverRole: agentRouting.approver_role,
+      routingSource: "hermes_agent",
+      agentRationale: agentRouting.rationale || null,
+      localFallbackApproverRole: localApproverRole
+    };
+  }
+
+  return {
+    approverRole: localApproverRole,
+    routingSource:
+      reviewArtifacts.mode === "hermes" ? "local_rules" : reviewArtifacts.mode,
+    agentRationale: null,
+    localFallbackApproverRole: null
+  };
+}
+
 async function findApprover(client, clubId, preferredRole) {
   const fallbackRoles = [preferredRole, "club_comms", "club_admin"];
 
@@ -200,10 +225,8 @@ export async function processSubmissionCreated(client, eventRow) {
 
   const submission = submissionResult.rows[0];
   const reviewArtifacts = await buildReviewArtifacts(submission);
-  const approverRole = chooseApproverRole({
-    visibility_target: submission.visibility_target,
-    risk_score: reviewArtifacts.riskScore
-  });
+  const routingDecision = chooseRoutingDecision(submission, reviewArtifacts);
+  const approverRole = routingDecision.approverRole;
 
   await client.query(
     `
@@ -223,6 +246,9 @@ export async function processSubmissionCreated(client, eventRow) {
         approverRole,
         rationale: reviewArtifacts.summary,
         reviewMode: reviewArtifacts.mode,
+        routingSource: routingDecision.routingSource,
+        agentRationale: routingDecision.agentRationale,
+        localFallbackApproverRole: routingDecision.localFallbackApproverRole,
         reviewRequiredReason:
           reviewArtifacts.structured?.review?.review_required_reason || null
       })

@@ -69,6 +69,36 @@ function normalizeFindings(value) {
   }));
 }
 
+function normalizeApproverRole(value) {
+  const normalized = normalizeOptionalString(value);
+  if (["club_admin", "club_comms"].includes(normalized)) {
+    return normalized;
+  }
+
+  return null;
+}
+
+function normalizeRoutingDecision(review) {
+  const routing = review.routing_decision || review.routingDecision || {};
+  const approverRole = normalizeApproverRole(
+    routing.approver_role ||
+      routing.approverRole ||
+      review.approver_role ||
+      review.approverRole
+  );
+
+  if (!approverRole) {
+    return null;
+  }
+
+  return {
+    approver_role: approverRole,
+    rationale:
+      normalizeOptionalString(routing.rationale || review.routing_rationale) ||
+      null
+  };
+}
+
 function buildReviewPrompt({
   rawText,
   visibilityTarget,
@@ -82,7 +112,7 @@ function buildReviewPrompt({
     "Provide a concise internal caption draft suitable for a club feed.",
     "If the text contains sensitive injury, medical, bullying, harassment, profanity, contact details, or privacy issues, call that out.",
     "Use this JSON shape exactly:",
-    '{"risk_level":"low|medium|high","confidence":0.0,"summary":"...","caption_draft":"...","review_required_reason":"...","findings":[{"type":"policy|privacy|quality|safety","severity":"low|medium|high","message":"..."}]}',
+    '{"risk_level":"low|medium|high","confidence":0.0,"summary":"...","caption_draft":"...","review_required_reason":"...","routing_decision":{"approver_role":"club_comms|club_admin","rationale":"..."},"findings":[{"type":"policy|privacy|quality|safety","severity":"low|medium|high","message":"..."}]}',
     "",
     `Visibility target: ${visibilityTarget || "internal"}`,
     `Content type: ${contentType || "unknown"}`,
@@ -182,6 +212,7 @@ export function normalizeHermesReviewResponse(payload = {}) {
         normalizeOptionalString(
           review.review_required_reason || review.reviewRequiredReason
         ) || null,
+      routing_decision: normalizeRoutingDecision(review),
       findings: normalizeFindings(review.findings)
     },
     raw: payload
