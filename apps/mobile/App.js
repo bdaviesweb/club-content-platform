@@ -1550,6 +1550,22 @@ export default function App() {
                     <Text style={styles.statusSummaryLabel}>Feed</Text>
                   </View>
                 </View>
+                <View style={styles.feedCheckPanel}>
+                  <View>
+                    <Text style={styles.feedCheckLabel}>Last feed check</Text>
+                    <Text style={styles.feedCheckValue}>
+                      {formatLastUpdatedLabel(clubFeedLastRefreshedAt)}
+                    </Text>
+                  </View>
+                  {loadingClubFeed || refreshingView ? (
+                    <View style={styles.feedCheckBadge}>
+                      <ActivityIndicator color="#5b52ba" size="small" />
+                      <Text style={styles.feedCheckBadgeText}>Checking</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.feedCheckReady}>Ready</Text>
+                  )}
+                </View>
               </View>
 
               <View style={styles.sectionBlock}>
@@ -1566,17 +1582,6 @@ export default function App() {
                       {getRefreshButtonLabel(loadingClubFeed || refreshingView)}
                     </Text>
                   </Pressable>
-                </View>
-                <View style={styles.refreshFeedbackRow}>
-                  <Text style={styles.refreshFeedbackText}>
-                    {formatLastUpdatedLabel(clubFeedLastRefreshedAt)}
-                  </Text>
-                  {loadingClubFeed || refreshingView ? (
-                    <View style={styles.refreshFeedbackPill}>
-                      <ActivityIndicator color="#5b52ba" size="small" />
-                      <Text style={styles.refreshFeedbackPillText}>Checking feed</Text>
-                    </View>
-                  ) : null}
                 </View>
 
                 {clubFeedItems.length ? (
@@ -3081,21 +3086,35 @@ const styles = StyleSheet.create({
     color: "#2a2451",
     fontWeight: "800"
   },
-  refreshFeedbackRow: {
-    minHeight: 34,
+  feedCheckPanel: {
+    minHeight: 64,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 10,
-    flexWrap: "wrap"
+    gap: 12,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: "rgba(255,255,255,0.46)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.58)"
   },
-  refreshFeedbackText: {
-    color: "#6d6698",
-    fontSize: 12,
+  feedCheckLabel: {
+    color: "#8078af",
+    fontSize: 11,
+    letterSpacing: 1.1,
+    textTransform: "uppercase",
     fontWeight: "800"
   },
-  refreshFeedbackPill: {
-    minHeight: 30,
+  feedCheckValue: {
+    color: "#2a2451",
+    fontSize: 18,
+    lineHeight: 23,
+    fontWeight: "900",
+    marginTop: 3
+  },
+  feedCheckBadge: {
+    minHeight: 34,
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
@@ -3105,10 +3124,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.58)"
   },
-  refreshFeedbackPillText: {
+  feedCheckBadgeText: {
     color: "#5b52ba",
     fontSize: 12,
     fontWeight: "900"
+  },
+  feedCheckReady: {
+    color: "#226d56",
+    fontSize: 12,
+    fontWeight: "900",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(204, 255, 228, 0.64)",
+    overflow: "hidden"
   },
   unreadBadge: {
     color: "#5b52ba",
