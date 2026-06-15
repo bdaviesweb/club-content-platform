@@ -30,6 +30,13 @@ const { getClubFeedImagePreviewUrls } = require("./feedMedia");
 const { uploadSelectedAsset } = require("./mediaUpload");
 const { buildApiError } = require("./apiErrors");
 const {
+  extractReadinessDefaults,
+  fetchAppReadiness,
+  formatCapability,
+  shouldApplyReadinessDefault,
+  summarizeAppReadiness
+} = require("./appReadiness");
+const {
   formatLastUpdatedLabel,
   getRefreshButtonLabel
 } = require("./refreshFeedback");
@@ -356,6 +363,9 @@ export default function App() {
   const [reviewActionInProgress, setReviewActionInProgress] = useState(false);
   const [reviewActionStatus, setReviewActionStatus] = useState("Pick a review item to get started.");
   const [lastReviewedPublishedSubmission, setLastReviewedPublishedSubmission] = useState(null);
+  const [appReadiness, setAppReadiness] = useState(null);
+  const [loadingAppReadiness, setLoadingAppReadiness] = useState(false);
+  const [appReadinessError, setAppReadinessError] = useState("");
 
   const roleAccess = useMemo(
     () =>
@@ -401,6 +411,8 @@ export default function App() {
       executionEnvironment: Constants.executionEnvironment || "unknown"
     };
   }, []);
+  const appReadinessSummary = useMemo(() => summarizeAppReadiness(appReadiness), [appReadiness]);
+  const readinessCapabilities = appReadiness?.capabilities || {};
   const latestStatusSummary = latestSubmission
     ? summarizeSubmissionProgress(latestSubmission)
     : "Your first post will show review and publish status here.";
@@ -409,6 +421,57 @@ export default function App() {
       selectedSubmissionDetail?.latestApprovalRequest?.latestAction?.reasonCode
     );
   }, [selectedSubmissionDetail]);
+
+  useEffect(() => {
+    if (!apiBaseUrl.trim()) return;
+
+    let isCurrent = true;
+
+    async function loadReadiness() {
+      setLoadingAppReadiness(true);
+      try {
+        const payload = await fetchAppReadiness(apiBaseUrl);
+        if (!isCurrent) return;
+
+        const defaults = extractReadinessDefaults(payload);
+        setAppReadiness(payload);
+        setAppReadinessError("");
+
+        if (defaults.clubSlug) {
+          setClubSlug((current) =>
+            shouldApplyReadinessDefault(current, defaultConfig.clubSlug) ? defaults.clubSlug : current
+          );
+        }
+        if (defaults.teamSlug) {
+          setTeamSlug((current) =>
+            shouldApplyReadinessDefault(current, defaultConfig.teamSlug) ? defaults.teamSlug : current
+          );
+        }
+        if (defaults.submitterEmail) {
+          setSubmitterEmail((current) =>
+            shouldApplyReadinessDefault(current, defaultConfig.submitterEmail) ? defaults.submitterEmail : current
+          );
+        }
+        if (defaults.reviewerEmail) {
+          setReviewerEmail((current) =>
+            shouldApplyReadinessDefault(current, defaultConfig.reviewerEmail) ? defaults.reviewerEmail : current
+          );
+        }
+      } catch (error) {
+        if (!isCurrent) return;
+        setAppReadiness(null);
+        setAppReadinessError(error.message || "Could not load backend rules");
+      } finally {
+        if (isCurrent) setLoadingAppReadiness(false);
+      }
+    }
+
+    loadReadiness();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [apiBaseUrl]);
   const resubmitShortcuts = useMemo(() => {
     return resubmitShortcutsForReasonCode(
       selectedSubmissionDetail?.latestApprovalRequest?.latestAction?.reasonCode
@@ -2052,6 +2115,20 @@ export default function App() {
                   { label: "Version", value: appBuildInfo.appVersion },
                   { label: "Build", value: appBuildInfo.buildNumber },
                   { label: "API", value: normalizeApiBaseUrl(apiBaseUrl) || "not set" },
+                  {
+                    label: "Backend rules",
+                    value: loadingAppReadiness
+                      ? "Checking"
+                      : appReadinessError || appReadinessSummary
+                  },
+                  {
+                    label: "Review",
+                    value: formatCapability(Boolean(readinessCapabilities.review))
+                  },
+                  {
+                    label: "Publishing",
+                    value: formatCapability(Boolean(readinessCapabilities.publishing))
+                  },
                   { label: "Role", value: roleAccess.mode },
                   { label: "Bundle", value: appBuildInfo.bundleIdentifier },
                   { label: "EAS project", value: appBuildInfo.easProjectId },

@@ -27,6 +27,7 @@ import {
   registerPushToken
 } from "./push-tokens.js";
 import { buildInternalFeedSmokeFilter } from "./feedFilters.js";
+import { loadAppReadiness } from "./app-readiness.js";
 
 const port = Number(process.env.API_PORT || 4000);
 const publicAppName = process.env.PUBLIC_PRODUCT_NAME || "Club Content";
@@ -414,6 +415,14 @@ async function handleCreateSubmission(req, res) {
   });
 
   sendJson(res, 201, { submission });
+}
+
+async function handleAppReadiness(res) {
+  const readiness = await loadAppReadiness({
+    pool: getPool()
+  });
+
+  sendJson(res, 200, readiness);
 }
 
 async function handleCreateUploadPlan(req, res) {
@@ -1526,6 +1535,11 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/privacy") {
       handlePrivacyPage(res);
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/app/readiness") {
+      await handleAppReadiness(res);
       return;
     }
 
