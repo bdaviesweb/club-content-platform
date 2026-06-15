@@ -1,5 +1,5 @@
 import Constants from "expo-constants";
-import * as FileSystem from "expo-file-system";
+import { File as ExpoFile } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
@@ -27,6 +27,7 @@ import {
 const { registerPushToken } = require("./pushRegistration");
 const { buildMobileRolePolicy, submitterMode } = require("./rolePolicy");
 const { getClubFeedImagePreviewUrls } = require("./feedMedia");
+const { uploadSelectedAsset } = require("./mediaUpload");
 const {
   formatLastUpdatedLabel,
   getRefreshButtonLabel
@@ -46,7 +47,7 @@ const defaultConfig = {
   clubSlug: process.env.EXPO_PUBLIC_CLUB_SLUG || "demo-soccer-club",
   teamSlug: process.env.EXPO_PUBLIC_TEAM_SLUG || "u14-girls",
   submitterEmail:
-    process.env.EXPO_PUBLIC_SUBMITTER_EMAIL || "clubhqpro@gmail.com",
+    process.env.EXPO_PUBLIC_SUBMITTER_EMAIL || "coach@demo-club.local",
   reviewerEmail:
     process.env.EXPO_PUBLIC_REVIEWER_EMAIL || "reviewer@demo-club.local",
   roleMode: process.env.EXPO_PUBLIC_MOBILE_ROLE || submitterMode
@@ -642,7 +643,9 @@ export default function App() {
         const uploadPlan = signPayload.uploads?.[0];
         if (!uploadPlan) throw new Error("Replacement signing returned no upload plan");
 
-        await uploadSelectedAsset(uploadPlan, resubmissionAsset);
+        await uploadSelectedAsset(uploadPlan, resubmissionAsset, {
+          fileSystem: { File: ExpoFile }
+        });
         resubmissionMedia = [
           {
             objectKey: uploadPlan.objectKey,
@@ -692,6 +695,8 @@ export default function App() {
       mediaTypes: ["images", "videos"],
       allowsEditing: false,
       quality: 0.9,
+      preferredAssetRepresentationMode:
+        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
       videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium
     });
 
@@ -973,6 +978,8 @@ export default function App() {
       mediaTypes: ["images", "videos"],
       allowsEditing: false,
       quality: 0.9,
+      preferredAssetRepresentationMode:
+        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
       videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium
     });
 
@@ -1018,18 +1025,6 @@ export default function App() {
     setStatus("Take a photo or choose one to get started.");
   }
 
-  async function uploadSelectedAsset(uploadPlan, selectedAsset) {
-    const uploadResponse = await FileSystem.uploadAsync(uploadPlan.uploadUrl, selectedAsset.uri, {
-      httpMethod: uploadPlan.method,
-      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-      headers: uploadPlan.headers
-    });
-
-    if (uploadResponse.status < 200 || uploadResponse.status >= 300) {
-      throw new Error(`Upload failed with status ${uploadResponse.status}`);
-    }
-  }
-
   async function submit() {
     if (!asset) return;
 
@@ -1062,7 +1057,9 @@ export default function App() {
       if (!uploadPlan) throw new Error("Upload signing returned no upload plan");
 
       setStatus("Uploading media...");
-      await uploadSelectedAsset(uploadPlan, asset);
+      await uploadSelectedAsset(uploadPlan, asset, {
+        fileSystem: { File: ExpoFile }
+      });
 
       setStatus("Creating submission...");
       const submissionResponse = await fetch(`${baseUrl}/submissions`, {
