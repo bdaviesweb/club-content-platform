@@ -2010,6 +2010,12 @@ export default function App() {
                 <Text style={styles.closeButtonText}>Done</Text>
               </Pressable>
             </View>
+            <View style={styles.settingsHeaderStateRow}>
+              <Text style={styles.settingsHeaderStateLabel}>Current API</Text>
+              <View style={styles.inlineMetaPill}>
+                <Text style={styles.inlineMetaPillText}>{formatApiConnectionLabel(apiBaseUrl)}</Text>
+              </View>
+            </View>
 
             <ScrollView
               style={styles.settingsScroll}
@@ -3581,6 +3587,19 @@ const styles = StyleSheet.create({
   settingsScrollContent: {
     gap: 12,
     paddingBottom: 12
+  },
+  settingsHeaderStateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap"
+  },
+  settingsHeaderStateLabel: {
+    color: "#7369a2",
+    fontWeight: "800",
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 1.2
   },
   settingsLabel: {
     color: "#7369a2",
