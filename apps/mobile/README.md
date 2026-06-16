@@ -70,9 +70,10 @@ If you only want device-distributed beta builds before App Store Connect submiss
 
 The app defaults to:
 
-- `API base URL`: `http://localhost:4000`
+- `API base URL`: `https://clubcontent-api.davmn.net`
 - `clubSlug`: `demo-soccer-club`
 - `teamSlug`: `u14-girls`
 - `submitterEmail`: `coach@demo-club.local`
 
-On a real phone, replace `localhost` with the dev VPS host or a LAN-reachable machine address.
+Use the hosted dev VPS URL for TestFlight and real-device QA. If you are
+pointing at a local backend, override the API base URL explicitly.
