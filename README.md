@@ -360,7 +360,7 @@ The VPS-hosted reviewer console listens on port `3002` and is intended to stay p
 Use an SSH tunnel from your machine:
 
 ```bash
-ssh -L 43002:localhost:3002 hermes-dev-zt
+ssh -L 43002:localhost:3002 hermes-dev
 ```
 
 Then open `http://localhost:43002`. If admin basic-auth credentials are configured on the VPS, your browser will prompt for them before loading the queue.
