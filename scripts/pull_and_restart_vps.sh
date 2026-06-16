@@ -26,7 +26,7 @@ if [ ! -f .env.vps ]; then
 fi
 
 echo "Rebuilding and starting VPS stack"
-docker compose -f "${COMPOSE_FILE}" up --build -d
+docker compose -f "${COMPOSE_FILE}" up --build -d --remove-orphans
 
 echo "Health check"
 deadline=$((SECONDS + HEALTH_TIMEOUT_SECONDS))

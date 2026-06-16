@@ -20,7 +20,7 @@ echo "Ensuring VPS env file exists"
 ssh "${REMOTE_HOST}" "cd '${REMOTE_DIR}' && if [ ! -f .env.vps ]; then cp .env.vps.example .env.vps; fi"
 
 echo "Starting VPS stack"
-ssh "${REMOTE_HOST}" "cd '${REMOTE_DIR}' && docker compose -f docker-compose.vps.yml up --build -d"
+ssh "${REMOTE_HOST}" "cd '${REMOTE_DIR}' && docker compose -f docker-compose.vps.yml up --build -d --remove-orphans"
 
 echo "Done. Next check:"
 echo "ssh ${REMOTE_HOST} 'cd ${REMOTE_DIR} && docker compose -f docker-compose.vps.yml ps'"
