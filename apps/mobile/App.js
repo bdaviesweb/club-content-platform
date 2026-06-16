@@ -358,6 +358,7 @@ export default function App() {
   const [selectedSubmissionId, setSelectedSubmissionId] = useState(null);
   const [selectedSubmissionDetail, setSelectedSubmissionDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [submissionDetailLastRefreshedAt, setSubmissionDetailLastRefreshedAt] = useState(null);
   const [resubmissionText, setResubmissionText] = useState("");
   const [resubmissionAsset, setResubmissionAsset] = useState(null);
   const [resubmittingDetail, setResubmittingDetail] = useState(false);
@@ -603,6 +604,7 @@ export default function App() {
       const payload = await fetchSubmissionDetail(submissionId);
       setSelectedSubmissionDetail(payload);
       setSelectedSubmissionId(submissionId);
+      setSubmissionDetailLastRefreshedAt(new Date().toISOString());
       setResubmissionText(payload.raw_text || "");
       setResubmissionAsset(null);
       return payload;
@@ -2315,6 +2317,22 @@ export default function App() {
                   <Text style={styles.detailStatus}>{formatStatusLabel(selectedSubmissionDetail.status)}</Text>
                   <Text style={styles.detailSummary}>{selectedSubmissionDetail.raw_text?.trim() || "No caption provided"}</Text>
                   <Text style={styles.detailMeta}>{formatSubmittedAt(selectedSubmissionDetail.created_at)}</Text>
+                </View>
+                <View style={styles.feedCheckPanel}>
+                  <View>
+                    <Text style={styles.feedCheckLabel}>Last detail check</Text>
+                    <Text style={styles.feedCheckValue}>
+                      {formatLastUpdatedLabel(submissionDetailLastRefreshedAt)}
+                    </Text>
+                  </View>
+                  {loadingDetail ? (
+                    <View style={styles.feedCheckBadge}>
+                      <ActivityIndicator color="#5b52ba" size="small" />
+                      <Text style={styles.feedCheckBadgeText}>Checking</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.feedCheckReady}>Ready</Text>
+                  )}
                 </View>
 
                 {selectedSubmissionDetail.media?.length || resubmissionAsset ? (
