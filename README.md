@@ -83,6 +83,8 @@ Recommended routine:
 5. run `./scripts/hermes_smoke_vps.sh` after AI review changes or VPS env updates
 6. run `RUN_APPROVAL_PUBLISH_SMOKE=1 ./scripts/update_vps.sh` after approval, publishing, or full workflow changes
 
+`./scripts/update_vps.sh` now autostashes a dirty VPS checkout before it pulls, so a stray edit on the server no longer blocks the update.
+
 For hosted dev work, prefer `npm run dev:vps`. It syncs the current checkout to the verified hermes-dev VPS, restarts the stack there, and prints the live URLs up front. Use `npm run dev:stack` only when you need a local fallback.
 
 Set `CLEANUP_APPROVAL=0` on `./scripts/hermes_smoke_vps.sh` when you want the

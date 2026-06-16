@@ -11,6 +11,11 @@ HEALTH_POLL_SECONDS="${HEALTH_POLL_SECONDS:-2}"
 
 cd "${REPO_DIR}"
 
+if [ -n "$(git status --porcelain)" ]; then
+  echo "Working tree is dirty; creating an autostash before pull"
+  git stash push --include-untracked -m "autostash before pull_and_restart_vps $(date -u +%Y%m%dT%H%M%SZ)"
+fi
+
 echo "Pulling latest ${BRANCH} in ${REPO_DIR}"
 git fetch origin "${BRANCH}"
 git checkout "${BRANCH}"
