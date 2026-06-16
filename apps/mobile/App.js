@@ -353,6 +353,7 @@ export default function App() {
   const [notifications, setNotifications] = useState([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [notificationsError, setNotificationsError] = useState("");
+  const [notificationsLastRefreshedAt, setNotificationsLastRefreshedAt] = useState(null);
   const [pushRegistrationStatus, setPushRegistrationStatus] = useState("");
   const [selectedSubmissionId, setSelectedSubmissionId] = useState(null);
   const [selectedSubmissionDetail, setSelectedSubmissionDetail] = useState(null);
@@ -548,6 +549,7 @@ export default function App() {
       if (!response.ok) throw new Error(`Notifications failed: ${response.status}`);
       const payload = await response.json();
       setNotifications(Array.isArray(payload.items) ? payload.items : []);
+      setNotificationsLastRefreshedAt(new Date().toISOString());
     } catch (error) {
       setNotificationsError(error.message || "Could not load notifications");
       setStatus(error.message || "Could not load notifications");
@@ -2011,6 +2013,25 @@ export default function App() {
                 {pushRegistrationStatus ? (
                   <Text style={styles.pushRegistrationStatus}>{pushRegistrationStatus}</Text>
                 ) : null}
+                <View style={styles.feedCheckPanel}>
+                  <View>
+                    <Text style={styles.feedCheckLabel}>Last updates check</Text>
+                    <Text style={styles.feedCheckValue}>
+                      {formatLastUpdatedLabel(notificationsLastRefreshedAt)}
+                    </Text>
+                  </View>
+                  {loadingNotifications || refreshingView ? (
+                    <View style={styles.feedCheckBadge}>
+                      <ActivityIndicator color="#5b52ba" size="small" />
+                      <Text style={styles.feedCheckBadgeText}>Checking</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.feedCheckReady}>Ready</Text>
+                  )}
+                </View>
+                <Text style={styles.feedCheckCopy}>
+                  {getAutoRefreshLabel(Boolean(canLoadRecent || canLoadClubFeed))}
+                </Text>
 
                 {notifications.length ? (
                   notifications.map((item) => (
