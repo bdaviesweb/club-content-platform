@@ -64,6 +64,7 @@ The repo is now set up to match the other GitHub-backed projects:
 
 Useful scripts:
 
+- `npm run dev:stack` - start API, admin, worker, and mobile web together with fixed local URLs
 - `./scripts/deploy_vps.sh` - bootstrap or force-sync the repo to the VPS
 - `./scripts/update_vps.sh` - normal day-to-day flow after pushing to GitHub
 - `./scripts/smoke_vps.sh` - check VPS API health and approval queue from your Mac
@@ -80,6 +81,8 @@ Recommended routine:
 4. run `./scripts/smoke_vps.sh`
 5. run `./scripts/hermes_smoke_vps.sh` after AI review changes or VPS env updates
 6. run `RUN_APPROVAL_PUBLISH_SMOKE=1 ./scripts/update_vps.sh` after approval, publishing, or full workflow changes
+
+For local work, prefer `npm run dev:stack` over starting individual apps by hand. It prints the exact URLs up front so you can paste or bookmark the right one instead of reopening the wrong localhost port.
 
 Set `CLEANUP_APPROVAL=0` on `./scripts/hermes_smoke_vps.sh` when you want the
 generated AI review item to stay in the approval queue for manual inspection.
