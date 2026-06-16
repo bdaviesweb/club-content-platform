@@ -348,6 +348,7 @@ export default function App() {
   const [clubFeedError, setClubFeedError] = useState("");
   const [failedClubFeedImages, setFailedClubFeedImages] = useState({});
   const [refreshingView, setRefreshingView] = useState(false);
+  const [statusLastRefreshedAt, setStatusLastRefreshedAt] = useState(null);
   const [clubFeedLastRefreshedAt, setClubFeedLastRefreshedAt] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
@@ -661,6 +662,7 @@ export default function App() {
 
   async function refreshStatusFeed() {
     await Promise.all([loadRecentSubmissions(), loadNotifications(), loadClubFeed()]);
+    setStatusLastRefreshedAt(new Date().toISOString());
   }
 
   async function refreshActiveView() {
@@ -1816,6 +1818,25 @@ export default function App() {
                     <Text style={styles.statusSummaryLabel}>Posted</Text>
                   </View>
                 </View>
+                <View style={styles.feedCheckPanel}>
+                  <View>
+                    <Text style={styles.feedCheckLabel}>Last status check</Text>
+                    <Text style={styles.feedCheckValue}>
+                      {formatLastUpdatedLabel(statusLastRefreshedAt)}
+                    </Text>
+                  </View>
+                  {loadingRecent || loadingNotifications || loadingClubFeed || refreshingView ? (
+                    <View style={styles.feedCheckBadge}>
+                      <ActivityIndicator color="#5b52ba" size="small" />
+                      <Text style={styles.feedCheckBadgeText}>Checking</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.feedCheckReady}>Ready</Text>
+                  )}
+                </View>
+                <Text style={styles.feedCheckCopy}>
+                  {getAutoRefreshLabel(Boolean(canLoadRecent || canLoadClubFeed))}
+                </Text>
               </View>
 
               <View style={styles.sectionBlock}>
