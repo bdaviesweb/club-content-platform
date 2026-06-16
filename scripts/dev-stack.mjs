@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import net from "node:net";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
@@ -8,6 +9,20 @@ const apiPort = Number(process.env.CLUB_API_PORT || process.env.API_PORT || 4000
 const adminPort = Number(process.env.CLUB_ADMIN_PORT || process.env.PORT || 3001);
 const mobileWebPort = Number(process.env.CLUB_MOBILE_WEB_PORT || 19006);
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const localDefaults = {
+  DATABASE_URL: process.env.DATABASE_URL || "postgresql://club:club@localhost:5432/club_content",
+  REDIS_URL: process.env.REDIS_URL || "redis://localhost:6379",
+  S3_ENDPOINT: process.env.S3_ENDPOINT || "http://localhost:9000",
+  S3_BUCKET: process.env.S3_BUCKET || "club-content",
+  S3_ACCESS_KEY: process.env.S3_ACCESS_KEY || "minioadmin",
+  S3_SECRET_KEY: process.env.S3_SECRET_KEY || "minioadmin",
+  S3_PUBLIC_BASE_URL: process.env.S3_PUBLIC_BASE_URL || "http://localhost:9000",
+  PUBLIC_APP_URL: process.env.PUBLIC_APP_URL || "http://localhost:3000",
+  ADMIN_APP_URL: process.env.ADMIN_APP_URL || `http://localhost:${adminPort}`,
+  API_BASE_URL: process.env.API_BASE_URL || `http://localhost:${apiPort}`,
+  EXPO_PUBLIC_API_BASE_URL:
+    process.env.EXPO_PUBLIC_API_BASE_URL || `http://localhost:${apiPort}`
+};
 
 const children = new Map();
 
@@ -34,6 +49,49 @@ function start(name, command, args, extraEnv = {}) {
   });
 
   return child;
+}
+
+function waitForPort(host, port, timeoutMs = 60000) {
+  const startedAt = Date.now();
+
+  return new Promise((resolvePromise, rejectPromise) => {
+    function attempt() {
+      const socket = net.createConnection({ host, port });
+
+      socket.once("connect", () => {
+        socket.end();
+        resolvePromise();
+      });
+
+      socket.once("error", () => {
+        socket.destroy();
+
+        if (Date.now() - startedAt >= timeoutMs) {
+          rejectPromise(new Error(`Timed out waiting for ${host}:${port}`));
+          return;
+        }
+
+        setTimeout(attempt, 1000).unref();
+      });
+    }
+
+    attempt();
+  });
+}
+
+function ensureLocalServices() {
+  const result = spawnSync(
+    "docker",
+    ["compose", "up", "-d", "postgres", "redis", "minio"],
+    {
+      cwd: repoRoot,
+      stdio: "inherit"
+    }
+  );
+
+  if (result.status !== 0) {
+    throw new Error("Failed to start local Docker services");
+  }
 }
 
 let shuttingDown = false;
@@ -68,23 +126,38 @@ console.log("");
 console.log("Use these exact URLs instead of bare localhost to avoid opening the wrong app.");
 console.log("");
 
+try {
+  ensureLocalServices();
+  console.log("Waiting for local storage and database services...");
+  await Promise.all([
+    waitForPort("127.0.0.1", 5432),
+    waitForPort("127.0.0.1", 6379),
+    waitForPort("127.0.0.1", 9000)
+  ]);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
+
 start("api", "npm", ["--workspace", "@club/app-api", "run", "dev"], {
+  ...localDefaults,
   API_PORT: String(apiPort)
 });
 
 start("admin", "npm", ["--workspace", "@club/admin-web", "run", "dev"], {
-  PORT: String(adminPort),
-  API_BASE_URL: process.env.API_BASE_URL || `http://localhost:${apiPort}`
+  ...localDefaults,
+  PORT: String(adminPort)
 });
 
-start("worker", "npm", ["--workspace", "@club/worker", "run", "dev"]);
+start("worker", "npm", ["--workspace", "@club/worker", "run", "dev"], {
+  ...localDefaults
+});
 
 start(
   "mobile-web",
   "npm",
   ["--workspace", "@club/mobile", "run", "web", "--", "--port", String(mobileWebPort)],
   {
-    EXPO_PUBLIC_API_BASE_URL:
-      process.env.EXPO_PUBLIC_API_BASE_URL || `http://localhost:${apiPort}`
+    ...localDefaults
   }
 );

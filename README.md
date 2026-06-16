@@ -82,7 +82,7 @@ Recommended routine:
 5. run `./scripts/hermes_smoke_vps.sh` after AI review changes or VPS env updates
 6. run `RUN_APPROVAL_PUBLISH_SMOKE=1 ./scripts/update_vps.sh` after approval, publishing, or full workflow changes
 
-For local work, prefer `npm run dev:stack` over starting individual apps by hand. It prints the exact URLs up front so you can paste or bookmark the right one instead of reopening the wrong localhost port.
+For local work, prefer `npm run dev:stack` over starting individual apps by hand. It prints the exact URLs up front so you can paste or bookmark the right one instead of reopening the wrong localhost port, and it brings up the local database and storage containers first.
 
 Set `CLEANUP_APPROVAL=0` on `./scripts/hermes_smoke_vps.sh` when you want the
 generated AI review item to stay in the approval queue for manual inspection.
