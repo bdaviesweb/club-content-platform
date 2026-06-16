@@ -3,15 +3,25 @@ function isImageMedia(item) {
   return !mimeType || mimeType.startsWith("image/");
 }
 
+function getPrimaryClubFeedImagePreviewMedia(item) {
+  for (const mediaItem of Array.isArray(item?.media) ? item.media : []) {
+    if (mediaItem?.previewUrl && isImageMedia(mediaItem)) {
+      return mediaItem;
+    }
+  }
+
+  return null;
+}
+
 function getClubFeedImagePreviewUrls(items) {
   const urls = [];
   const seen = new Set();
 
   for (const item of Array.isArray(items) ? items : []) {
-    const primaryMedia = item?.media?.[0];
-    const previewUrl = primaryMedia?.previewUrl;
+    const previewMedia = getPrimaryClubFeedImagePreviewMedia(item);
+    const previewUrl = previewMedia?.previewUrl;
 
-    if (!previewUrl || !isImageMedia(primaryMedia) || seen.has(previewUrl)) {
+    if (!previewUrl || seen.has(previewUrl)) {
       continue;
     }
 
@@ -24,5 +34,6 @@ function getClubFeedImagePreviewUrls(items) {
 
 module.exports = {
   getClubFeedImagePreviewUrls,
+  getPrimaryClubFeedImagePreviewMedia,
   isImageMedia
 };

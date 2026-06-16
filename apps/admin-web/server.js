@@ -2,7 +2,7 @@ import http from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { formatRoutingSourceLabel } from "./routingLabels.js";
 
-const port = 3001;
+const port = Number(process.env.PORT || 3001);
 const apiBase = process.env.API_BASE_URL || "http://app-api:4000";
 const authUser = process.env.ADMIN_BASIC_AUTH_USER || "";
 const authPassword = process.env.ADMIN_BASIC_AUTH_PASSWORD || "";
