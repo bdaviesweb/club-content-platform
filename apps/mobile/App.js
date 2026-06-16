@@ -26,7 +26,10 @@ import {
 
 const { registerPushToken } = require("./pushRegistration");
 const { buildMobileRolePolicy, submitterMode } = require("./rolePolicy");
-const { getClubFeedImagePreviewUrls } = require("./feedMedia");
+const {
+  getClubFeedImagePreviewUrls,
+  getPrimaryClubFeedImagePreviewMedia
+} = require("./feedMedia");
 const { uploadSelectedAsset } = require("./mediaUpload");
 const { buildApiError } = require("./apiErrors");
 const {
@@ -1677,41 +1680,34 @@ export default function App() {
 
                 {clubFeedItems.length ? (
                   clubFeedItems.map((item, index) => {
-                    const primaryMedia = item.media?.[0];
-                    const isVideo = String(primaryMedia?.mimeType || "").startsWith("video/");
-                    const mediaStatusKey = primaryMedia?.previewUrl || `${item.id}-primary-media`;
+                    const previewMedia = getPrimaryClubFeedImagePreviewMedia(item);
+                    const mediaStatusKey = previewMedia?.previewUrl || `${item.id}-primary-media`;
                     const imageFailed = Boolean(failedClubFeedImages[mediaStatusKey]);
                     return (
                       <View key={item.id} style={[styles.feedCard, index === 0 && styles.feedCardFeatured]}>
                         <GlassLayer />
-                        {primaryMedia?.previewUrl ? (
+                        {previewMedia?.previewUrl ? (
                           <View style={styles.clubFeedMediaFrame}>
-                            {isVideo ? (
-                              <View style={styles.clubFeedVideoPreview}>
-                                <Text style={styles.clubFeedVideoText}>Video</Text>
-                              </View>
-                            ) : (
-                              <Image
-                                source={{ uri: primaryMedia.previewUrl }}
-                                style={styles.clubFeedImage}
-                                resizeMode="cover"
-                                onLoad={() =>
-                                  setFailedClubFeedImages((current) => {
-                                    if (!current[mediaStatusKey]) return current;
-                                    const next = { ...current };
-                                    delete next[mediaStatusKey];
-                                    return next;
-                                  })
-                                }
-                                onError={() => {
-                                  setFailedClubFeedImages((current) => ({
-                                    ...current,
-                                    [mediaStatusKey]: true
-                                  }));
-                                  setStatus("Feed image could not load. Refresh the feed or check the media URL in Settings.");
-                                }}
-                              />
-                            )}
+                            <Image
+                              source={{ uri: previewMedia.previewUrl }}
+                              style={styles.clubFeedImage}
+                              resizeMode="cover"
+                              onLoad={() =>
+                                setFailedClubFeedImages((current) => {
+                                  if (!current[mediaStatusKey]) return current;
+                                  const next = { ...current };
+                                  delete next[mediaStatusKey];
+                                  return next;
+                                })
+                              }
+                              onError={() => {
+                                setFailedClubFeedImages((current) => ({
+                                  ...current,
+                                  [mediaStatusKey]: true
+                                }));
+                                setStatus("Feed image could not load. Refresh the feed or check the media URL in Settings.");
+                              }}
+                            />
                             {imageFailed ? (
                               <View style={styles.clubFeedImageFallback}>
                                 <Text style={styles.clubFeedImageFallbackTitle}>Image unavailable</Text>
@@ -2229,10 +2225,9 @@ export default function App() {
                         source={{ uri: resubmissionAsset.uri }}
                         style={styles.detailMediaPreview}
                       />
-                    ) : selectedSubmissionDetail.media[0]?.previewUrl &&
-                      !String(selectedSubmissionDetail.media[0]?.mimeType || "").startsWith("video/") ? (
+                    ) : getPrimaryClubFeedImagePreviewMedia(selectedSubmissionDetail)?.previewUrl ? (
                       <Image
-                        source={{ uri: selectedSubmissionDetail.media[0].previewUrl }}
+                        source={{ uri: getPrimaryClubFeedImagePreviewMedia(selectedSubmissionDetail).previewUrl }}
                         style={styles.detailMediaPreview}
                       />
                     ) : (
