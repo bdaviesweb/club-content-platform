@@ -364,6 +364,7 @@ export default function App() {
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [reviewQueue, setReviewQueue] = useState([]);
   const [loadingReviewQueue, setLoadingReviewQueue] = useState(false);
+  const [reviewQueueLastRefreshedAt, setReviewQueueLastRefreshedAt] = useState(null);
   const [reviewQueueError, setReviewQueueError] = useState("");
   const [reviewAction, setReviewAction] = useState("approve");
   const [reviewActionReasonCode, setReviewActionReasonCode] = useState(null);
@@ -896,6 +897,7 @@ export default function App() {
       const payload = await response.json();
       const items = Array.isArray(payload.items) ? payload.items : [];
       setReviewQueue(items);
+      setReviewQueueLastRefreshedAt(new Date().toISOString());
       return items;
     } catch (error) {
       setReviewQueueError(error.message || "Could not load review queue");
@@ -1465,6 +1467,22 @@ export default function App() {
                 <Text style={styles.reviewQueueHint}>
                   {getAutoRefreshLabel(Boolean(canReview))}
                 </Text>
+                <View style={styles.feedCheckPanel}>
+                  <View>
+                    <Text style={styles.feedCheckLabel}>Last review check</Text>
+                    <Text style={styles.feedCheckValue}>
+                      {formatLastUpdatedLabel(reviewQueueLastRefreshedAt)}
+                    </Text>
+                  </View>
+                  {loadingReviewQueue ? (
+                    <View style={styles.feedCheckBadge}>
+                      <ActivityIndicator color="#5b52ba" size="small" />
+                      <Text style={styles.feedCheckBadgeText}>Checking</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.feedCheckReady}>Ready</Text>
+                  )}
+                </View>
                 <View style={styles.statusSummaryRow}>
                   <View style={styles.statusSummaryPill}>
                     <Text style={styles.statusSummaryValue}>{reviewQueue.length}</Text>
