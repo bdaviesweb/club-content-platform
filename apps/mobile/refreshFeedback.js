@@ -15,7 +15,12 @@ function getRefreshButtonLabel(isRefreshing) {
   return isRefreshing ? "Refreshing" : "Refresh";
 }
 
+function getAutoRefreshLabel(isActive) {
+  return isActive ? "Auto-refreshes while this view is open." : "Auto-refresh paused.";
+}
+
 module.exports = {
+  getAutoRefreshLabel,
   formatLastUpdatedLabel,
   getRefreshButtonLabel
 };

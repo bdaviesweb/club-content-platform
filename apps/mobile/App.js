@@ -41,6 +41,7 @@ const {
 } = require("./appReadiness");
 const {
   formatLastUpdatedLabel,
+  getAutoRefreshLabel,
   getRefreshButtonLabel
 } = require("./refreshFeedback");
 const {
@@ -1455,6 +1456,9 @@ export default function App() {
                 <Text style={styles.statusHeroBody}>
                   Tap a queue item to open the post, see the recommendation, and make the call without digging through extra detail.
                 </Text>
+                <Text style={styles.reviewQueueHint}>
+                  {getAutoRefreshLabel(Boolean(canReview))}
+                </Text>
                 <View style={styles.statusSummaryRow}>
                   <View style={styles.statusSummaryPill}>
                     <Text style={styles.statusSummaryValue}>{reviewQueue.length}</Text>
@@ -1664,6 +1668,9 @@ export default function App() {
                     <Text style={styles.feedCheckReady}>Ready</Text>
                   )}
                 </View>
+                <Text style={styles.feedCheckCopy}>
+                  {getAutoRefreshLabel(Boolean(canLoadClubFeed || canLoadRecent))}
+                </Text>
               </View>
 
               <View style={styles.sectionBlock}>
@@ -3224,6 +3231,11 @@ const styles = StyleSheet.create({
     color: "#5d5a80",
     lineHeight: 20,
     marginTop: 2
+  },
+  feedCheckCopy: {
+    color: "#5d5a80",
+    lineHeight: 20,
+    marginTop: -2
   },
   reviewerPublishedCard: {
     backgroundColor: "rgba(255,255,255,0.48)",
