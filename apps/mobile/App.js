@@ -1191,9 +1191,15 @@ export default function App() {
         <View style={styles.backgroundGlowC} />
 
         <View style={styles.chromeBar}>
-          <View>
+          <View style={styles.chromeTitleBlock}>
             <Text style={styles.appName}>Club Content</Text>
             <Text style={styles.appSubtitle}>{roleAccess.label} workspace</Text>
+            <View style={styles.chromeStateRow}>
+              <Text style={styles.chromeStateLabel}>Current API</Text>
+              <View style={styles.inlineMetaPill}>
+                <Text style={styles.inlineMetaPillText}>{formatApiConnectionLabel(apiBaseUrl)}</Text>
+              </View>
+            </View>
           </View>
           <Pressable style={styles.settingsButton} onPress={() => setSettingsVisible(true)}>
             <Text style={styles.settingsButtonText}>Settings</Text>
@@ -2701,10 +2707,14 @@ const styles = StyleSheet.create({
   chromeBar: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 10
+  },
+  chromeTitleBlock: {
+    gap: 4,
+    flexShrink: 1
   },
   appName: {
     fontSize: 24,
@@ -2715,6 +2725,19 @@ const styles = StyleSheet.create({
   appSubtitle: {
     fontSize: 13,
     color: "#756fa0"
+  },
+  chromeStateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap"
+  },
+  chromeStateLabel: {
+    fontSize: 11,
+    color: "#786ea8",
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1.1
   },
   settingsButton: {
     paddingHorizontal: 16,
