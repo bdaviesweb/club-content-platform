@@ -4,6 +4,7 @@ const test = require("node:test");
 const {
   countStatuses,
   formatApiConnectionLabel,
+  formatBackendConnectionCopy,
   formatApprovalRoleLabel,
   formatStatusLabel,
   formatRoutingSourceLabel,
@@ -51,6 +52,14 @@ test("labels hosted and local API connections clearly", () => {
   assert.equal(formatApiConnectionLabel(""), "Not set");
   assert.equal(isHostedDevApiBaseUrl("https://clubcontent-api.davmn.net/"), true);
   assert.equal(isHostedDevApiBaseUrl("http://localhost:4000"), false);
+  assert.equal(
+    formatBackendConnectionCopy("https://clubcontent-api.davmn.net/"),
+    "Hosted dev VPS selected for TestFlight and device QA."
+  );
+  assert.equal(
+    formatBackendConnectionCopy("http://localhost:4000"),
+    "Local backend selected for debugging."
+  );
 });
 
 test("counts statuses using the mobile-facing workflow buckets", () => {

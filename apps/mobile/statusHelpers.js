@@ -91,6 +91,26 @@ function isHostedDevApiBaseUrl(value) {
   return normalized.includes("clubcontent-api.davmn.net");
 }
 
+function formatBackendConnectionCopy(value) {
+  const normalized = String(value || "").trim().replace(/\/+$/, "").toLowerCase();
+  if (!normalized) {
+    return "API base URL not set.";
+  }
+  if (isHostedDevApiBaseUrl(normalized)) {
+    return "Hosted dev VPS selected for TestFlight and device QA.";
+  }
+  if (
+    normalized.startsWith("http://localhost") ||
+    normalized.startsWith("https://localhost") ||
+    normalized.startsWith("http://127.0.0.1") ||
+    normalized.startsWith("https://127.0.0.1")
+  ) {
+    return "Local backend selected for debugging.";
+  }
+
+  return `Connected to ${normalized}.`;
+}
+
 function getStatusTone(value) {
   const normalized = normalizeSubmissionStatus(value);
   if (["published", "approved"].includes(normalized)) return "success";
@@ -169,6 +189,7 @@ function getProgressStageState(status, stageKey) {
 module.exports = {
   countStatuses,
   formatApiConnectionLabel,
+  formatBackendConnectionCopy,
   formatStatusLabel,
   formatApprovalRoleLabel,
   isHostedDevApiBaseUrl,
