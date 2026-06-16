@@ -3,6 +3,7 @@ const test = require("node:test");
 
 const {
   countStatuses,
+  formatApprovalRoleLabel,
   formatStatusLabel,
   formatRoutingSourceLabel,
   getProgressStageState,
@@ -31,6 +32,12 @@ test("formats Hermes routing sources for the submitter detail view", () => {
   assert.equal(formatRoutingSourceLabel("hermes_agent"), "Hermes");
   assert.equal(formatRoutingSourceLabel("local_rules"), "Local rules");
   assert.equal(formatRoutingSourceLabel("fallback_router"), "Fallback Router");
+});
+
+test("formats reviewer roles for routing badges", () => {
+  assert.equal(formatApprovalRoleLabel("club_admin"), "Club Admin");
+  assert.equal(formatApprovalRoleLabel("club_comms"), "Club Comms");
+  assert.equal(formatApprovalRoleLabel(""), "n/a");
 });
 
 test("counts statuses using the mobile-facing workflow buckets", () => {

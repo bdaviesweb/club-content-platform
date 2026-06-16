@@ -55,6 +55,17 @@ function formatRoutingSourceLabel(value) {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
+function formatApprovalRoleLabel(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) {
+    return "n/a";
+  }
+
+  return normalized
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
 function getStatusTone(value) {
   const normalized = normalizeSubmissionStatus(value);
   if (["published", "approved"].includes(normalized)) return "success";
@@ -133,6 +144,7 @@ function getProgressStageState(status, stageKey) {
 module.exports = {
   countStatuses,
   formatStatusLabel,
+  formatApprovalRoleLabel,
   formatRoutingSourceLabel,
   getProgressStageState,
   getStatusTone,
