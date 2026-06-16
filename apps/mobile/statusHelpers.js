@@ -66,6 +66,26 @@ function formatApprovalRoleLabel(value) {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
+function formatApiConnectionLabel(value) {
+  const normalized = String(value || "").trim().replace(/\/+$/, "").toLowerCase();
+  if (!normalized) {
+    return "Not set";
+  }
+  if (normalized.includes("clubcontent-api.davmn.net")) {
+    return "Hosted dev VPS";
+  }
+  if (
+    normalized.startsWith("http://localhost") ||
+    normalized.startsWith("https://localhost") ||
+    normalized.startsWith("http://127.0.0.1") ||
+    normalized.startsWith("https://127.0.0.1")
+  ) {
+    return "Local backend";
+  }
+
+  return normalized;
+}
+
 function getStatusTone(value) {
   const normalized = normalizeSubmissionStatus(value);
   if (["published", "approved"].includes(normalized)) return "success";
@@ -143,6 +163,7 @@ function getProgressStageState(status, stageKey) {
 
 module.exports = {
   countStatuses,
+  formatApiConnectionLabel,
   formatStatusLabel,
   formatApprovalRoleLabel,
   formatRoutingSourceLabel,

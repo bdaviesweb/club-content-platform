@@ -45,6 +45,7 @@ const {
 } = require("./refreshFeedback");
 const {
   countStatuses,
+  formatApiConnectionLabel,
   formatApprovalRoleLabel,
   formatStatusLabel,
   formatRoutingSourceLabel,
@@ -2148,6 +2149,10 @@ export default function App() {
                   { label: "Version", value: appBuildInfo.appVersion },
                   { label: "Build", value: appBuildInfo.buildNumber },
                   { label: "API", value: normalizeApiBaseUrl(apiBaseUrl) || "not set" },
+                  {
+                    label: "Connection",
+                    value: formatApiConnectionLabel(apiBaseUrl)
+                  },
                   {
                     label: "Backend rules",
                     value: loadingAppReadiness
