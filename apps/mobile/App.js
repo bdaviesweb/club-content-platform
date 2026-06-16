@@ -49,6 +49,7 @@ const {
   formatApprovalRoleLabel,
   formatStatusLabel,
   formatRoutingSourceLabel,
+  formatBackendConnectionCopy,
   isHostedDevApiBaseUrl,
   getProgressStageState,
   getStatusTone,
@@ -2115,7 +2116,9 @@ export default function App() {
             <Pressable style={styles.advancedToggle} onPress={() => setShowAdvancedSettings((current) => !current)}>
               <Text style={styles.advancedToggleTitle}>Advanced connection</Text>
               <Text style={styles.advancedToggleCopy}>
-                {showAdvancedSettings ? "Hide backend settings" : "Show backend settings used for internal and beta builds"}
+                {showAdvancedSettings
+                  ? "Hide backend settings"
+                  : formatBackendConnectionCopy(apiBaseUrl)}
               </Text>
             </Pressable>
 
