@@ -71,7 +71,7 @@ function formatApiConnectionLabel(value) {
   if (!normalized) {
     return "Not set";
   }
-  if (normalized.includes("clubcontent-api.davmn.net")) {
+  if (isHostedDevApiBaseUrl(normalized)) {
     return "Hosted dev VPS";
   }
   if (
@@ -84,6 +84,11 @@ function formatApiConnectionLabel(value) {
   }
 
   return normalized;
+}
+
+function isHostedDevApiBaseUrl(value) {
+  const normalized = String(value || "").trim().replace(/\/+$/, "").toLowerCase();
+  return normalized.includes("clubcontent-api.davmn.net");
 }
 
 function getStatusTone(value) {
@@ -166,6 +171,7 @@ module.exports = {
   formatApiConnectionLabel,
   formatStatusLabel,
   formatApprovalRoleLabel,
+  isHostedDevApiBaseUrl,
   formatRoutingSourceLabel,
   getProgressStageState,
   getStatusTone,

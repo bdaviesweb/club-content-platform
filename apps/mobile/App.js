@@ -49,6 +49,7 @@ const {
   formatApprovalRoleLabel,
   formatStatusLabel,
   formatRoutingSourceLabel,
+  isHostedDevApiBaseUrl,
   getProgressStageState,
   getStatusTone,
   progressStages,
@@ -419,6 +420,7 @@ export default function App() {
   }, []);
   const appReadinessSummary = useMemo(() => summarizeAppReadiness(appReadiness), [appReadiness]);
   const readinessCapabilities = appReadiness?.capabilities || {};
+  const isHostedApiSelected = isHostedDevApiBaseUrl(apiBaseUrl);
   const latestStatusSummary = latestSubmission
     ? summarizeSubmissionProgress(latestSubmission)
     : "Your first post will show review and publish status here.";
@@ -2127,8 +2129,18 @@ export default function App() {
                   onChangeText={setApiBaseUrl}
                   placeholder="API base URL"
                 />
+                <View style={styles.settingsActionRow}>
+                  <Pressable
+                    style={[styles.inlineButton, styles.settingsActionButton, isHostedApiSelected && styles.buttonDisabled]}
+                    onPress={() => setApiBaseUrl(defaultConfig.apiBaseUrl)}
+                  >
+                    <Text style={styles.inlineButtonText}>
+                      {isHostedApiSelected ? "Hosted dev VPS selected" : "Use hosted dev VPS"}
+                    </Text>
+                  </Pressable>
+                </View>
                 <Text style={styles.advancedHelpText}>
-                  For TestFlight and production-style builds, this should be preconfigured so normal users never need to edit it.
+                  For TestFlight and production-style builds, this should stay on the hosted dev VPS unless you are testing a local backend.
                 </Text>
               </View>
             ) : null}
@@ -3073,6 +3085,12 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     lineHeight: 19,
     textAlign: "center"
+  },
+  settingsActionRow: {
+    flexDirection: "row"
+  },
+  settingsActionButton: {
+    minHeight: 58
   },
   submitButton: {
     flex: 1,

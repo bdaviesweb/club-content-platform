@@ -9,6 +9,7 @@ const {
   formatRoutingSourceLabel,
   getProgressStageState,
   getStatusTone,
+  isHostedDevApiBaseUrl,
   normalizeSubmissionStatus,
   summarizeSubmissionProgress
 } = require("./statusHelpers");
@@ -48,6 +49,8 @@ test("labels hosted and local API connections clearly", () => {
   );
   assert.equal(formatApiConnectionLabel("http://localhost:4000"), "Local backend");
   assert.equal(formatApiConnectionLabel(""), "Not set");
+  assert.equal(isHostedDevApiBaseUrl("https://clubcontent-api.davmn.net/"), true);
+  assert.equal(isHostedDevApiBaseUrl("http://localhost:4000"), false);
 });
 
 test("counts statuses using the mobile-facing workflow buckets", () => {
