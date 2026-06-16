@@ -287,7 +287,7 @@ seeded demo club/team. On startup it will:
 5. Read `GET /approvals/queue`.
 6. Approve with `POST /approval-requests/:id/actions`.
 7. Read the submission again to confirm it reaches `published`.
-8. Open `http://localhost:3001` to use the admin review console.
+8. Open `http://localhost:3002` to use the admin review console.
 9. If `ADMIN_BASIC_AUTH_USER` and `ADMIN_BASIC_AUTH_PASSWORD` are set, the review console requires HTTP Basic Auth.
 
 Against the VPS, run `TIMEOUT_SECONDS=300 ./scripts/approval_publish_smoke_vps.sh`
