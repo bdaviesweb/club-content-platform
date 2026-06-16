@@ -3,6 +3,7 @@ const test = require("node:test");
 
 const {
   countStatuses,
+  formatApiConnectionLabel,
   formatApprovalRoleLabel,
   formatStatusLabel,
   formatRoutingSourceLabel,
@@ -38,6 +39,15 @@ test("formats reviewer roles for routing badges", () => {
   assert.equal(formatApprovalRoleLabel("club_admin"), "Club Admin");
   assert.equal(formatApprovalRoleLabel("club_comms"), "Club Comms");
   assert.equal(formatApprovalRoleLabel(""), "n/a");
+});
+
+test("labels hosted and local API connections clearly", () => {
+  assert.equal(
+    formatApiConnectionLabel("https://clubcontent-api.davmn.net/"),
+    "Hosted dev VPS"
+  );
+  assert.equal(formatApiConnectionLabel("http://localhost:4000"), "Local backend");
+  assert.equal(formatApiConnectionLabel(""), "Not set");
 });
 
 test("counts statuses using the mobile-facing workflow buckets", () => {
