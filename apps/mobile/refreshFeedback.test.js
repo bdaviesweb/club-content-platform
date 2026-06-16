@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 const {
+  getAutoRefreshLabel,
   formatLastUpdatedLabel,
   getRefreshButtonLabel
 } = require("./refreshFeedback");
@@ -21,4 +22,9 @@ test("formatLastUpdatedLabel includes an updated time for valid values", () => {
 test("getRefreshButtonLabel reflects the current refresh state", () => {
   assert.equal(getRefreshButtonLabel(true), "Refreshing");
   assert.equal(getRefreshButtonLabel(false), "Refresh");
+});
+
+test("getAutoRefreshLabel explains the current refresh mode", () => {
+  assert.equal(getAutoRefreshLabel(true), "Auto-refreshes while this view is open.");
+  assert.equal(getAutoRefreshLabel(false), "Auto-refresh paused.");
 });
