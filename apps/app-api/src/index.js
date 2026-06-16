@@ -796,6 +796,7 @@ async function handleApprovalQueue(res) {
       s.status AS submission_status,
       s.raw_text,
       s.risk_score,
+      s.routing_decision,
       u.full_name AS approver_name,
       rv.summary AS latest_review_summary
     FROM approval_requests ar

@@ -1,5 +1,6 @@
 import http from "node:http";
 import { timingSafeEqual } from "node:crypto";
+import { formatRoutingSourceLabel } from "./routingLabels.js";
 
 const port = 3001;
 const apiBase = process.env.API_BASE_URL || "http://app-api:4000";
@@ -946,6 +947,7 @@ function renderQueue(queue, activeId) {
       const active = item.id === activeId ? " active" : "";
       const band = riskBand(item.risk_score);
       const preview = item.raw_text || item.latest_review_summary || "No caption yet.";
+      const routingSource = item.routing_decision?.routingSource || item.routing_decision?.routing_source;
       return `<a class="queue-card${active}" href="/?approvalRequestId=${encodeURIComponent(item.id)}">
         <div class="header-row">
           <strong>${index === 0 ? "Up next" : `Then ${index + 1}`}</strong>
@@ -953,6 +955,7 @@ function renderQueue(queue, activeId) {
         </div>
         <div class="badge-row" style="margin-top:8px;">
           ${item.team_name ? renderStatusBadge(escapeHtml(item.team_name), "neutral") : renderStatusBadge(formatLabel(item.content_type || "post"), "neutral")}
+          ${routingSource ? renderStatusBadge(formatRoutingSourceLabel(routingSource), routingSource === "hermes_agent" ? "good" : "neutral") : ""}
           <span class="subtle">${escapeHtml(formatRelativeTime(item.created_at))}</span>
         </div>
         <p style="margin-top:10px; line-height:1.45;">${escapeHtml(preview).slice(0, 96)}</p>
