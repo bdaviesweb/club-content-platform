@@ -42,6 +42,7 @@ const {
 } = require("./refreshFeedback");
 const {
   countStatuses,
+  formatApprovalRoleLabel,
   formatStatusLabel,
   formatRoutingSourceLabel,
   getProgressStageState,
@@ -1490,6 +1491,20 @@ export default function App() {
                   <Text style={styles.feedSupport}>
                     {lastReviewedPublishedSubmission.publishedPost.destinationName} · {formatSubmittedAt(lastReviewedPublishedSubmission.publishedPost.publishedAt)}
                   </Text>
+                  {lastReviewedPublishedSubmission.routing_decision ? (
+                    <View style={styles.metaChipRow}>
+                      <View style={styles.metaChip}>
+                        <Text style={styles.metaChipText}>
+                          Route: {formatRoutingSourceLabel(lastReviewedPublishedSubmission.routing_decision.routingSource)}
+                        </Text>
+                      </View>
+                      <View style={styles.metaChip}>
+                        <Text style={styles.metaChipText}>
+                          Approver: {formatApprovalRoleLabel(lastReviewedPublishedSubmission.latestApprovalRequest?.approverRole)}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null}
                   <View style={styles.publishedActionRow}>
                     <Pressable
                       style={styles.publishedPrimaryButton}
@@ -1553,11 +1568,25 @@ export default function App() {
                             {item.team_name || formatContentTypeLabel(item.content_type)}
                           </Text>
                         </View>
-                        <View style={styles.metaChip}>
+                      <View style={styles.metaChip}>
                           <Text style={styles.metaChipText}>
                             {formatRiskScoreLabel(item.risk_score)}
                           </Text>
                         </View>
+                        {item.routing_decision ? (
+                          <View style={styles.metaChip}>
+                            <Text style={styles.metaChipText}>
+                              Route: {formatRoutingSourceLabel(item.routing_decision.routingSource)}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {item.approverRole ? (
+                          <View style={styles.metaChip}>
+                            <Text style={styles.metaChipText}>
+                              Approver: {formatApprovalRoleLabel(item.approverRole)}
+                            </Text>
+                          </View>
+                        ) : null}
                       </View>
                     </Pressable>
                   ))
@@ -1711,6 +1740,13 @@ export default function App() {
                           {item.media?.length ? (
                             <View style={styles.metaChip}>
                               <Text style={styles.metaChipText}>{formatMediaCountLabel(item.media.length)}</Text>
+                            </View>
+                          ) : null}
+                          {item.routing_decision ? (
+                            <View style={styles.metaChip}>
+                              <Text style={styles.metaChipText}>
+                                Route: {formatRoutingSourceLabel(item.routing_decision.routingSource)}
+                              </Text>
                             </View>
                           ) : null}
                         </View>
@@ -2541,6 +2577,20 @@ export default function App() {
                         </Text>
                       </View>
                     </View>
+                    {selectedSubmissionDetail.routing_decision ? (
+                      <View style={styles.metaChipRow}>
+                        <View style={styles.metaChip}>
+                          <Text style={styles.metaChipText}>
+                            Route: {formatRoutingSourceLabel(selectedSubmissionDetail.routing_decision.routingSource)}
+                          </Text>
+                        </View>
+                        <View style={styles.metaChip}>
+                          <Text style={styles.metaChipText}>
+                            Approver: {formatApprovalRoleLabel(selectedSubmissionDetail.latestApprovalRequest?.approverRole)}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : null}
                     <View style={styles.publishedActionRow}>
                       <Pressable
                         style={styles.publishedPrimaryButton}

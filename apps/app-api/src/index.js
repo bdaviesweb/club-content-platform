@@ -796,6 +796,7 @@ async function handleApprovalQueue(res) {
       s.status AS submission_status,
       s.raw_text,
       s.risk_score,
+      ar.approver_role AS "approverRole",
       s.routing_decision,
       u.full_name AS approver_name,
       rv.summary AS latest_review_summary
@@ -1095,6 +1096,7 @@ async function handleInternalFeed(res, searchParams = new URLSearchParams()) {
       s.content_type,
       s.visibility_target,
       s.risk_score,
+      s.routing_decision,
       pd.name AS destination_name,
       COALESCE(
         json_agg(
