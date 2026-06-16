@@ -43,6 +43,7 @@ const {
 const {
   countStatuses,
   formatStatusLabel,
+  formatRoutingSourceLabel,
   getProgressStageState,
   getStatusTone,
   progressStages,
@@ -2274,6 +2275,24 @@ export default function App() {
                   <View style={styles.metaChip}><Text style={styles.metaChipText}>{formatMediaCountLabel(selectedSubmissionDetail.media?.length)}</Text></View>
                   <View style={styles.metaChip}><Text style={styles.metaChipText}>{formatVisibilityLabel(selectedSubmissionDetail.visibility_target)}</Text></View>
                 </View>
+
+                {selectedSubmissionDetail.routing_decision ? (
+                  <View style={styles.metaChipRow}>
+                    <View style={styles.metaChip}>
+                      <Text style={styles.metaChipText}>
+                        Route: {formatRoutingSourceLabel(selectedSubmissionDetail.routing_decision.routingSource)}
+                      </Text>
+                    </View>
+                    <View style={styles.metaChip}>
+                      <Text style={styles.metaChipText}>
+                        Routed to: {formatStatusLabel(
+                          selectedSubmissionDetail.routing_decision.approverRole ||
+                            selectedSubmissionDetail.latestApprovalRequest?.approverRole
+                        )}
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
 
                 <Text style={styles.detailLine}>Review score: {formatRiskScoreLabel(selectedSubmissionDetail.risk_score)}</Text>
                 <Text style={styles.detailLine}>

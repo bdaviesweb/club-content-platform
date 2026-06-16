@@ -4,6 +4,7 @@ const test = require("node:test");
 const {
   countStatuses,
   formatStatusLabel,
+  formatRoutingSourceLabel,
   getProgressStageState,
   getStatusTone,
   normalizeSubmissionStatus,
@@ -24,6 +25,12 @@ test("explains publish failures without exposing backend state names", () => {
     summarizeSubmissionProgress({ status: "publish_failed" }),
     "Approved, but publishing needs admin follow-up."
   );
+});
+
+test("formats Hermes routing sources for the submitter detail view", () => {
+  assert.equal(formatRoutingSourceLabel("hermes_agent"), "Hermes");
+  assert.equal(formatRoutingSourceLabel("local_rules"), "Local rules");
+  assert.equal(formatRoutingSourceLabel("fallback_router"), "Fallback Router");
 });
 
 test("counts statuses using the mobile-facing workflow buckets", () => {
