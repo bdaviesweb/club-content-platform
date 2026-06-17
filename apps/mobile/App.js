@@ -61,6 +61,7 @@ const {
   getProgressStageState,
   getStatusTone,
   progressStages,
+  summarizeSubmissionNextStep,
   summarizeSubmissionProgress
 } = require("./statusHelpers");
 
@@ -1572,6 +1573,14 @@ export default function App() {
                 </Text>
                 <Text style={styles.miniStatusBody}>{latestStatusSummary}</Text>
                 {latestSubmission ? (
+                  <View style={styles.nextStepPanel}>
+                    <Text style={styles.nextStepLabel}>Next</Text>
+                    <Text style={styles.nextStepText}>
+                      {summarizeSubmissionNextStep(latestSubmission)}
+                    </Text>
+                  </View>
+                ) : null}
+                {latestSubmission ? (
                   <View style={styles.inlineStatusActions}>
                     <Pressable style={styles.inlineStatusLink} onPress={() => setActiveView("status")}>
                       <Text style={styles.inlineStatusLinkText}>Open status feed</Text>
@@ -1727,13 +1736,19 @@ export default function App() {
                       <Text style={styles.feedSupport}>
                         {item.latest_review_summary || summarizeSubmissionProgress({ status: "needs_human_review" })}
                       </Text>
+                      <View style={styles.nextStepPanel}>
+                        <Text style={styles.nextStepLabel}>Reviewer task</Text>
+                        <Text style={styles.nextStepText}>
+                          Open this item and make the approve, send back, or reject call.
+                        </Text>
+                      </View>
                       <View style={styles.metaChipRow}>
                         <View style={styles.metaChip}>
                           <Text style={styles.metaChipText}>
                             {item.team_name || formatContentTypeLabel(item.content_type)}
                           </Text>
                         </View>
-                      <View style={styles.metaChip}>
+                        <View style={styles.metaChip}>
                           <Text style={styles.metaChipText}>
                             {formatRiskScoreLabel(item.risk_score)}
                           </Text>
@@ -2010,6 +2025,12 @@ export default function App() {
                       {latestSubmission.raw_text?.trim() || "No caption provided"}
                     </Text>
                     <Text style={styles.feedSupport}>{summarizeSubmissionProgress(latestSubmission)}</Text>
+                    <View style={styles.nextStepPanel}>
+                      <Text style={styles.nextStepLabel}>Next</Text>
+                      <Text style={styles.nextStepText}>
+                        {summarizeSubmissionNextStep(latestSubmission)}
+                      </Text>
+                    </View>
 
                     <View style={styles.progressTrack}>
                       {progressStages.map((stage, index) => {
@@ -2107,16 +2128,19 @@ export default function App() {
                           >
                             {formatStatusLabel(item.status)}
                           </Text>
-                        </View>
-                        <Text style={styles.feedTime}>{formatSubmittedAt(item.created_at)}</Text>
                       </View>
-                      <Text style={styles.feedHeadline}>{item.raw_text?.trim() || "No caption provided"}</Text>
-                      <Text style={styles.feedSupport}>{summarizeSubmissionProgress(item)}</Text>
-                      {item.status === "published" ? (
-                        <Text style={styles.feedPublishedHint}>Tap to view the finished club post.</Text>
-                      ) : null}
-                    </Pressable>
-                  ))
+                      <Text style={styles.feedTime}>{formatSubmittedAt(item.created_at)}</Text>
+                    </View>
+                    <Text style={styles.feedHeadline}>{item.raw_text?.trim() || "No caption provided"}</Text>
+                    <Text style={styles.feedSupport}>{summarizeSubmissionProgress(item)}</Text>
+                    <View style={styles.nextStepPanel}>
+                      <Text style={styles.nextStepLabel}>Next</Text>
+                      <Text style={styles.nextStepText}>
+                        {summarizeSubmissionNextStep(item)}
+                      </Text>
+                    </View>
+                  </Pressable>
+                ))
                 ) : loadingRecent ? (
                   <Text style={styles.emptyStateText}>Loading recent posts…</Text>
                 ) : recentError ? (
@@ -2472,6 +2496,12 @@ export default function App() {
                   <Text style={styles.detailStatus}>{formatStatusLabel(selectedSubmissionDetail.status)}</Text>
                   <Text style={styles.detailSummary}>{selectedSubmissionDetail.raw_text?.trim() || "No caption provided"}</Text>
                   <Text style={styles.detailMeta}>{formatSubmittedAt(selectedSubmissionDetail.created_at)}</Text>
+                  <View style={styles.nextStepPanel}>
+                    <Text style={styles.nextStepLabel}>Next</Text>
+                    <Text style={styles.nextStepText}>
+                      {summarizeSubmissionNextStep(selectedSubmissionDetail)}
+                    </Text>
+                  </View>
                 </View>
                 <View style={styles.feedCheckPanel}>
                   <View>
@@ -3640,8 +3670,24 @@ const styles = StyleSheet.create({
     color: "#656185",
     lineHeight: 21
   },
-  feedPublishedHint: {
-    color: "#5b52ba",
+  nextStepPanel: {
+    borderRadius: 18,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    gap: 4,
+    backgroundColor: "rgba(244,242,255,0.62)",
+    borderWidth: 1,
+    borderColor: "rgba(91,82,186,0.12)"
+  },
+  nextStepLabel: {
+    color: "#7168a2",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1,
+    textTransform: "uppercase"
+  },
+  nextStepText: {
+    color: "#2f295d",
     fontWeight: "800",
     lineHeight: 20
   },

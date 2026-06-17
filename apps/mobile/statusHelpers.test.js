@@ -12,6 +12,7 @@ const {
   getStatusTone,
   isHostedDevApiBaseUrl,
   normalizeSubmissionStatus,
+  summarizeSubmissionNextStep,
   summarizeSubmissionProgress
 } = require("./statusHelpers");
 
@@ -86,4 +87,19 @@ test("maps workflow-only statuses onto the progress rail", () => {
   assert.equal(getProgressStageState("publish_failed", "needs_human_review"), "complete");
   assert.equal(getProgressStageState("publish_failed", "approved"), "current");
   assert.equal(getProgressStageState("publish_failed", "published"), "pending");
+});
+
+test("summarizes the next action for submitters", () => {
+  assert.equal(
+    summarizeSubmissionNextStep({ status: "needs_human_review" }),
+    "Waiting on the reviewer. No action needed from you."
+  );
+  assert.equal(
+    summarizeSubmissionNextStep({ status: "published" }),
+    "Posted. Open the feed or share it from detail."
+  );
+  assert.equal(
+    summarizeSubmissionNextStep({ status: "needs_metadata" }),
+    "Update the caption or media, then resubmit it."
+  );
 });
