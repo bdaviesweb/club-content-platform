@@ -14,6 +14,7 @@ rsync -av \
   --exclude data \
   --exclude .expo \
   --exclude .git \
+  --exclude .env.vps \
   ./ "${REMOTE_HOST}:${REMOTE_DIR}/"
 
 echo "Ensuring VPS env file exists"
