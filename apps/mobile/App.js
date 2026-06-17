@@ -348,14 +348,17 @@ export default function App() {
   const [clubFeedError, setClubFeedError] = useState("");
   const [failedClubFeedImages, setFailedClubFeedImages] = useState({});
   const [refreshingView, setRefreshingView] = useState(false);
+  const [statusLastRefreshedAt, setStatusLastRefreshedAt] = useState(null);
   const [clubFeedLastRefreshedAt, setClubFeedLastRefreshedAt] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [notificationsError, setNotificationsError] = useState("");
+  const [notificationsLastRefreshedAt, setNotificationsLastRefreshedAt] = useState(null);
   const [pushRegistrationStatus, setPushRegistrationStatus] = useState("");
   const [selectedSubmissionId, setSelectedSubmissionId] = useState(null);
   const [selectedSubmissionDetail, setSelectedSubmissionDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [submissionDetailLastRefreshedAt, setSubmissionDetailLastRefreshedAt] = useState(null);
   const [resubmissionText, setResubmissionText] = useState("");
   const [resubmissionAsset, setResubmissionAsset] = useState(null);
   const [resubmittingDetail, setResubmittingDetail] = useState(false);
@@ -547,6 +550,7 @@ export default function App() {
       if (!response.ok) throw new Error(`Notifications failed: ${response.status}`);
       const payload = await response.json();
       setNotifications(Array.isArray(payload.items) ? payload.items : []);
+      setNotificationsLastRefreshedAt(new Date().toISOString());
     } catch (error) {
       setNotificationsError(error.message || "Could not load notifications");
       setStatus(error.message || "Could not load notifications");
@@ -600,6 +604,7 @@ export default function App() {
       const payload = await fetchSubmissionDetail(submissionId);
       setSelectedSubmissionDetail(payload);
       setSelectedSubmissionId(submissionId);
+      setSubmissionDetailLastRefreshedAt(new Date().toISOString());
       setResubmissionText(payload.raw_text || "");
       setResubmissionAsset(null);
       return payload;
@@ -661,6 +666,7 @@ export default function App() {
 
   async function refreshStatusFeed() {
     await Promise.all([loadRecentSubmissions(), loadNotifications(), loadClubFeed()]);
+    setStatusLastRefreshedAt(new Date().toISOString());
   }
 
   async function refreshActiveView() {
@@ -1816,6 +1822,25 @@ export default function App() {
                     <Text style={styles.statusSummaryLabel}>Posted</Text>
                   </View>
                 </View>
+                <View style={styles.feedCheckPanel}>
+                  <View>
+                    <Text style={styles.feedCheckLabel}>Last status check</Text>
+                    <Text style={styles.feedCheckValue}>
+                      {formatLastUpdatedLabel(statusLastRefreshedAt)}
+                    </Text>
+                  </View>
+                  {loadingRecent || loadingNotifications || loadingClubFeed || refreshingView ? (
+                    <View style={styles.feedCheckBadge}>
+                      <ActivityIndicator color="#5b52ba" size="small" />
+                      <Text style={styles.feedCheckBadgeText}>Checking</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.feedCheckReady}>Ready</Text>
+                  )}
+                </View>
+                <Text style={styles.feedCheckCopy}>
+                  {getAutoRefreshLabel(Boolean(canLoadRecent || canLoadClubFeed))}
+                </Text>
               </View>
 
               <View style={styles.sectionBlock}>
@@ -1990,6 +2015,25 @@ export default function App() {
                 {pushRegistrationStatus ? (
                   <Text style={styles.pushRegistrationStatus}>{pushRegistrationStatus}</Text>
                 ) : null}
+                <View style={styles.feedCheckPanel}>
+                  <View>
+                    <Text style={styles.feedCheckLabel}>Last updates check</Text>
+                    <Text style={styles.feedCheckValue}>
+                      {formatLastUpdatedLabel(notificationsLastRefreshedAt)}
+                    </Text>
+                  </View>
+                  {loadingNotifications || refreshingView ? (
+                    <View style={styles.feedCheckBadge}>
+                      <ActivityIndicator color="#5b52ba" size="small" />
+                      <Text style={styles.feedCheckBadgeText}>Checking</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.feedCheckReady}>Ready</Text>
+                  )}
+                </View>
+                <Text style={styles.feedCheckCopy}>
+                  {getAutoRefreshLabel(Boolean(canLoadRecent || canLoadClubFeed))}
+                </Text>
 
                 {notifications.length ? (
                   notifications.map((item) => (
@@ -2273,6 +2317,22 @@ export default function App() {
                   <Text style={styles.detailStatus}>{formatStatusLabel(selectedSubmissionDetail.status)}</Text>
                   <Text style={styles.detailSummary}>{selectedSubmissionDetail.raw_text?.trim() || "No caption provided"}</Text>
                   <Text style={styles.detailMeta}>{formatSubmittedAt(selectedSubmissionDetail.created_at)}</Text>
+                </View>
+                <View style={styles.feedCheckPanel}>
+                  <View>
+                    <Text style={styles.feedCheckLabel}>Last detail check</Text>
+                    <Text style={styles.feedCheckValue}>
+                      {formatLastUpdatedLabel(submissionDetailLastRefreshedAt)}
+                    </Text>
+                  </View>
+                  {loadingDetail ? (
+                    <View style={styles.feedCheckBadge}>
+                      <ActivityIndicator color="#5b52ba" size="small" />
+                      <Text style={styles.feedCheckBadgeText}>Checking</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.feedCheckReady}>Ready</Text>
+                  )}
                 </View>
 
                 {selectedSubmissionDetail.media?.length || resubmissionAsset ? (
