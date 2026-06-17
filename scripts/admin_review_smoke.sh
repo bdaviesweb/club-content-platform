@@ -36,6 +36,7 @@ const timeoutSeconds = Number(process.env.TIMEOUT_SECONDS || 300);
 const pollSeconds = Number(process.env.POLL_SECONDS || 3);
 const marker = process.env.SMOKE_MARKER;
 const deadline = Date.now() + timeoutSeconds * 1000;
+let adminProcess = null;
 
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
@@ -110,7 +111,7 @@ async function waitFor(description, callback) {
 }
 
 function startAdminServer() {
-  const child = spawn("npm", ["--workspace", "@club/admin-web", "run", "dev"], {
+  const child = spawn(process.execPath, ["apps/admin-web/server.js"], {
     env: {
       ...process.env,
       API_BASE_URL: apiBaseUrl,
@@ -121,7 +122,31 @@ function startAdminServer() {
 
   child.stdout.on("data", (chunk) => process.stdout.write(`[admin] ${chunk}`));
   child.stderr.on("data", (chunk) => process.stderr.write(`[admin] ${chunk}`));
+  adminProcess = child;
   return child;
+}
+
+function killAdminNow() {
+  if (adminProcess && adminProcess.exitCode === null && adminProcess.signalCode === null) {
+    adminProcess.kill("SIGTERM");
+  }
+}
+
+async function stopAdmin() {
+  if (!adminProcess || adminProcess.exitCode !== null || adminProcess.signalCode !== null) {
+    return;
+  }
+
+  const exited = new Promise((resolve) => {
+    adminProcess.once("exit", () => resolve(true));
+  });
+  adminProcess.kill("SIGTERM");
+  const stopped = await Promise.race([exited, sleep(2000).then(() => false)]);
+
+  if (!stopped && adminProcess.exitCode === null && adminProcess.signalCode === null) {
+    adminProcess.kill("SIGKILL");
+    await Promise.race([exited, sleep(1000)]);
+  }
 }
 
 async function main() {
@@ -138,18 +163,13 @@ async function main() {
     }
   });
 
-  const stopAdmin = () => {
-    if (!admin.killed) {
-      admin.kill("SIGTERM");
-    }
-  };
-  process.on("exit", stopAdmin);
+  process.on("exit", killAdminNow);
   process.on("SIGINT", () => {
-    stopAdmin();
+    killAdminNow();
     process.exit(130);
   });
   process.on("SIGTERM", () => {
-    stopAdmin();
+    killAdminNow();
     process.exit(143);
   });
 
@@ -238,11 +258,12 @@ async function main() {
   console.log(`published_at=${publishedDetail.publishedPost.publishedAt}`);
   console.log(`final_queue_count=${(finalQueue.items || []).length}`);
 
-  stopAdmin();
+  await stopAdmin();
 }
 
 main().catch((error) => {
   console.error(error);
+  killAdminNow();
   process.exit(1);
 });
 NODE
