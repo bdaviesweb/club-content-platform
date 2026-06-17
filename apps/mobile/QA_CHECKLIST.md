@@ -71,7 +71,7 @@ EXPO_URL='exp://10.0.0.133:8082' TIMEOUT_SECONDS=300 ./scripts/mobile_demo_revie
 
 Expected result: the script opens the mobile app, creates a demo post through `demoAction=post`, waits for review, approves it through `demoAction=approveFirstReview`, and confirms the post reaches `published`.
 
-This smoke creates or boots the dedicated `Club Content iPhone 17 Pro` simulator unless `SIMULATOR_DEVICE` is explicitly set. It expects the hosted approval queue to start empty so the app's `approveFirstReview` hook cannot approve an unrelated pending item. If old smoke approvals are present, clean them up before running it.
+This smoke creates or boots the dedicated `Club Content iPhone 17 Pro` simulator unless `SIMULATOR_DEVICE` is explicitly set. It expects the hosted approval queue to start empty so the app's `approveFirstReview` hook cannot approve an unrelated pending item. If old smoke approvals are present, clean them up before running it, or use `CLEAN_SMOKE_APPROVALS=1` with `npm run qa:mobile` so the wrapper clears them before the first smoke starts.
 
 If you need the deeper VPS/database smoke and SSH is healthy, run:
 
@@ -145,4 +145,8 @@ TIMEOUT_SECONDS=300 ./scripts/approval_publish_smoke_vps.sh
 ./scripts/cleanup_smoke_approvals_vps.sh
 ```
 
-Then re-run with `APPLY=1` only when you intend to move smoke approvals out of the active queue.
+Then re-run with `APPLY=1` only when you intend to move smoke approvals out of the active queue, or use:
+
+```sh
+CLEAN_SMOKE_APPROVALS=1 npm run qa:mobile
+```

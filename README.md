@@ -68,7 +68,7 @@ Useful scripts:
 - `npm run dev:vps` - sync the current checkout to the verified hermes-dev VPS and check the live stack
 - `./scripts/deploy_vps.sh` - bootstrap or force-sync the repo to the VPS
 - `./scripts/update_vps.sh` - normal day-to-day flow after pushing to GitHub
-- `./scripts/smoke_vps.sh` - check VPS API health and approval queue from your Mac
+- `./scripts/smoke_vps.sh` - check VPS API health, deployed admin health, approval queue, and pending workflow events from your Mac
 - `./scripts/public_upload_smoke_vps.sh` - verify the public upload signing and preview path through the dev VPS ingress
 - `./scripts/hermes_smoke_vps.sh` - submit a sample post, verify AI review output, and remove the sample from the active review queue
 - `./scripts/cleanup_smoke_approvals_vps.sh` - list old pending smoke approvals; use `APPLY=1` to move them out of the active queue
@@ -90,6 +90,9 @@ For hosted dev work, prefer `npm run dev:vps`. It syncs the current checkout to 
 
 Set `CLEANUP_APPROVAL=0` on `./scripts/hermes_smoke_vps.sh` when you want the
 generated AI review item to stay in the approval queue for manual inspection.
+
+Set `CLEAN_SMOKE_APPROVALS=1` on `npm run qa:mobile` when you want the wrapper
+to clear old smoke approvals before the public mobile smoke starts.
 
 ## API Endpoints
 
