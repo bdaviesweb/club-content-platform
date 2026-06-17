@@ -71,6 +71,7 @@ Useful scripts:
 - `./scripts/smoke_vps.sh` - check VPS API health, deployed admin health, approval queue, and pending workflow events from your Mac
 - `./scripts/public_upload_smoke_vps.sh` - verify the public upload signing and preview path through the dev VPS ingress
 - `./scripts/hermes_smoke_vps.sh` - submit a sample post, verify AI review output, and remove the sample from the active review queue
+- `./scripts/notification_status_smoke_vps.sh` - assert the live dev notification delivery contract on the VPS
 - `./scripts/cleanup_smoke_approvals_vps.sh` - list old pending smoke approvals; use `APPLY=1` to move them out of the active queue
 - `RUN_APPROVAL_PUBLISH_SMOKE=1 ./scripts/update_vps.sh` - update the VPS and verify submit, AI review, approval, and internal publishing
 - `DETACH=1 RUN_APPROVAL_PUBLISH_SMOKE=1 ./scripts/update_vps.sh` - run a long VPS update in the background and print the log path
@@ -82,6 +83,7 @@ Recommended routine:
 3. run `./scripts/update_vps.sh`
 4. run `./scripts/smoke_vps.sh`
 5. run `./scripts/hermes_smoke_vps.sh` after AI review changes or VPS env updates
+6. run `./scripts/notification_status_smoke_vps.sh` after notification config or delivery-status changes
 6. run `RUN_APPROVAL_PUBLISH_SMOKE=1 ./scripts/update_vps.sh` after approval, publishing, or full workflow changes
 
 `./scripts/update_vps.sh` now autostashes a dirty VPS checkout before it pulls, so a stray edit on the server no longer blocks the update.
@@ -242,9 +244,10 @@ VPS enablement steps:
 5. Create or update a submission and let the worker emit the notification email.
 6. Create or update a Resend webhook to `https://clubcontent-api.davmn.net/webhooks/resend`.
 7. Subscribe it to the recommended email events above.
-8. Run `./scripts/notification_smoke_vps.sh`.
-9. Confirm `GET /notification-delivery/status` reports `provider: resend`, `enabled: true`, and `webhook.secretConfigured: true`.
-10. Check `GET /notifications?userEmail=<your demo inbox>` or the inbox itself to confirm the event progresses from `sent` to `delivered`.
+8. Run `./scripts/notification_status_smoke_vps.sh` to confirm the live delivery status contract before deeper notification checks.
+9. Run `./scripts/notification_smoke_vps.sh`.
+10. Confirm `GET /notification-delivery/status` reports the expected provider, mode, enabled state, and webhook configuration for that environment.
+11. Check `GET /notifications?userEmail=<your demo inbox>` or the inbox itself to confirm the event progresses from `sent` to `delivered`.
 
 Incoming webhook events are written to `audit_logs` and surfaced on `GET /notifications` as
 `deliveryStatus`, `deliveryProviderId`, and `deliveryUpdatedAt`.

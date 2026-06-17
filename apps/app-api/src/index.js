@@ -11,8 +11,6 @@ import {
 import { Webhook } from "svix";
 import {
   createAndDeliverNotification,
-  describeEmailDeliveryConfig,
-  describePushDeliveryConfig,
   submissionEvents
 } from "../../../packages/shared/src/index.js";
 import { loadAuthorizedApprovalActor } from "./approval-authorization.js";
@@ -30,6 +28,7 @@ import {
 } from "./push-tokens.js";
 import { buildInternalFeedSmokeFilter } from "./feedFilters.js";
 import { loadAppReadiness } from "./app-readiness.js";
+import { buildNotificationDeliveryStatus } from "./notification-delivery-status.js";
 
 const port = Number(process.env.API_PORT || 4000);
 const publicAppName = process.env.PUBLIC_PRODUCT_NAME || "Club Content";
@@ -1256,41 +1255,21 @@ async function handleListPushTokens(res, searchParams) {
 }
 
 function handleNotificationDeliveryStatus(res) {
-  const emailConfig = describeEmailDeliveryConfig({
-    resendApiKey,
-    fromEmail: notificationFromEmail,
-    supportEmail
-  });
-  const pushConfig = describePushDeliveryConfig({
-    enabled: pushNotificationsEnabled,
-    provider: pushProvider,
-    projectId: pushProjectId
-  });
-
-  sendJson(res, 200, {
-    email: {
-      provider: emailConfig.provider,
-      enabled: emailConfig.enabled,
-      mode: emailConfig.mode,
-      reason: emailConfig.reason,
-      fromEmailConfigured: emailConfig.fromEmailConfigured,
-      supportEmail: emailConfig.supportEmail,
-      webhook: {
-        endpointPath: resendWebhookEndpointPath,
-        secretConfigured: Boolean(resendWebhookSecret),
-        subscribedEvents: resendWebhookEvents
-      }
-    },
-    push: {
-      provider: pushConfig.provider,
-      enabled: pushConfig.enabled,
-      mode: pushConfig.mode,
-      reason: pushConfig.reason,
-      projectIdConfigured: pushConfig.projectIdConfigured,
-      projectId: pushConfig.projectId,
-      registrationEndpoint: "/push-tokens"
-    }
-  });
+  sendJson(
+    res,
+    200,
+    buildNotificationDeliveryStatus({
+      resendApiKey,
+      notificationFromEmail,
+      supportEmail,
+      resendWebhookEndpointPath,
+      resendWebhookSecret,
+      resendWebhookEvents,
+      pushNotificationsEnabled,
+      pushProvider,
+      pushProjectId
+    })
+  );
 }
 
 function normalizeWebhookAction(type) {
