@@ -61,6 +61,7 @@ const {
   getProgressStageState,
   getStatusTone,
   progressStages,
+  summarizeSubmissionHandoff,
   summarizeSubmissionNextStep,
   summarizeSubmissionProgress
 } = require("./statusHelpers");
@@ -439,12 +440,18 @@ export default function App() {
   const latestStatusSummary = latestSubmission
     ? summarizeSubmissionProgress(latestSubmission)
     : "Your first post will show review and publish status here.";
+  const latestSubmissionHandoff = latestSubmission
+    ? summarizeSubmissionHandoff(latestSubmission)
+    : null;
   const selectedSubmissionNextStep =
     activeView === "review" &&
     roleAccess.canReview &&
     selectedSubmissionDetail?.latestApprovalRequest?.state === "pending"
       ? "Choose approve, send back, or reject below."
       : summarizeSubmissionNextStep(selectedSubmissionDetail);
+  const selectedSubmissionHandoff = selectedSubmissionDetail
+    ? summarizeSubmissionHandoff(selectedSubmissionDetail)
+    : null;
   const resubmitPrompt = useMemo(() => {
     return fixPromptForReasonCode(
       selectedSubmissionDetail?.latestApprovalRequest?.latestAction?.reasonCode
@@ -1842,6 +1849,12 @@ export default function App() {
                           Open this item and make the approve, send back, or reject call.
                         </Text>
                       </View>
+                      <View style={styles.nextStepPanel}>
+                        <Text style={styles.nextStepLabel}>{summarizeSubmissionHandoff(item).label}</Text>
+                        <Text style={styles.nextStepText}>
+                          {summarizeSubmissionHandoff(item).title}. {summarizeSubmissionHandoff(item).body}
+                        </Text>
+                      </View>
                       <View style={styles.metaChipRow}>
                         <View style={styles.metaChip}>
                           <Text style={styles.metaChipText}>
@@ -2131,6 +2144,14 @@ export default function App() {
                         {summarizeSubmissionNextStep(latestSubmission)}
                       </Text>
                     </View>
+                    {latestSubmissionHandoff ? (
+                      <View style={styles.nextStepPanel}>
+                        <Text style={styles.nextStepLabel}>{latestSubmissionHandoff.label}</Text>
+                        <Text style={styles.nextStepText}>
+                          {latestSubmissionHandoff.title}. {latestSubmissionHandoff.body}
+                        </Text>
+                      </View>
+                    ) : null}
 
                     <View style={styles.progressTrack}>
                       {progressStages.map((stage, index) => {
@@ -2602,6 +2623,14 @@ export default function App() {
                       {selectedSubmissionNextStep}
                     </Text>
                   </View>
+                  {selectedSubmissionHandoff ? (
+                    <View style={styles.nextStepPanel}>
+                      <Text style={styles.nextStepLabel}>{selectedSubmissionHandoff.label}</Text>
+                      <Text style={styles.nextStepText}>
+                        {selectedSubmissionHandoff.title}. {selectedSubmissionHandoff.body}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
                 <View style={styles.feedCheckPanel}>
                   <View>

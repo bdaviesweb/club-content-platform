@@ -157,6 +157,79 @@ function summarizeSubmissionNextStep(item) {
   return "Queued for review. Check back after the workflow runs.";
 }
 
+function inferSubmissionDestination(item) {
+  return (
+    item?.publishedPost?.destinationName ||
+    item?.destination_name ||
+    (item?.visibility_target === "internal" ? "Internal Club Feed" : "the selected destination")
+  );
+}
+
+function summarizeSubmissionHandoff(item) {
+  const status = normalizeSubmissionStatus(item?.status);
+  const destination = inferSubmissionDestination(item);
+  const approver = formatApprovalRoleLabel(
+    item?.latestApprovalRequest?.approverRole ||
+      item?.approverRole ||
+      item?.routing_decision?.approverRole ||
+      item?.routing_decision?.approver_role
+  );
+
+  if (status === "published") {
+    return {
+      label: "Handoff complete",
+      title: `Live in ${destination}`,
+      body: "The submitter can share it or open the feed to confirm what families see."
+    };
+  }
+
+  if (status === "approved") {
+    return {
+      label: "Publishing",
+      title: `Approved for ${destination}`,
+      body: "The workflow owns the final publish step. Refresh if it does not land shortly."
+    };
+  }
+
+  if (status === "publish_failed") {
+    return {
+      label: "Admin handoff",
+      title: "Publishing needs help",
+      body: "An admin should check workflow recovery before the submitter tries again."
+    };
+  }
+
+  if (status === "changes_requested" || status === "needs_metadata") {
+    return {
+      label: "Submitter handoff",
+      title: "Needs an update from the submitter",
+      body: "Use the reviewer note, update the caption or media, then send it back into review."
+    };
+  }
+
+  if (status === "rejected") {
+    return {
+      label: "Review closed",
+      title: "Stopped by reviewer",
+      body: "This version will not publish. Start a new submission only if the club wants a different version."
+    };
+  }
+
+  if (status === "needs_human_review") {
+    return {
+      label: "Reviewer handoff",
+      title: `Waiting on ${approver === "n/a" ? "reviewer" : approver}`,
+      body: `The submitter is done for now. If approved, this is headed to ${destination}.`
+    };
+  }
+
+  return {
+    label: "Workflow handoff",
+    title: "Preparing for review",
+    body: "The system is creating the review packet before a reviewer makes the call."
+  };
+}
+
 function countStatuses(items) {
   return items.reduce(
     (accumulator, item) => {
@@ -215,6 +288,7 @@ module.exports = {
   getStatusTone,
   normalizeSubmissionStatus,
   progressStages,
+  summarizeSubmissionHandoff,
   summarizeSubmissionNextStep,
   summarizeSubmissionProgress
 };

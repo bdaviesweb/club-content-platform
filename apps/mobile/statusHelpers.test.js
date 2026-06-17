@@ -12,6 +12,7 @@ const {
   getStatusTone,
   isHostedDevApiBaseUrl,
   normalizeSubmissionStatus,
+  summarizeSubmissionHandoff,
   summarizeSubmissionNextStep,
   summarizeSubmissionProgress
 } = require("./statusHelpers");
@@ -101,5 +102,37 @@ test("summarizes the next action for submitters", () => {
   assert.equal(
     summarizeSubmissionNextStep({ status: "needs_metadata" }),
     "Update the caption or media, then resubmit it."
+  );
+});
+
+test("summarizes submission handoffs across submitter and reviewer states", () => {
+  assert.deepEqual(
+    summarizeSubmissionHandoff({
+      status: "needs_human_review",
+      visibility_target: "internal",
+      latestApprovalRequest: { approverRole: "club_comms" }
+    }),
+    {
+      label: "Reviewer handoff",
+      title: "Waiting on Club Comms",
+      body: "The submitter is done for now. If approved, this is headed to Internal Club Feed."
+    }
+  );
+
+  assert.deepEqual(
+    summarizeSubmissionHandoff({
+      status: "published",
+      publishedPost: { destinationName: "Internal Club Feed" }
+    }),
+    {
+      label: "Handoff complete",
+      title: "Live in Internal Club Feed",
+      body: "The submitter can share it or open the feed to confirm what families see."
+    }
+  );
+
+  assert.equal(
+    summarizeSubmissionHandoff({ status: "needs_metadata" }).label,
+    "Submitter handoff"
   );
 });
