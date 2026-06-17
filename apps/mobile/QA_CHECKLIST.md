@@ -22,6 +22,20 @@ so the device results stay tied to the exact TestFlight build.
 curl -fsS https://clubcontent-api.davmn.net/health
 ```
 
+- Run the mobile QA preflight:
+
+```sh
+npm run qa:mobile
+```
+
+Expected result: the script runs the hosted public API golden path and confirms review, approval, and publishing still work.
+
+If Metro and the iOS simulator are already running, include the app-driven smoke:
+
+```sh
+RUN_SIMULATOR_SMOKE=1 npm run qa:mobile
+```
+
 - Run the public API golden-path smoke when approval, publishing, notifications, or review behavior changed:
 
 ```sh
