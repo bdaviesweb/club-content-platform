@@ -4,13 +4,10 @@ import {
   reviewThresholds,
   submissionEvents
 } from "../../../packages/shared/src/index.js";
-import { draftCaption, scoreRisk, summarizeReview } from "./fallback-review.js";
-import {
-  hasHermesReviewAgent,
-  runHermesReviewAgent
-} from "./hermes-review.js";
-import { hasOpenAI, runModeration, runStructuredReview } from "./openai.js";
 import { publishToDestination } from "./publishing.js";
+import { buildReviewArtifacts } from "./review-provider.js";
+
+export { buildReviewArtifacts } from "./review-provider.js";
 
 export function chooseApproverRole(submission) {
   if (
@@ -75,137 +72,9 @@ async function findApprover(client, clubId, preferredRole) {
   return null;
 }
 
-function riskLevelToScore(riskLevel) {
-  switch (riskLevel) {
-    case "high":
-      return 0.85;
-    case "medium":
-      return 0.55;
-    default:
-      return 0.15;
-  }
-}
-
 function buildPublishFailureSummary(error) {
   const message = error?.message || "Unknown publishing failure";
   return `Publishing failed: ${message}`;
-}
-
-function buildReviewFallbackReason(provider, error) {
-  const message = error?.message || "unknown error";
-  return `${provider} review unavailable: ${message}`;
-}
-
-export async function buildReviewArtifacts(submission) {
-  const buildFallbackArtifacts = () => {
-    const fallbackRiskScore = scoreRisk(submission.raw_text || "");
-    return {
-      mode: "fallback",
-      riskScore: fallbackRiskScore,
-      summary: summarizeReview(submission.raw_text || "", fallbackRiskScore),
-      captionDraft: draftCaption(submission.raw_text || "", submission.submitter_name),
-      moderation: {
-        model: "local-rules",
-        flagged: fallbackRiskScore >= reviewThresholds.highRisk,
-        categories: {},
-        categoryScores: {}
-      },
-      structured: null,
-      findings:
-        fallbackRiskScore >= reviewThresholds.mediumRisk
-          ? [
-              {
-                type: "policy",
-                severity: fallbackRiskScore >= reviewThresholds.highRisk ? "high" : "medium",
-                message: "Fallback rules found language or details that require review."
-              }
-            ]
-          : []
-    };
-  };
-
-  const buildOpenAIArtifacts = async (summaryPrefix = "") => {
-    try {
-      const moderation = await runModeration(submission.raw_text || "");
-      const structured = await runStructuredReview({
-        rawText: submission.raw_text || "",
-        visibilityTarget: submission.visibility_target,
-        contentType: submission.content_type
-      });
-      const review = structured.review || {};
-      const riskScore = moderation.flagged
-        ? Math.max(riskLevelToScore(review.risk_level), 0.8)
-        : riskLevelToScore(review.risk_level);
-
-      return {
-        mode: "openai",
-        riskScore,
-        summary: `${summaryPrefix}${review.summary || "AI review completed."}`,
-        captionDraft:
-          review.caption_draft ||
-          draftCaption(submission.raw_text || "", submission.submitter_name),
-        moderation,
-        structured,
-        findings: Array.isArray(review.findings) ? review.findings : []
-      };
-    } catch (error) {
-      const fallback = buildFallbackArtifacts();
-      const fallbackReason = buildReviewFallbackReason("OpenAI", error);
-      return {
-        ...fallback,
-        fallbackReason,
-        summary: `${fallback.summary} ${summaryPrefix}${fallbackReason}; local fallback used.`
-      };
-    }
-  };
-
-  if (hasHermesReviewAgent()) {
-    try {
-      const structured = await runHermesReviewAgent({
-        rawText: submission.raw_text || "",
-        visibilityTarget: submission.visibility_target,
-        contentType: submission.content_type,
-        submitterName: submission.submitter_name
-      });
-      const review = structured.review || {};
-      const riskScore = riskLevelToScore(review.risk_level);
-
-      return {
-        mode: "hermes",
-        riskScore,
-        summary: review.summary || "Hermes review completed.",
-        captionDraft:
-          review.caption_draft ||
-          draftCaption(submission.raw_text || "", submission.submitter_name),
-        moderation: {
-          model: structured.model,
-          flagged: riskScore >= reviewThresholds.highRisk,
-          categories: {},
-          categoryScores: {}
-        },
-        structured,
-        findings: Array.isArray(review.findings) ? review.findings : []
-      };
-    } catch (error) {
-      const fallback = buildFallbackArtifacts();
-      const fallbackReason = buildReviewFallbackReason("Hermes", error);
-      if (hasOpenAI()) {
-        return buildOpenAIArtifacts(`${fallbackReason}; `);
-      }
-
-      return {
-        ...fallback,
-        fallbackReason,
-        summary: `${fallback.summary} ${fallbackReason}; local fallback used.`
-      };
-    }
-  }
-
-  if (!hasOpenAI()) {
-    return buildFallbackArtifacts();
-  }
-
-  return buildOpenAIArtifacts();
 }
 
 export async function processSubmissionCreated(client, eventRow) {

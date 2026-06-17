@@ -297,11 +297,20 @@ Against the VPS, run `TIMEOUT_SECONDS=300 ./scripts/approval_publish_smoke_vps.s
 after review or publishing changes to verify the full submission, AI review,
 approval, and internal publish chain.
 
-If `HERMES_REVIEW_AGENT_URL` is set, the worker sends new submissions to the
-configured AI review provider first. The deployed VPS can use local Ollama for a
-free, reliable review path:
+The worker review provider now routes through `REVIEW_PROVIDER_MODE`:
+
+- `auto` (default): Hermes first when configured, then OpenAI, then local rules
+- `disabled`: skip external review providers and use local rules
+- `log_only`: record provider availability but skip external review calls
+- `fallback_only`: always use local rules
+- `hermes_only`: use Hermes when configured, otherwise local rules
+- `openai_only`: use OpenAI when configured, otherwise local rules
+
+For hosted dev work, keep `REVIEW_PROVIDER_MODE=auto` and point Hermes at the
+local Ollama instance on the VPS for a free, reliable review path:
 
 ```env
+REVIEW_PROVIDER_MODE=auto
 HERMES_REVIEW_AGENT_URL=http://172.21.0.1:11434/api/generate
 HERMES_REVIEW_AGENT_MODE=ollama_generate
 HERMES_REVIEW_AGENT_NAME=llama3.2:3b-instruct-q4_K_M
@@ -339,13 +348,14 @@ For the Hermes gateway's OpenAI-compatible API, set
 name, and set `HERMES_REVIEW_AGENT_API_KEY` to the gateway `API_SERVER_KEY`.
 The worker will send a review prompt and normalize the returned JSON.
 
-If Hermes is not configured and `OPENAI_API_KEY` is set, the worker uses:
+In `auto` mode, if Hermes is not configured and `OPENAI_API_KEY` is set, the
+worker uses:
 
 - `POST /v1/moderations` for safety classification
 - `POST /v1/responses` for structured review and caption drafting
 
-If neither provider is configured, the worker falls back to local rule-based
-review so the flow still works in dev.
+If neither provider is configured, or if the selected mode disables them, the
+worker falls back to local rule-based review so the flow still works in dev.
 
 ## Workflow Recovery
 
