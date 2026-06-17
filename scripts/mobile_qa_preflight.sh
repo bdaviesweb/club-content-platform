@@ -5,13 +5,13 @@ RUN_SIMULATOR_SMOKE="${RUN_SIMULATOR_SMOKE:-0}"
 CLEAN_SMOKE_APPROVALS="${CLEAN_SMOKE_APPROVALS:-0}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-300}"
 
-echo "Running mobile public API QA smoke..."
-TIMEOUT_SECONDS="${TIMEOUT_SECONDS}" ./scripts/mobile_qa_public_api_smoke.sh
-
 if [[ "${CLEAN_SMOKE_APPROVALS}" == "1" ]]; then
-  echo "Cleaning pending smoke approvals before simulator QA smoke..."
+  echo "Cleaning pending smoke approvals before mobile QA smoke..."
   APPLY=1 ./scripts/cleanup_smoke_approvals_vps.sh
 fi
+
+echo "Running mobile public API QA smoke..."
+TIMEOUT_SECONDS="${TIMEOUT_SECONDS}" ./scripts/mobile_qa_public_api_smoke.sh
 
 if [[ "${RUN_SIMULATOR_SMOKE}" == "1" ]]; then
   echo "Running simulator-driven mobile demo review smoke..."
