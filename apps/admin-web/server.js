@@ -1,6 +1,7 @@
 import http from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { formatRoutingSourceLabel } from "./routingLabels.js";
+import { summarizeReviewHandoff } from "./reviewHandoff.js";
 
 const port = Number(process.env.PORT || 3001);
 const apiBase = process.env.API_BASE_URL || "http://app-api:4000";
@@ -948,6 +949,7 @@ function renderQueue(queue, activeId) {
       const band = riskBand(item.risk_score);
       const preview = item.raw_text || item.latest_review_summary || "No caption yet.";
       const routingSource = item.routing_decision?.routingSource || item.routing_decision?.routing_source;
+      const handoff = summarizeReviewHandoff(item);
       return `<a class="queue-card${active}" href="/?approvalRequestId=${encodeURIComponent(item.id)}">
         <div class="header-row">
           <strong>${index === 0 ? "Up next" : `Then ${index + 1}`}</strong>
@@ -959,6 +961,7 @@ function renderQueue(queue, activeId) {
           <span class="subtle">${escapeHtml(formatRelativeTime(item.created_at))}</span>
         </div>
         <p style="margin-top:10px; line-height:1.45;">${escapeHtml(preview).slice(0, 96)}</p>
+        <p class="subtle" style="margin-top:8px; line-height:1.4;"><strong>${escapeHtml(handoff.label)}:</strong> ${escapeHtml(handoff.title)}.</p>
       </a>`;
     })
     .join("");
@@ -1283,6 +1286,7 @@ function renderDecisionDock(detail, queueIds, recommendation) {
 
 function renderCenterStage(detail, recommendation, queueIds) {
   const risk = riskBand(detail.risk_score);
+  const handoff = summarizeReviewHandoff(detail);
   return `<section class="center-stage">
     <div class="panel stage-shell">
       <div class="stage-header">
@@ -1308,6 +1312,12 @@ function renderCenterStage(detail, recommendation, queueIds) {
       </div>
 
       ${renderAiReviewPanel(detail)}
+
+      <div class="stage-card" style="margin-top:14px;">
+        <div class="section-label">${escapeHtml(handoff.label)}</div>
+        <h3>${escapeHtml(handoff.title)}</h3>
+        <p class="subtle" style="margin-top:8px; line-height:1.45;">${escapeHtml(handoff.body)}</p>
+      </div>
 
       ${renderDecisionDock(detail, queueIds, recommendation)}
     </div>
