@@ -4,7 +4,9 @@ set -euo pipefail
 API_BASE_URL="${API_BASE_URL:-https://clubcontent-api.davmn.net}"
 EXPO_URL="${EXPO_URL:-exp://10.0.0.133:8082}"
 METRO_STATUS_URL="${METRO_STATUS_URL:-http://localhost:8082/status}"
-SIMULATOR_DEVICE="${SIMULATOR_DEVICE:-booted}"
+SIMULATOR_DEVICE="${SIMULATOR_DEVICE:-Club Content iPhone 17 Pro}"
+SIMULATOR_DEVICE_TYPE="${SIMULATOR_DEVICE_TYPE:-com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro}"
+SIMULATOR_RUNTIME="${SIMULATOR_RUNTIME:-com.apple.CoreSimulator.SimRuntime.iOS-26-5}"
 CLUB_SLUG="${CLUB_SLUG:-demo-soccer-club}"
 SUBMITTER_EMAIL="${SUBMITTER_EMAIL:-coach@demo-club.local}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-300}"
@@ -15,6 +17,8 @@ API_BASE_URL="${API_BASE_URL}" \
 EXPO_URL="${EXPO_URL}" \
 METRO_STATUS_URL="${METRO_STATUS_URL}" \
 SIMULATOR_DEVICE="${SIMULATOR_DEVICE}" \
+SIMULATOR_DEVICE_TYPE="${SIMULATOR_DEVICE_TYPE}" \
+SIMULATOR_RUNTIME="${SIMULATOR_RUNTIME}" \
 CLUB_SLUG="${CLUB_SLUG}" \
 SUBMITTER_EMAIL="${SUBMITTER_EMAIL}" \
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS}" \
@@ -27,6 +31,8 @@ const apiBaseUrl = process.env.API_BASE_URL.replace(/\/+$/, "");
 const expoUrl = process.env.EXPO_URL.replace(/\/+$/, "");
 const metroStatusUrl = process.env.METRO_STATUS_URL;
 const simulatorDevice = process.env.SIMULATOR_DEVICE;
+const simulatorDeviceType = process.env.SIMULATOR_DEVICE_TYPE;
+const simulatorRuntime = process.env.SIMULATOR_RUNTIME;
 const clubSlug = process.env.CLUB_SLUG;
 const submitterEmail = process.env.SUBMITTER_EMAIL;
 const timeoutSeconds = Number(process.env.TIMEOUT_SECONDS || 300);
@@ -40,9 +46,63 @@ function actionUrl(action) {
   return `${expoUrl}${expoUrl.includes("?") ? "&" : "?"}demoAction=${encodeURIComponent(action)}`;
 }
 
+function listSimulatorDevices() {
+  const output = execFileSync("xcrun", ["simctl", "list", "devices", "available", "-j"], {
+    encoding: "utf8"
+  });
+  return JSON.parse(output).devices || {};
+}
+
+function findSimulatorDeviceByName(name) {
+  for (const devices of Object.values(listSimulatorDevices())) {
+    const match = devices.find((device) => device.name === name);
+    if (match?.udid) {
+      return match;
+    }
+  }
+  return null;
+}
+
+function ensureSimulatorDevice() {
+  if (!simulatorDevice) {
+    throw new Error("SIMULATOR_DEVICE must be set to a dedicated simulator name or UDID");
+  }
+
+  if (/^[0-9A-F-]{36}$/i.test(simulatorDevice)) {
+    console.log(`Using simulator UDID: ${simulatorDevice}`);
+    return simulatorDevice;
+  }
+
+  let device = findSimulatorDeviceByName(simulatorDevice);
+  if (!device) {
+    console.log(`Creating dedicated simulator: ${simulatorDevice}`);
+    execFileSync("xcrun", [
+      "simctl",
+      "create",
+      simulatorDevice,
+      simulatorDeviceType,
+      simulatorRuntime
+    ], { stdio: "inherit" });
+    device = findSimulatorDeviceByName(simulatorDevice);
+  }
+
+  if (!device?.udid) {
+    throw new Error(`Could not find or create simulator named ${simulatorDevice}`);
+  }
+
+  console.log(`Using simulator: ${device.name} (${device.udid})`);
+  try {
+    execFileSync("xcrun", ["simctl", "boot", device.udid], { stdio: "ignore" });
+  } catch {
+    // Already booted is fine.
+  }
+  execFileSync("xcrun", ["simctl", "bootstatus", device.udid, "-b"], { stdio: "ignore" });
+  return device.udid;
+}
+
 function openSimulatorUrl(url) {
   console.log(`Opening simulator URL: ${url}`);
-  execFileSync("xcrun", ["simctl", "openurl", simulatorDevice, url], {
+  execFileSync("xcrun", ["simctl", "openurl", resolvedSimulatorDevice, url], {
     stdio: "inherit"
   });
 }
@@ -187,6 +247,8 @@ async function main() {
   console.log(`published_at=${publishedDetail.publishedPost.publishedAt}`);
   console.log(`final_queue_count=${(finalQueue.items || []).length}`);
 }
+
+const resolvedSimulatorDevice = ensureSimulatorDevice();
 
 main().catch((error) => {
   console.error(error);
