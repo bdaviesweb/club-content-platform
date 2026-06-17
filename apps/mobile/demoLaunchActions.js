@@ -2,7 +2,8 @@ const demoLaunchActions = {
   loadWorkspace: "load-workspace",
   createPost: "create-post",
   openReview: "open-review",
-  openFirstReview: "open-first-review"
+  openFirstReview: "open-first-review",
+  approveFirstReview: "approve-first-review"
 };
 
 function parseDemoLaunchAction(url) {
@@ -23,6 +24,7 @@ function parseDemoLaunchAction(url) {
   if (queryAction === "post") return demoLaunchActions.createPost;
   if (queryAction === "review") return demoLaunchActions.openReview;
   if (queryAction === "reviewFirst") return demoLaunchActions.openFirstReview;
+  if (queryAction === "approveFirstReview") return demoLaunchActions.approveFirstReview;
 
   const segments = pathname
     .split("/")
@@ -34,6 +36,9 @@ function parseDemoLaunchAction(url) {
   if (segments[1] === "post") return demoLaunchActions.createPost;
   if (segments[1] === "review") return demoLaunchActions.openReview;
   if (segments[1] === "review-first") return demoLaunchActions.openFirstReview;
+  if (segments[1] === "approve-first-review") {
+    return demoLaunchActions.approveFirstReview;
+  }
   return null;
 }
 

@@ -542,10 +542,14 @@ export default function App() {
 
       if (
         action === demoLaunchActions.openReview ||
-        action === demoLaunchActions.openFirstReview
+        action === demoLaunchActions.openFirstReview ||
+        action === demoLaunchActions.approveFirstReview
       ) {
         await openDemoReviewQueue(demoWorkspace, {
-          openFirst: action === demoLaunchActions.openFirstReview
+          openFirst:
+            action === demoLaunchActions.openFirstReview ||
+            action === demoLaunchActions.approveFirstReview,
+          approveFirst: action === demoLaunchActions.approveFirstReview
         });
         return;
       }
@@ -1037,6 +1041,17 @@ export default function App() {
         setSubmissionDetailLastRefreshedAt(new Date().toISOString());
         setResubmissionText(detail.raw_text || "");
         setResubmissionAsset(null);
+
+        if (options.approveFirst) {
+          await performReviewAction({
+            submissionDetail: detail,
+            action: "approve",
+            actorEmail: workspace.reviewerEmail,
+            showAlert: false
+          });
+          return;
+        }
+
         setStatus("Demo review item opened.");
         return;
       }
@@ -1093,41 +1108,38 @@ export default function App() {
     resetReviewActionState();
   }
 
-  async function submitReviewAction() {
-    if (!roleAccess.canReview) {
-      Alert.alert("Reviewer mode required", "Switch this device to reviewer mode before approving posts.");
-      return;
-    }
-
-    const approvalRequestId = selectedSubmissionDetail?.latestApprovalRequest?.id;
+  async function performReviewAction({
+    submissionDetail = selectedSubmissionDetail,
+    action = reviewAction,
+    actorEmail = roleAccess.reviewActorEmail,
+    notes = reviewActionNotes,
+    reasonCode = reviewActionReasonCode,
+    showAlert = true
+  } = {}) {
+    const approvalRequestId = submissionDetail?.latestApprovalRequest?.id;
     if (!approvalRequestId) return;
-
-    if (reviewAction !== "approve" && !reviewActionNotes.trim()) {
-      Alert.alert("Note required", "Add a short note before you send this back or reject it.");
-      return;
-    }
 
     setReviewActionInProgress(true);
     Keyboard.dismiss();
     try {
       const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
-      const reviewedSubmissionId = selectedSubmissionDetail.id;
-      const submittedAction = reviewAction;
+      const reviewedSubmissionId = submissionDetail.id;
+      const submittedAction = action;
       const actionLabel =
         submittedAction === "approve"
           ? "Approved"
           : submittedAction === "request_changes"
             ? "Sent back for changes"
-            : "Rejected";
+          : "Rejected";
 
       const response = await fetch(baseUrl + "/approval-requests/" + approvalRequestId + "/actions", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          action: reviewAction,
-          actedByEmail: roleAccess.reviewActorEmail,
-          notes: reviewAction === "approve" ? null : reviewActionNotes.trim(),
-          reasonCode: reviewActionReasonCode
+          action: submittedAction,
+          actedByEmail: actorEmail,
+          notes: submittedAction === "approve" ? null : notes.trim(),
+          reasonCode
         })
       });
 
@@ -1171,22 +1183,43 @@ export default function App() {
         setSelectedSubmissionDetail(null);
       }
 
-      Alert.alert(
-        actionLabel,
-        submittedAction === "approve"
-          ? reviewedDetail?.publishedPost
-            ? `Published to ${reviewedDetail.publishedPost.destinationName}.`
-            : "It is moving forward."
-          : submittedAction === "request_changes"
-            ? "The submitter will see your note."
-            : "The submitter will be notified."
-      );
+      if (showAlert) {
+        Alert.alert(
+          actionLabel,
+          submittedAction === "approve"
+            ? reviewedDetail?.publishedPost
+              ? `Published to ${reviewedDetail.publishedPost.destinationName}.`
+              : "It is moving forward."
+            : submittedAction === "request_changes"
+              ? "The submitter will see your note."
+              : "The submitter will be notified."
+        );
+      }
+
+      return reviewedDetail;
     } catch (error) {
       setStatus(error.message || "Could not save review action");
-      Alert.alert("Review failed", error.message || "Unknown error");
+      if (showAlert) Alert.alert("Review failed", error.message || "Unknown error");
+      return null;
     } finally {
       setReviewActionInProgress(false);
     }
+  }
+
+  async function submitReviewAction() {
+    if (!roleAccess.canReview) {
+      Alert.alert("Reviewer mode required", "Switch this device to reviewer mode before approving posts.");
+      return;
+    }
+
+    if (!selectedSubmissionDetail?.latestApprovalRequest?.id) return;
+
+    if (reviewAction !== "approve" && !reviewActionNotes.trim()) {
+      Alert.alert("Note required", "Add a short note before you send this back or reject it.");
+      return;
+    }
+
+    await performReviewAction();
   }
 
   async function pickFromLibrary() {
