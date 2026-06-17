@@ -5,6 +5,12 @@ import {
   submissionEvents
 } from "../../../packages/shared/src/index.js";
 import { publishToDestination } from "./publishing.js";
+import {
+  buildPublishedEventPayload,
+  buildPublishedNotificationPayload,
+  buildPublishFailureEventPayload,
+  buildPublishFailureSummary
+} from "./publish-outcome.js";
 import { buildReviewArtifacts } from "./review-provider.js";
 
 export { buildReviewArtifacts } from "./review-provider.js";
@@ -70,11 +76,6 @@ async function findApprover(client, clubId, preferredRole) {
   }
 
   return null;
-}
-
-function buildPublishFailureSummary(error) {
-  const message = error?.message || "Unknown publishing failure";
-  return `Publishing failed: ${message}`;
 }
 
 export async function processSubmissionCreated(client, eventRow) {
@@ -328,7 +329,7 @@ export async function processSubmissionApproved(
         JSON.stringify({
           destinationType: publishDestination.destination_type,
           destinationName: publishDestination.name,
-          error: error?.message || "Unknown publishing failure"
+          ...buildPublishFailureEventPayload(error)
         })
       ]
     );
@@ -384,21 +385,16 @@ export async function processSubmissionApproved(
     [
       submission.id,
       submissionEvents.published,
-      JSON.stringify({
-        destinationType: publishResult.destinationType,
-        destinationName: publishResult.destinationName
-      })
+      JSON.stringify(buildPublishedEventPayload(publishResult))
     ]
   );
 
   await createAndDeliverNotification(client, {
     userId: submission.submitted_by_user_id,
     type: "submission_published",
-    payload: {
+    payload: buildPublishedNotificationPayload({
       submissionId: submission.id,
-      status: "published",
-      destinationType: publishResult.destinationType,
-      destinationName: publishResult.destinationName
-    }
+      result: publishResult
+    })
   });
 }
