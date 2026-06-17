@@ -27,9 +27,32 @@ const reviewerEmail = process.env.REVIEWER_EMAIL;
 const timeoutSeconds = Number(process.env.TIMEOUT_SECONDS || 300);
 const pollSeconds = Number(process.env.POLL_SECONDS || 3);
 const marker = process.env.SMOKE_MARKER;
+const smokePrefixes = [
+  "admin-review-smoke-",
+  "approval-publish-smoke-",
+  "approval-publish-smoke-mobile-qa-",
+  "hermes-smoke-",
+  "hermes-diagnostic-",
+  "E2E smoke post",
+  "Approval action smoke",
+  "mobile-demo-post-"
+];
 
 const deadline = Date.now() + timeoutSeconds * 1000;
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+function isSmokeRawText(value) {
+  const rawText = String(value || "");
+  return smokePrefixes.some((prefix) => rawText.startsWith(prefix));
+}
+
+function summarizeQueueItems(items = []) {
+  return items.map((item) => ({
+    id: item.id,
+    submissionId: item.submission_id,
+    rawText: item.raw_text
+  }));
+}
 
 async function request(path, options = {}) {
   const response = await fetch(`${apiBaseUrl}${path}`, {
@@ -70,6 +93,19 @@ async function waitFor(description, callback) {
 
 console.log(`Checking API health: ${apiBaseUrl}`);
 await request("/health");
+
+const initialQueue = await request("/approvals/queue");
+const initialQueueItems = initialQueue.items || [];
+const staleSmokeItems = initialQueueItems.filter((item) => isSmokeRawText(item.raw_text));
+if (staleSmokeItems.length) {
+  throw new Error(
+    `Pending smoke approvals already exist: ${JSON.stringify(summarizeQueueItems(staleSmokeItems))}. ` +
+      "Clear them before running mobile_qa_public_api_smoke.sh."
+  );
+}
+
+const initialQueueCount = initialQueueItems.length;
+console.log(`initial_queue_count=${initialQueueCount}`);
 
 console.log(`Creating mobile QA smoke submission: ${marker}`);
 const created = await request("/submissions", {
@@ -129,8 +165,23 @@ const publishedDetail = await waitFor("published submission", async (attempt) =>
   return null;
 });
 
+const finalQueue = await request("/approvals/queue");
+const finalQueueItems = finalQueue.items || [];
+const stillPending = finalQueueItems.some((item) => item.submission_id === submissionId);
+if (stillPending) {
+  throw new Error(`Submission ${submissionId} is still present in the review queue`);
+}
+
+if (finalQueueItems.length > initialQueueCount) {
+  throw new Error(
+    `Approval queue grew during smoke: initial=${initialQueueCount} final=${finalQueueItems.length} ` +
+      `remaining=${JSON.stringify(summarizeQueueItems(finalQueueItems))}`
+  );
+}
+
 console.log("Mobile QA public API smoke passed.");
 console.log(`status=${publishedDetail.status}`);
 console.log(`destination=${publishedDetail.publishedPost.destinationName}`);
 console.log(`published_at=${publishedDetail.publishedPost.publishedAt}`);
+console.log(`final_queue_count=${finalQueueItems.length}`);
 NODE
