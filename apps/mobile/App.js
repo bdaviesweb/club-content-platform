@@ -32,6 +32,7 @@ const {
 } = require("./feedMedia");
 const { uploadSelectedAsset } = require("./mediaUpload");
 const { buildApiError } = require("./apiErrors");
+const { buildDemoSubmissionPayload } = require("./demoTools");
 const {
   extractReadinessDefaults,
   fetchAppReadiness,
@@ -340,6 +341,7 @@ export default function App() {
   const [asset, setAsset] = useState(null);
   const [status, setStatus] = useState("Take a photo or choose one to get started.");
   const [submitting, setSubmitting] = useState(false);
+  const [creatingDemoPost, setCreatingDemoPost] = useState(false);
   const [recentSubmissions, setRecentSubmissions] = useState([]);
   const [loadingRecent, setLoadingRecent] = useState(false);
   const [recentError, setRecentError] = useState("");
@@ -1105,6 +1107,54 @@ export default function App() {
     setAsset(null);
     setCaption("");
     setStatus("Take a photo or choose one to get started.");
+  }
+
+  function loadDemoWorkspace() {
+    setApiBaseUrl(defaultConfig.apiBaseUrl);
+    setClubSlug(defaultConfig.clubSlug);
+    setTeamSlug(defaultConfig.teamSlug);
+    setSubmitterEmail(defaultConfig.submitterEmail);
+    setReviewerEmail(defaultConfig.reviewerEmail);
+    setVisibilityTarget("internal");
+    setStatus("Demo club loaded.");
+  }
+
+  async function createDemoPost() {
+    Keyboard.dismiss();
+    setCreatingDemoPost(true);
+    setStatus("Creating demo post...");
+
+    try {
+      const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
+      const submissionResponse = await fetch(`${baseUrl}/submissions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(
+          buildDemoSubmissionPayload({
+            clubSlug: clubSlug.trim(),
+            teamSlug: teamSlug.trim(),
+            submitterEmail: roleAccess.submitterEmail,
+            visibilityTarget
+          })
+        )
+      });
+
+      if (!submissionResponse.ok) {
+        throw new Error(`Demo post failed: ${submissionResponse.status}`);
+      }
+
+      const submissionPayload = await submissionResponse.json();
+      setStatus(`Demo post created ${submissionPayload.submission.id}`);
+      setSettingsVisible(false);
+      setActiveView("status");
+      await refreshStatusFeed();
+      Alert.alert("Demo post created", "The fake club post is now in the workflow.");
+    } catch (error) {
+      setStatus(error.message || "Demo post failed");
+      Alert.alert("Demo post failed", error.message || "Unknown error");
+    } finally {
+      setCreatingDemoPost(false);
+    }
   }
 
   async function submit() {
@@ -2167,6 +2217,37 @@ export default function App() {
 
             <View style={styles.settingsCard}>
               <GlassLayer />
+              <Text style={styles.settingsLabel}>Demo tools</Text>
+              <View style={styles.settingsActionRow}>
+                <Pressable
+                  style={[styles.inlineButton, styles.settingsActionButton]}
+                  onPress={loadDemoWorkspace}
+                >
+                  <Text style={styles.inlineButtonText}>Load demo club</Text>
+                </Pressable>
+                <Pressable
+                  disabled={creatingDemoPost}
+                  style={[
+                    styles.inlineButton,
+                    styles.settingsActionButton,
+                    creatingDemoPost && styles.buttonDisabled
+                  ]}
+                  onPress={createDemoPost}
+                >
+                  {creatingDemoPost ? (
+                    <ActivityIndicator color="#5b52ba" />
+                  ) : (
+                    <Text style={styles.inlineButtonText}>Create demo post</Text>
+                  )}
+                </Pressable>
+              </View>
+              <Text style={styles.advancedHelpText}>
+                Uses the hosted dev workflow so simulator QA starts from a known fake club.
+              </Text>
+            </View>
+
+            <View style={styles.settingsCard}>
+              <GlassLayer />
               <Text style={styles.settingsLabel}>Audience default</Text>
               <View style={styles.audienceRow}>
                 {[
@@ -3204,7 +3285,9 @@ const styles = StyleSheet.create({
     textAlign: "center"
   },
   settingsActionRow: {
-    flexDirection: "row"
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10
   },
   settingsActionButton: {
     minHeight: 58
