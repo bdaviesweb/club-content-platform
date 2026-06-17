@@ -12,6 +12,18 @@ TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-300}"
 POLL_SECONDS="${POLL_SECONDS:-3}"
 SMOKE_MARKER="${SMOKE_MARKER:-approval-publish-smoke-$(date -u +%Y%m%dT%H%M%SZ)-${RANDOM}}"
 
+is_smoke_raw_text() {
+  local raw_text="${1:-}"
+  [[ "${raw_text}" == admin-review-smoke-* ]] \
+    || [[ "${raw_text}" == approval-publish-smoke-* ]] \
+    || [[ "${raw_text}" == approval-publish-smoke-mobile-qa-* ]] \
+    || [[ "${raw_text}" == hermes-smoke-* ]] \
+    || [[ "${raw_text}" == hermes-diagnostic-* ]] \
+    || [[ "${raw_text}" == "E2E smoke post"* ]] \
+    || [[ "${raw_text}" == "Approval action smoke"* ]] \
+    || [[ "${raw_text}" == mobile-demo-post-* ]]
+}
+
 shell_quote() {
   printf "%q" "$1"
 }
@@ -51,6 +63,38 @@ query_one() {
 echo "Checking API health..."
 curl -fsS http://localhost:4000/health
 echo
+
+initial_queue_rows="$(query_one "
+  SELECT
+    COALESCE(ar.id::text, ''),
+    COALESCE(s.id::text, ''),
+    COALESCE(s.raw_text, '')
+  FROM approval_requests ar
+  JOIN submissions s ON s.id = ar.submission_id
+  WHERE ar.state = 'pending'
+  ORDER BY ar.created_at ASC;
+")"
+
+initial_queue_count=0
+stale_smoke_rows=""
+if [[ -n "${initial_queue_rows}" ]]; then
+  while IFS='|' read -r queue_approval_request_id queue_submission_id queue_raw_text; do
+    [[ -z "${queue_approval_request_id}" ]] && continue
+    initial_queue_count=$((initial_queue_count + 1))
+    if is_smoke_raw_text "${queue_raw_text}"; then
+      stale_smoke_rows+="${queue_approval_request_id}|${queue_submission_id}|${queue_raw_text}"$'\n'
+    fi
+  done <<< "${initial_queue_rows}"
+fi
+
+if [[ -n "${stale_smoke_rows}" ]]; then
+  echo "Pending smoke approvals already exist:" >&2
+  printf '%s' "${stale_smoke_rows}" >&2
+  echo "Clear them before running approval_publish_smoke_vps.sh." >&2
+  exit 1
+fi
+
+echo "initial_queue_count=${initial_queue_count}"
 
 echo "Creating approval publish smoke submission: ${SMOKE_MARKER}"
 curl -fsS \
@@ -183,6 +227,16 @@ while (( SECONDS < deadline )); do
     echo "publish_state=${publish_state}"
     echo "external_post_id=${external_post_id}"
     echo "result_summary=${result_summary}"
+    final_queue_count=$(query_one "
+      SELECT COUNT(*)
+      FROM approval_requests
+      WHERE state = 'pending';
+    ")
+    echo "final_queue_count=${final_queue_count}"
+    if (( final_queue_count > initial_queue_count )); then
+      echo "Approval queue grew during smoke: initial=${initial_queue_count} final=${final_queue_count}" >&2
+      exit 1
+    fi
     exit 0
   fi
 
