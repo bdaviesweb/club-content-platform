@@ -13,6 +13,7 @@
     "dev:mobile": "npm --workspace @club/mobile run dev",
     "dev:stack": "node scripts/dev-stack.mjs",
     "dev:vps": "bash scripts/dev_vps.sh",
+    "qa:admin": "bash scripts/admin_review_smoke.sh",
     "qa:mobile": "bash scripts/mobile_qa_preflight.sh",
     "lint": "echo \"Lint targets not wired yet\"",
     "test": "node --test packages/shared/src/*.test.js apps/mobile/*.test.js apps/app-api/src/*.test.js apps/worker/src/*.test.js"

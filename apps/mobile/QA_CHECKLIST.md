@@ -36,6 +36,14 @@ If Metro and the iOS simulator are already running, include the app-driven smoke
 RUN_SIMULATOR_SMOKE=1 npm run qa:mobile
 ```
 
+- Run the admin reviewer-console smoke when approval UI behavior changes:
+
+```sh
+npm run qa:admin
+```
+
+Expected result: the script starts the local admin web console, creates a hosted smoke submission, confirms `/quick-review` renders that item, approves it through the admin UI proxy, and confirms publishing completes.
+
 - Run the public API golden-path smoke when approval, publishing, notifications, or review behavior changed:
 
 ```sh
