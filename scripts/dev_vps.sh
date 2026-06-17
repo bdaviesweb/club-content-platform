@@ -9,7 +9,8 @@ REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/deploy_vps.sh
 
 echo
 echo "Checking remote health"
-ssh "${REMOTE_HOST}" "cd '${REMOTE_DIR}' && curl -fsS http://localhost:4000/health && printf '\n' && docker compose -f docker-compose.vps.yml ps"
+REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/smoke_vps.sh
+ssh "${REMOTE_HOST}" "cd '${REMOTE_DIR}' && printf '\n---\n' && docker compose -f docker-compose.vps.yml ps"
 
 echo
 echo "VPS stack is live at:"
