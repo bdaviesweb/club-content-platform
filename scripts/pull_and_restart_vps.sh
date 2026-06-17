@@ -78,6 +78,7 @@ fi
 echo
 echo "---"
 echo "Post-deploy QA options"
+echo "  VPS snapshot:          ./scripts/smoke_vps.sh"
 echo "  API publish smoke:     RUN_APPROVAL_PUBLISH_SMOKE=1 ./scripts/update_vps.sh"
 echo "  Admin review smoke:    RUN_ADMIN_REVIEW_SMOKE=1 ./scripts/update_vps.sh"
-echo "  Mobile simulator QA:   RUN_SIMULATOR_SMOKE=1 npm run qa:mobile"
+echo "  Mobile simulator QA:   CLEAN_SMOKE_APPROVALS=1 RUN_SIMULATOR_SMOKE=1 npm run qa:mobile"
