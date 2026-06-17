@@ -210,7 +210,8 @@ Without those values, notifications still appear in-app and delivery attempts fa
 log-only or skipped modes with audit log entries. If `RESEND_WEBHOOK_SECRET` is omitted, the webhook
 endpoint can still parse JSON payloads in dev, but signature verification stays disabled.
 Push status is also surfaced on `GET /notification-delivery/status`, including whether push
-is enabled and whether a push project id is configured.
+is enabled, the effective delivery `mode`, and a `reason` when delivery is intentionally
+inactive or misconfigured.
 
 To enable Expo push delivery, set:
 

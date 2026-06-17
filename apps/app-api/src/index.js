@@ -11,6 +11,8 @@ import {
 import { Webhook } from "svix";
 import {
   createAndDeliverNotification,
+  describeEmailDeliveryConfig,
+  describePushDeliveryConfig,
   submissionEvents
 } from "../../../packages/shared/src/index.js";
 import { loadAuthorizedApprovalActor } from "./approval-authorization.js";
@@ -1254,12 +1256,25 @@ async function handleListPushTokens(res, searchParams) {
 }
 
 function handleNotificationDeliveryStatus(res) {
+  const emailConfig = describeEmailDeliveryConfig({
+    resendApiKey,
+    fromEmail: notificationFromEmail,
+    supportEmail
+  });
+  const pushConfig = describePushDeliveryConfig({
+    enabled: pushNotificationsEnabled,
+    provider: pushProvider,
+    projectId: pushProjectId
+  });
+
   sendJson(res, 200, {
     email: {
-      provider: resendApiKey ? "resend" : "log-only",
-      enabled: Boolean(resendApiKey && notificationFromEmail),
-      fromEmailConfigured: Boolean(notificationFromEmail),
-      supportEmail,
+      provider: emailConfig.provider,
+      enabled: emailConfig.enabled,
+      mode: emailConfig.mode,
+      reason: emailConfig.reason,
+      fromEmailConfigured: emailConfig.fromEmailConfigured,
+      supportEmail: emailConfig.supportEmail,
       webhook: {
         endpointPath: resendWebhookEndpointPath,
         secretConfigured: Boolean(resendWebhookSecret),
@@ -1267,10 +1282,12 @@ function handleNotificationDeliveryStatus(res) {
       }
     },
     push: {
-      provider: pushProvider,
-      enabled: pushNotificationsEnabled,
-      projectIdConfigured: Boolean(pushProjectId),
-      projectId: pushProjectId || null,
+      provider: pushConfig.provider,
+      enabled: pushConfig.enabled,
+      mode: pushConfig.mode,
+      reason: pushConfig.reason,
+      projectIdConfigured: pushConfig.projectIdConfigured,
+      projectId: pushConfig.projectId,
       registrationEndpoint: "/push-tokens"
     }
   });

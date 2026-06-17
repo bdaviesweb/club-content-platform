@@ -25,6 +25,7 @@ export {
   buildNotificationEmail,
   buildNotificationPush,
   createAndDeliverNotification,
+  describeEmailDeliveryConfig,
   sendEmailViaResend
 } from "./notification-delivery.js";
-export { sendPushNotifications } from "./push-delivery.js";
+export { describePushDeliveryConfig, sendPushNotifications } from "./push-delivery.js";

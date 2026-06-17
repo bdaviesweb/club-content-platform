@@ -1,6 +1,43 @@
 const expoPushEndpoint =
   process.env.EXPO_PUSH_ENDPOINT || "https://exp.host/--/api/v2/push/send";
 
+export function describePushDeliveryConfig({
+  enabled = false,
+  provider = "expo",
+  projectId = ""
+} = {}) {
+  if (!enabled) {
+    return {
+      provider,
+      enabled: false,
+      mode: "disabled",
+      reason: "push_disabled",
+      projectIdConfigured: Boolean(projectId),
+      projectId: projectId || null
+    };
+  }
+
+  if (provider !== "expo") {
+    return {
+      provider,
+      enabled: true,
+      mode: "unsupported-provider",
+      reason: `unsupported_push_provider:${provider}`,
+      projectIdConfigured: Boolean(projectId),
+      projectId: projectId || null
+    };
+  }
+
+  return {
+    provider,
+    enabled: true,
+    mode: "expo",
+    reason: projectId ? null : "missing_project_id",
+    projectIdConfigured: Boolean(projectId),
+    projectId: projectId || null
+  };
+}
+
 function normalizeTokens(tokens) {
   return [...new Set((tokens || []).map((token) => String(token || "").trim()).filter(Boolean))];
 }

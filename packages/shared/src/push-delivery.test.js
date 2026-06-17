@@ -1,6 +1,40 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sendPushNotifications } from "./push-delivery.js";
+import { describePushDeliveryConfig, sendPushNotifications } from "./push-delivery.js";
+
+test("describes disabled push delivery clearly", () => {
+  const result = describePushDeliveryConfig({
+    enabled: false,
+    provider: "expo",
+    projectId: ""
+  });
+
+  assert.deepEqual(result, {
+    provider: "expo",
+    enabled: false,
+    mode: "disabled",
+    reason: "push_disabled",
+    projectIdConfigured: false,
+    projectId: null
+  });
+});
+
+test("describes configured expo push delivery clearly", () => {
+  const result = describePushDeliveryConfig({
+    enabled: true,
+    provider: "expo",
+    projectId: "project-1"
+  });
+
+  assert.deepEqual(result, {
+    provider: "expo",
+    enabled: true,
+    mode: "expo",
+    reason: null,
+    projectIdConfigured: true,
+    projectId: "project-1"
+  });
+});
 
 test("skips delivery when push is disabled", async () => {
   const result = await sendPushNotifications({

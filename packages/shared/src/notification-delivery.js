@@ -1,5 +1,42 @@
 import { sendPushNotifications } from "./push-delivery.js";
 
+export function describeEmailDeliveryConfig({
+  resendApiKey = "",
+  fromEmail = "",
+  supportEmail = "support@example.com"
+} = {}) {
+  const hasApiKey = Boolean(resendApiKey);
+  const hasFromEmail = Boolean(fromEmail);
+  const enabled = hasApiKey && hasFromEmail;
+
+  return {
+    provider: enabled ? "resend" : "log-only",
+    enabled,
+    mode: enabled ? "resend" : "log-only",
+    reason: enabled
+      ? null
+      : !hasApiKey
+        ? "missing_resend_api_key"
+        : "missing_from_email",
+    fromEmailConfigured: hasFromEmail,
+    supportEmail
+  };
+}
+
+function isExpectedNotificationSkip(delivery) {
+  return ["log-only", "disabled", "no-recipients"].includes(delivery?.mode);
+}
+
+function emailAuditAction(delivery) {
+  if (delivery?.delivered) {
+    return "notification.email.delivered";
+  }
+
+  return isExpectedNotificationSkip(delivery)
+    ? "notification.email.skipped"
+    : "notification.email.failed";
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -283,7 +320,7 @@ export async function createAndDeliverNotification(client, {
     [
       actorUserId,
       notification.id,
-      delivery.delivered ? "notification.email.delivered" : "notification.email.skipped",
+      emailAuditAction(delivery),
       JSON.stringify({
         type,
         recipientEmail: user.email,
@@ -294,13 +331,18 @@ export async function createAndDeliverNotification(client, {
   );
 
   if (!delivery.delivered) {
-    console.log("notification email not sent", {
+    console.log(
+      isExpectedNotificationSkip(delivery)
+        ? "notification email skipped"
+        : "notification email failed",
+      {
       notificationId: notification.id,
       to: user.email,
       type,
       reason: delivery.reason,
       mode: delivery.mode
-    });
+      }
+    );
   }
 
   const pushRegistrations = await listActivePushRegistrations(client, userId);
@@ -339,13 +381,18 @@ export async function createAndDeliverNotification(client, {
   );
 
   if (!pushDelivery.delivered) {
-    console.log("notification push not sent", {
+    console.log(
+      isExpectedNotificationSkip(pushDelivery)
+        ? "notification push skipped"
+        : "notification push failed",
+      {
       notificationId: notification.id,
       to: user.email,
       type,
       reason: pushDelivery.reason,
       mode: pushDelivery.mode
-    });
+      }
+    );
   }
 
   return {
