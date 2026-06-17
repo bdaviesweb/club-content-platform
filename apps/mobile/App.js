@@ -439,6 +439,12 @@ export default function App() {
   const latestStatusSummary = latestSubmission
     ? summarizeSubmissionProgress(latestSubmission)
     : "Your first post will show review and publish status here.";
+  const selectedSubmissionNextStep =
+    activeView === "review" &&
+    roleAccess.canReview &&
+    selectedSubmissionDetail?.latestApprovalRequest?.state === "pending"
+      ? "Choose approve, send back, or reject below."
+      : summarizeSubmissionNextStep(selectedSubmissionDetail);
   const resubmitPrompt = useMemo(() => {
     return fixPromptForReasonCode(
       selectedSubmissionDetail?.latestApprovalRequest?.latestAction?.reasonCode
@@ -534,8 +540,13 @@ export default function App() {
         return;
       }
 
-      if (action === demoLaunchActions.openReview) {
-        await openDemoReviewQueue(demoWorkspace);
+      if (
+        action === demoLaunchActions.openReview ||
+        action === demoLaunchActions.openFirstReview
+      ) {
+        await openDemoReviewQueue(demoWorkspace, {
+          openFirst: action === demoLaunchActions.openFirstReview
+        });
         return;
       }
 
@@ -992,7 +1003,7 @@ export default function App() {
     }
   }
 
-  async function openDemoReviewQueue(workspace = buildDefaultDemoWorkspace()) {
+  async function openDemoReviewQueue(workspace = buildDefaultDemoWorkspace(), options = {}) {
     Keyboard.dismiss();
     applyDemoWorkspace(workspace);
     setRoleMode(reviewerMode);
@@ -1010,6 +1021,26 @@ export default function App() {
       const items = Array.isArray(payload.items) ? payload.items : [];
       setReviewQueue(items);
       setReviewQueueLastRefreshedAt(new Date().toISOString());
+
+      if (options.openFirst && items[0]?.submission_id) {
+        const detailResponse = await fetch(
+          baseUrl + "/submissions/" + items[0].submission_id
+        );
+        if (!detailResponse.ok) {
+          throw new Error("Submission detail failed: " + detailResponse.status);
+        }
+
+        const detail = await detailResponse.json();
+        resetReviewActionState();
+        setSelectedSubmissionDetail(detail);
+        setSelectedSubmissionId(items[0].submission_id);
+        setSubmissionDetailLastRefreshedAt(new Date().toISOString());
+        setResubmissionText(detail.raw_text || "");
+        setResubmissionAsset(null);
+        setStatus("Demo review item opened.");
+        return;
+      }
+
       setStatus(
         items.length
           ? `Demo review queue loaded with ${items.length} item${items.length === 1 ? "" : "s"}.`
@@ -2535,7 +2566,7 @@ export default function App() {
                   <View style={styles.nextStepPanel}>
                     <Text style={styles.nextStepLabel}>Next</Text>
                     <Text style={styles.nextStepText}>
-                      {summarizeSubmissionNextStep(selectedSubmissionDetail)}
+                      {selectedSubmissionNextStep}
                     </Text>
                   </View>
                 </View>
