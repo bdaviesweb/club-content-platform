@@ -39,8 +39,31 @@ const timeoutSeconds = Number(process.env.TIMEOUT_SECONDS || 300);
 const pollSeconds = Number(process.env.POLL_SECONDS || 3);
 const allowNonemptyQueue = process.env.ALLOW_NONEMPTY_QUEUE === "1";
 const deadline = Date.now() + timeoutSeconds * 1000;
+const smokePrefixes = [
+  "admin-review-smoke-",
+  "approval-publish-smoke-",
+  "approval-publish-smoke-mobile-qa-",
+  "hermes-smoke-",
+  "hermes-diagnostic-",
+  "E2E smoke post",
+  "Approval action smoke",
+  "mobile-demo-post-"
+];
 
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+function isSmokeRawText(value) {
+  const rawText = String(value || "");
+  return smokePrefixes.some((prefix) => rawText.startsWith(prefix));
+}
+
+function summarizeQueueItems(items = []) {
+  return items.map((item) => ({
+    id: item.id,
+    submissionId: item.submission_id,
+    rawText: item.raw_text
+  }));
+}
 
 function actionUrl(action) {
   return `${expoUrl}${expoUrl.includes("?") ? "&" : "?"}demoAction=${encodeURIComponent(action)}`;
@@ -174,14 +197,24 @@ async function main() {
   );
 
   const initialQueue = await requestJson("/approvals/queue");
-  if ((initialQueue.items || []).length && !allowNonemptyQueue) {
+  const initialQueueItems = initialQueue.items || [];
+  const staleSmokeItems = initialQueueItems.filter((item) => isSmokeRawText(item.raw_text));
+  if (staleSmokeItems.length) {
     throw new Error(
-      `Review queue has ${initialQueue.items.length} pending item(s). ` +
+      `Pending smoke approvals already exist: ${JSON.stringify(summarizeQueueItems(staleSmokeItems))}. ` +
+        "Clear them before running mobile_demo_review_smoke.sh."
+    );
+  }
+
+  if (initialQueueItems.length && !allowNonemptyQueue) {
+    throw new Error(
+      `Review queue has ${initialQueueItems.length} pending item(s). ` +
         "Run cleanup first or set ALLOW_NONEMPTY_QUEUE=1 if approving the first queue item is intentional."
     );
   }
 
-  console.log(`Initial queue count=${(initialQueue.items || []).length}`);
+  const initialQueueCount = initialQueueItems.length;
+  console.log(`initial_queue_count=${initialQueueCount}`);
   openSimulatorUrl(actionUrl("post"));
 
   const createdSubmission = await waitFor("new demo submission from mobile app", async (attempt) => {
@@ -233,11 +266,19 @@ async function main() {
   });
 
   const finalQueue = await requestJson("/approvals/queue");
-  const stillPending = (finalQueue.items || []).some(
+  const finalQueueItems = finalQueue.items || [];
+  const stillPending = finalQueueItems.some(
     (item) => item.submission_id === createdSubmission.id
   );
   if (stillPending) {
     throw new Error(`Submission ${createdSubmission.id} is still present in the review queue`);
+  }
+
+  if (finalQueueItems.length > initialQueueCount) {
+    throw new Error(
+      `Approval queue grew during smoke: initial=${initialQueueCount} final=${finalQueueItems.length} ` +
+        `remaining=${JSON.stringify(summarizeQueueItems(finalQueueItems))}`
+    );
   }
 
   console.log("Mobile demo review smoke passed.");
@@ -245,7 +286,7 @@ async function main() {
   console.log(`published_post_id=${publishedDetail.publishedPost.id}`);
   console.log(`destination=${publishedDetail.publishedPost.destinationName}`);
   console.log(`published_at=${publishedDetail.publishedPost.publishedAt}`);
-  console.log(`final_queue_count=${(finalQueue.items || []).length}`);
+  console.log(`final_queue_count=${finalQueueItems.length}`);
 }
 
 const resolvedSimulatorDevice = ensureSimulatorDevice();
