@@ -215,6 +215,13 @@ Push status is also surfaced on `GET /notification-delivery/status`, including w
 is enabled, the effective delivery `mode`, and a `reason` when delivery is intentionally
 inactive or misconfigured.
 
+Current `hermes-dev` expectation:
+
+- email: `provider=log-only`, `enabled=false`, `mode=log-only`, `reason=missing_resend_api_key`
+- push: `provider=expo`, `enabled=false`, `mode=disabled`, `reason=push_disabled`
+
+Use `./scripts/notification_status_smoke_vps.sh` to assert that contract directly after VPS updates.
+
 To enable Expo push delivery, set:
 
 - `PUSH_NOTIFICATIONS_ENABLED=true`
@@ -248,6 +255,8 @@ VPS enablement steps:
 9. Run `./scripts/notification_smoke_vps.sh`.
 10. Confirm `GET /notification-delivery/status` reports the expected provider, mode, enabled state, and webhook configuration for that environment.
 11. Check `GET /notifications?userEmail=<your demo inbox>` or the inbox itself to confirm the event progresses from `sent` to `delivered`.
+
+For the current dev VPS, step 10 should match the inactive dev contract above unless you intentionally turn on a real delivery channel.
 
 Incoming webhook events are written to `audit_logs` and surfaced on `GET /notifications` as
 `deliveryStatus`, `deliveryProviderId`, and `deliveryUpdatedAt`.
