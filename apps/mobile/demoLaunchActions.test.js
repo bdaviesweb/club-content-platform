@@ -55,6 +55,20 @@ test("parseDemoLaunchAction reads Expo Go first review URLs", () => {
   );
 });
 
+test("parseDemoLaunchAction reads query-based approve first review URLs", () => {
+  assert.equal(
+    parseDemoLaunchAction("exp://10.0.0.133:8082?demoAction=approveFirstReview"),
+    demoLaunchActions.approveFirstReview
+  );
+});
+
+test("parseDemoLaunchAction reads Expo Go approve first review URLs", () => {
+  assert.equal(
+    parseDemoLaunchAction("exp://10.0.0.133:8082/--/demo/approve-first-review"),
+    demoLaunchActions.approveFirstReview
+  );
+});
+
 test("parseDemoLaunchAction ignores unrelated URLs", () => {
   assert.equal(parseDemoLaunchAction("exp://10.0.0.133:8082/--/status"), null);
 });
