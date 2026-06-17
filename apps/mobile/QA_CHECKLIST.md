@@ -39,6 +39,16 @@ curl -fsS 'https://clubcontent-api.davmn.net/workflow-events?status=failed'
 
 `submission.created` events stuck in `pending` usually mean the API is reachable but the worker is not currently consuming the queue. Restart or inspect the VPS worker before continuing mobile QA.
 
+- Run the simulator-driven demo review smoke when checking the installed Expo app flow:
+
+```sh
+EXPO_URL='exp://10.0.0.133:8082' TIMEOUT_SECONDS=300 ./scripts/mobile_demo_review_smoke.sh
+```
+
+Expected result: the script opens the mobile app, creates a demo post through `demoAction=post`, waits for review, approves it through `demoAction=approveFirstReview`, and confirms the post reaches `published`.
+
+This smoke expects the hosted approval queue to start empty so the app's `approveFirstReview` hook cannot approve an unrelated pending item. If old smoke approvals are present, clean them up before running it.
+
 If you need the deeper VPS/database smoke and SSH is healthy, run:
 
 ```sh
