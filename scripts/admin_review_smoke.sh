@@ -37,8 +37,30 @@ const pollSeconds = Number(process.env.POLL_SECONDS || 3);
 const marker = process.env.SMOKE_MARKER;
 const deadline = Date.now() + timeoutSeconds * 1000;
 let adminProcess = null;
+const smokePrefixes = [
+  "admin-review-smoke-",
+  "approval-publish-smoke-",
+  "approval-publish-smoke-mobile-qa-",
+  "hermes-smoke-",
+  "hermes-diagnostic-",
+  "E2E smoke post",
+  "Approval action smoke"
+];
 
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+function isSmokeRawText(value) {
+  const rawText = String(value || "");
+  return smokePrefixes.some((prefix) => rawText.startsWith(prefix));
+}
+
+function summarizeQueueItems(items = []) {
+  return items.map((item) => ({
+    id: item.id,
+    submissionId: item.submission_id,
+    rawText: item.raw_text
+  }));
+}
 
 function authHeaders() {
   const user = process.env.ADMIN_BASIC_AUTH_USER || "";
@@ -185,6 +207,20 @@ async function main() {
     }
   });
 
+  const initialQueue = await requestJson(apiBaseUrl, "/approvals/queue");
+  const initialQueueItems = initialQueue.items || [];
+  const staleSmokeItems = initialQueueItems.filter((item) => isSmokeRawText(item.raw_text));
+
+  if (staleSmokeItems.length) {
+    throw new Error(
+      `Pending smoke approvals already exist: ${JSON.stringify(summarizeQueueItems(staleSmokeItems))}. ` +
+        "Clear them before running admin_review_smoke.sh."
+    );
+  }
+
+  const initialQueueCount = initialQueueItems.length;
+  console.log(`initial_queue_count=${initialQueueCount}`);
+
   console.log(`Creating admin review smoke submission: ${marker}`);
   const created = await requestJson(apiBaseUrl, "/submissions", {
     method: "POST",
@@ -246,9 +282,17 @@ async function main() {
   });
 
   const finalQueue = await requestJson(apiBaseUrl, "/approvals/queue");
-  const stillPending = (finalQueue.items || []).some((item) => item.submission_id === submissionId);
+  const finalQueueItems = finalQueue.items || [];
+  const stillPending = finalQueueItems.some((item) => item.submission_id === submissionId);
   if (stillPending) {
     throw new Error(`Submission ${submissionId} is still present in the review queue`);
+  }
+
+  if (finalQueueItems.length > initialQueueCount) {
+    throw new Error(
+      `Approval queue grew during smoke: initial=${initialQueueCount} final=${finalQueueItems.length} ` +
+        `remaining=${JSON.stringify(summarizeQueueItems(finalQueueItems))}`
+    );
   }
 
   console.log("Admin review smoke passed.");
@@ -256,7 +300,7 @@ async function main() {
   console.log(`published_post_id=${publishedDetail.publishedPost.id}`);
   console.log(`destination=${publishedDetail.publishedPost.destinationName}`);
   console.log(`published_at=${publishedDetail.publishedPost.publishedAt}`);
-  console.log(`final_queue_count=${(finalQueue.items || []).length}`);
+  console.log(`final_queue_count=${finalQueueItems.length}`);
 
   await stopAdmin();
 }
