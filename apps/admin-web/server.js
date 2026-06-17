@@ -1,5 +1,6 @@
 import http from "node:http";
 import { timingSafeEqual } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { formatRoutingSourceLabel } from "./routingLabels.js";
 import { summarizeReviewHandoff } from "./reviewHandoff.js";
 
@@ -2002,72 +2003,92 @@ function readJson(req) {
   });
 }
 
-const server = http.createServer(async (req, res) => {
-  try {
-    if (!isAuthorized(req)) {
-      requestAuth(res);
-      return;
+export function buildHealthPayload() {
+  return {
+    service: "admin-web",
+    status: "ok"
+  };
+}
+
+export function createAdminServer() {
+  return http.createServer(async (req, res) => {
+    try {
+      const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+
+      if (req.method === "GET" && url.pathname === "/health") {
+        res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify(buildHealthPayload()));
+        return;
+      }
+
+      if (!isAuthorized(req)) {
+        requestAuth(res);
+        return;
+      }
+
+      if (req.method === "GET" && url.pathname === "/") {
+        const html = await renderHome(url.searchParams.get("approvalRequestId"));
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.end(html);
+        return;
+      }
+
+      if (req.method === "GET" && url.pathname === "/quick-review") {
+        const html = await renderQuickReviewHome(url.searchParams.get("approvalRequestId"));
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.end(html);
+        return;
+      }
+
+      if (req.method === "POST" && /^\/ui\/actions\/[^/]+$/.test(url.pathname)) {
+        const approvalRequestId = url.pathname.split("/")[3];
+        const body = await readJson(req);
+        const payload = await fetchJson(`/approval-requests/${approvalRequestId}/actions`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify(payload));
+        return;
+      }
+
+      if (req.method === "GET" && /^\/ui\/submissions\/[^/]+$/.test(url.pathname)) {
+        const submissionId = url.pathname.split("/")[3];
+        const payload = await fetchJson(`/submissions/${submissionId}`);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify(payload));
+        return;
+      }
+
+      if (req.method === "POST" && /^\/ui\/workflow-events\/[^/]+\/retry$/.test(url.pathname)) {
+        const eventId = url.pathname.split("/")[3];
+        const body = await readJson(req);
+        const payload = await fetchJson(`/workflow-events/${eventId}/retry`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify(payload));
+        return;
+      }
+
+      res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+      res.end("Not found");
+    } catch (error) {
+      console.error("admin-web error", error);
+      res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+      res.end(error.message || "Internal Server Error");
     }
+  });
+}
 
-    const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+const isEntrypoint = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 
-    if (req.method === "GET" && url.pathname === "/") {
-      const html = await renderHome(url.searchParams.get("approvalRequestId"));
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(html);
-      return;
-    }
-
-    if (req.method === "GET" && url.pathname === "/quick-review") {
-      const html = await renderQuickReviewHome(url.searchParams.get("approvalRequestId"));
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(html);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/ui\/actions\/[^/]+$/.test(url.pathname)) {
-      const approvalRequestId = url.pathname.split("/")[3];
-      const body = await readJson(req);
-      const payload = await fetchJson(`/approval-requests/${approvalRequestId}/actions`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify(payload));
-      return;
-    }
-
-    if (req.method === "GET" && /^\/ui\/submissions\/[^/]+$/.test(url.pathname)) {
-      const submissionId = url.pathname.split("/")[3];
-      const payload = await fetchJson(`/submissions/${submissionId}`);
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify(payload));
-      return;
-    }
-
-    if (req.method === "POST" && /^\/ui\/workflow-events\/[^/]+\/retry$/.test(url.pathname)) {
-      const eventId = url.pathname.split("/")[3];
-      const body = await readJson(req);
-      const payload = await fetchJson(`/workflow-events/${eventId}/retry`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify(payload));
-      return;
-    }
-
-    res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
-    res.end("Not found");
-  } catch (error) {
-    console.error("admin-web error", error);
-    res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
-    res.end(error.message || "Internal Server Error");
-  }
-});
-
-server.listen(port, () => {
-  console.log(`admin-web listening on ${port}`);
-});
+if (isEntrypoint) {
+  const server = createAdminServer();
+  server.listen(port, () => {
+    console.log(`admin-web listening on ${port}`);
+  });
+}
