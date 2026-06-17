@@ -3,7 +3,7 @@ import { File as ExpoFile } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import {
   ActivityIndicator,
@@ -12,6 +12,7 @@ import {
   ImageBackground,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -32,6 +33,10 @@ const {
 } = require("./feedMedia");
 const { uploadSelectedAsset } = require("./mediaUpload");
 const { buildApiError } = require("./apiErrors");
+const {
+  demoLaunchActions,
+  parseDemoLaunchAction
+} = require("./demoLaunchActions");
 const { buildDemoSubmissionPayload } = require("./demoTools");
 const {
   extractReadinessDefaults,
@@ -381,6 +386,7 @@ export default function App() {
   const [appReadiness, setAppReadiness] = useState(null);
   const [loadingAppReadiness, setLoadingAppReadiness] = useState(false);
   const [appReadinessError, setAppReadinessError] = useState("");
+  const lastHandledDemoActionUrlRef = useRef("");
 
   const roleAccess = useMemo(
     () =>
@@ -438,6 +444,27 @@ export default function App() {
     );
   }, [selectedSubmissionDetail]);
 
+  function buildDefaultDemoWorkspace() {
+    return {
+      apiBaseUrl: defaultConfig.apiBaseUrl,
+      clubSlug: defaultConfig.clubSlug,
+      teamSlug: defaultConfig.teamSlug,
+      submitterEmail: defaultConfig.submitterEmail,
+      reviewerEmail: defaultConfig.reviewerEmail,
+      visibilityTarget: "internal"
+    };
+  }
+
+  function applyDemoWorkspace(workspace = buildDefaultDemoWorkspace()) {
+    setApiBaseUrl(workspace.apiBaseUrl);
+    setClubSlug(workspace.clubSlug);
+    setTeamSlug(workspace.teamSlug);
+    setSubmitterEmail(workspace.submitterEmail);
+    setReviewerEmail(workspace.reviewerEmail);
+    setVisibilityTarget(workspace.visibilityTarget);
+    return workspace;
+  }
+
   useEffect(() => {
     if (!apiBaseUrl.trim()) return;
 
@@ -488,6 +515,49 @@ export default function App() {
       isCurrent = false;
     };
   }, [apiBaseUrl]);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    async function handleDemoActionUrl(url) {
+      if (!isCurrent || !url || lastHandledDemoActionUrlRef.current === url) return;
+
+      const action = parseDemoLaunchAction(url);
+      if (!action) return;
+      lastHandledDemoActionUrlRef.current = url;
+
+      const demoWorkspace = applyDemoWorkspace();
+
+      if (action === demoLaunchActions.loadWorkspace) {
+        setStatus("Demo club loaded from launch action.");
+        return;
+      }
+
+      if (action === demoLaunchActions.createPost) {
+        setActiveView("status");
+        await createDemoPost({
+          apiBaseUrl: demoWorkspace.apiBaseUrl,
+          clubSlug: demoWorkspace.clubSlug,
+          teamSlug: demoWorkspace.teamSlug,
+          submitterEmail: demoWorkspace.submitterEmail,
+          visibilityTarget: demoWorkspace.visibilityTarget
+        });
+      }
+    }
+
+    Linking.getInitialURL()
+      .then(handleDemoActionUrl)
+      .catch(() => {});
+
+    const subscription = Linking.addEventListener("url", (event) => {
+      handleDemoActionUrl(event.url).catch(() => {});
+    });
+
+    return () => {
+      isCurrent = false;
+      subscription.remove();
+    };
+  }, [roleAccess.submitterEmail, visibilityTarget, apiBaseUrl, clubSlug, teamSlug]);
   const resubmitShortcuts = useMemo(() => {
     return resubmitShortcutsForReasonCode(
       selectedSubmissionDetail?.latestApprovalRequest?.latestAction?.reasonCode
@@ -1110,31 +1180,35 @@ export default function App() {
   }
 
   function loadDemoWorkspace() {
-    setApiBaseUrl(defaultConfig.apiBaseUrl);
-    setClubSlug(defaultConfig.clubSlug);
-    setTeamSlug(defaultConfig.teamSlug);
-    setSubmitterEmail(defaultConfig.submitterEmail);
-    setReviewerEmail(defaultConfig.reviewerEmail);
-    setVisibilityTarget("internal");
+    applyDemoWorkspace();
     setStatus("Demo club loaded.");
   }
 
-  async function createDemoPost() {
+  async function createDemoPost(workspaceOverrides = {}) {
     Keyboard.dismiss();
     setCreatingDemoPost(true);
     setStatus("Creating demo post...");
 
     try {
-      const baseUrl = normalizeApiBaseUrl(apiBaseUrl.trim());
+      const submissionWorkspace = {
+        apiBaseUrl: workspaceOverrides.apiBaseUrl ?? apiBaseUrl.trim(),
+        clubSlug: workspaceOverrides.clubSlug ?? clubSlug.trim(),
+        teamSlug: workspaceOverrides.teamSlug ?? teamSlug.trim(),
+        submitterEmail:
+          workspaceOverrides.submitterEmail ?? roleAccess.submitterEmail,
+        visibilityTarget:
+          workspaceOverrides.visibilityTarget ?? visibilityTarget
+      };
+      const baseUrl = normalizeApiBaseUrl(submissionWorkspace.apiBaseUrl);
       const submissionResponse = await fetch(`${baseUrl}/submissions`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(
           buildDemoSubmissionPayload({
-            clubSlug: clubSlug.trim(),
-            teamSlug: teamSlug.trim(),
-            submitterEmail: roleAccess.submitterEmail,
-            visibilityTarget
+            clubSlug: submissionWorkspace.clubSlug,
+            teamSlug: submissionWorkspace.teamSlug,
+            submitterEmail: submissionWorkspace.submitterEmail,
+            visibilityTarget: submissionWorkspace.visibilityTarget
           })
         )
       });
