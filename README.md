@@ -72,6 +72,7 @@ Useful scripts:
 - `./scripts/public_upload_smoke_vps.sh` - verify the public upload signing and preview path through the dev VPS ingress
 - `./scripts/hermes_smoke_vps.sh` - submit a sample post, verify AI review output, and remove the sample from the active review queue
 - `./scripts/notification_status_smoke_vps.sh` - assert the live dev notification delivery contract on the VPS
+- `./scripts/notification_webhook_smoke_vps.sh` - post a sample Resend-style webhook into the dev VPS and assert it is recorded correctly
 - `./scripts/cleanup_smoke_approvals_vps.sh` - list old pending smoke approvals; use `APPLY=1` to move them out of the active queue
 - `RUN_APPROVAL_PUBLISH_SMOKE=1 ./scripts/update_vps.sh` - update the VPS and verify submit, AI review, approval, and internal publishing
 - `DETACH=1 RUN_APPROVAL_PUBLISH_SMOKE=1 ./scripts/update_vps.sh` - run a long VPS update in the background and print the log path
@@ -84,6 +85,7 @@ Recommended routine:
 4. run `./scripts/smoke_vps.sh`
 5. run `./scripts/hermes_smoke_vps.sh` after AI review changes or VPS env updates
 6. run `./scripts/notification_status_smoke_vps.sh` after notification config or delivery-status changes
+7. run `./scripts/notification_webhook_smoke_vps.sh` after webhook handling changes
 6. run `RUN_APPROVAL_PUBLISH_SMOKE=1 ./scripts/update_vps.sh` after approval, publishing, or full workflow changes
 
 `./scripts/update_vps.sh` now autostashes a dirty VPS checkout before it pulls, so a stray edit on the server no longer blocks the update.
@@ -255,6 +257,7 @@ VPS enablement steps:
 9. Run `./scripts/notification_smoke_vps.sh`.
 10. Confirm `GET /notification-delivery/status` reports the expected provider, mode, enabled state, and webhook configuration for that environment.
 11. Check `GET /notifications?userEmail=<your demo inbox>` or the inbox itself to confirm the event progresses from `sent` to `delivered`.
+12. Run `./scripts/notification_webhook_smoke_vps.sh` to confirm the dev webhook endpoint accepts the sample payload and stores a `notification.email.webhook.*` audit row.
 
 For the current dev VPS, step 10 should match the inactive dev contract above unless you intentionally turn on a real delivery channel.
 
