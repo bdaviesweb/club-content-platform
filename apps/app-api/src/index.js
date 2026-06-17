@@ -30,6 +30,7 @@ import { buildInternalFeedSmokeFilter } from "./feedFilters.js";
 import { loadAppReadiness } from "./app-readiness.js";
 import { buildNotificationDeliveryStatus } from "./notification-delivery-status.js";
 import { recordNotificationWebhookEvent } from "./notification-webhook.js";
+import { parseResendWebhook } from "./notification-webhook-verification.js";
 
 const port = Number(process.env.API_PORT || 4000);
 const publicAppName = process.env.PUBLIC_PRODUCT_NAME || "Club Content";
@@ -1275,38 +1276,25 @@ function handleNotificationDeliveryStatus(res) {
 
 async function handleResendWebhook(req, res) {
   const rawBody = await readText(req);
+  const parsed = parseResendWebhook({
+    rawBody,
+    resendWebhookSecret,
+    headers: req.headers,
+    verifySignature(body, headers) {
+      return new Webhook(resendWebhookSecret).verify(body, headers);
+    }
+  });
 
-  if (!rawBody) {
-    sendJson(res, 400, { error: "Webhook body is required" });
+  if (!parsed.ok) {
+    sendJson(res, parsed.status, parsed.payload);
     return;
   }
 
-  let event;
-  let verified = false;
-
-  if (resendWebhookSecret) {
-    const svixHeaders = {
-      "svix-id": req.headers["svix-id"],
-      "svix-timestamp": req.headers["svix-timestamp"],
-      "svix-signature": req.headers["svix-signature"]
-    };
-
-    try {
-      event = new Webhook(resendWebhookSecret).verify(rawBody, svixHeaders);
-      verified = true;
-    } catch (error) {
-      sendJson(res, 400, {
-        error: "Invalid webhook signature",
-        detail: error instanceof Error ? error.message : "signature_verification_failed"
-      });
-      return;
-    }
-  } else {
-    event = JSON.parse(rawBody);
-  }
-
   const result = await withTransaction((client) =>
-    recordNotificationWebhookEvent(client, { event, verified })
+    recordNotificationWebhookEvent(client, {
+      event: parsed.event,
+      verified: parsed.verified
+    })
   );
 
   sendJson(res, 200, {
