@@ -66,7 +66,7 @@ curl -fsS 'https://clubcontent-api.davmn.net/workflow-events?status=failed'
 - Run the simulator-driven demo review smoke when checking the installed Expo app flow:
 
 ```sh
-EXPO_URL='exp://10.0.0.133:8082' TIMEOUT_SECONDS=300 ./scripts/mobile_demo_review_smoke.sh
+EXPO_URL='exp://127.0.0.1:8082' TIMEOUT_SECONDS=300 ./scripts/mobile_demo_review_smoke.sh
 ```
 
 Expected result: the script opens the mobile app, creates a demo post through `demoAction=post`, waits for review, approves it through `demoAction=approveFirstReview`, and confirms the post reaches `published`.

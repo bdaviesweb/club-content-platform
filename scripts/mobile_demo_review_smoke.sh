@@ -2,8 +2,8 @@
 set -euo pipefail
 
 API_BASE_URL="${API_BASE_URL:-https://clubcontent-api.davmn.net}"
-EXPO_URL="${EXPO_URL:-exp://10.0.0.133:8082}"
-METRO_STATUS_URL="${METRO_STATUS_URL:-http://localhost:8082/status}"
+EXPO_URL="${EXPO_URL:-exp://127.0.0.1:8082}"
+METRO_STATUS_URL="${METRO_STATUS_URL:-http://127.0.0.1:8082/status}"
 SIMULATOR_DEVICE="${SIMULATOR_DEVICE:-Club Content iPhone 17 Pro}"
 SIMULATOR_DEVICE_TYPE="${SIMULATOR_DEVICE_TYPE:-com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro}"
 SIMULATOR_RUNTIME="${SIMULATOR_RUNTIME:-com.apple.CoreSimulator.SimRuntime.iOS-26-5}"
