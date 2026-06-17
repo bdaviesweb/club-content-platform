@@ -27,10 +27,15 @@ query_smoke_approvals() {
     JOIN submissions s ON s.id = ar.submission_id
     WHERE ar.state = 'pending'
       AND (
-        s.raw_text LIKE 'hermes-smoke-%'
+        s.raw_text LIKE 'admin-review-smoke-%'
+        OR s.raw_text LIKE 'hermes-smoke-%'
         OR s.raw_text LIKE 'approval-publish-smoke-%'
+        OR s.raw_text LIKE 'approval-publish-smoke-mobile-qa-%'
         OR s.raw_text LIKE 'hermes-diagnostic-%'
         OR s.raw_text LIKE 'E2E smoke review post%'
+        OR s.raw_text LIKE 'E2E smoke post%'
+        OR s.raw_text LIKE 'Approval action smoke%'
+        OR s.raw_text LIKE 'mobile-demo-post-%'
       )
     ORDER BY ar.created_at ASC;
   "

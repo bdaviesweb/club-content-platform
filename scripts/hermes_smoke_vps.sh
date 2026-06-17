@@ -44,6 +44,18 @@ compose() {
   docker compose -f "${COMPOSE_FILE}" "$@" </dev/null
 }
 
+is_smoke_raw_text() {
+  local raw_text="${1:-}"
+  [[ "${raw_text}" == admin-review-smoke-* ]] \
+    || [[ "${raw_text}" == approval-publish-smoke-* ]] \
+    || [[ "${raw_text}" == approval-publish-smoke-mobile-qa-* ]] \
+    || [[ "${raw_text}" == hermes-smoke-* ]] \
+    || [[ "${raw_text}" == hermes-diagnostic-* ]] \
+    || [[ "${raw_text}" == "E2E smoke post"* ]] \
+    || [[ "${raw_text}" == "Approval action smoke"* ]] \
+    || [[ "${raw_text}" == mobile-demo-post-* ]]
+}
+
 echo "Checking API health..."
 curl -fsS http://localhost:4000/health
 echo
@@ -54,6 +66,38 @@ if [[ -z "${hermes_url}" ]]; then
   echo "HERMES_REVIEW_AGENT_URL is not set in the worker container." >&2
   exit 1
 fi
+
+initial_queue_rows="$(compose exec -T postgres psql -U club -d club_content -At -F '|' -c "
+  SELECT
+    COALESCE(ar.id::text, ''),
+    COALESCE(s.id::text, ''),
+    COALESCE(s.raw_text, '')
+  FROM approval_requests ar
+  JOIN submissions s ON s.id = ar.submission_id
+  WHERE ar.state = 'pending'
+  ORDER BY ar.created_at ASC;
+")"
+
+initial_queue_count=0
+stale_smoke_rows=""
+if [[ -n "${initial_queue_rows}" ]]; then
+  while IFS='|' read -r queue_approval_request_id queue_submission_id queue_raw_text; do
+    [[ -z "${queue_approval_request_id}" ]] && continue
+    initial_queue_count=$((initial_queue_count + 1))
+    if is_smoke_raw_text "${queue_raw_text}"; then
+      stale_smoke_rows+="${queue_approval_request_id}|${queue_submission_id}|${queue_raw_text}"$'\n'
+    fi
+  done <<< "${initial_queue_rows}"
+fi
+
+if [[ -n "${stale_smoke_rows}" ]]; then
+  echo "Pending smoke approvals already exist:" >&2
+  printf '%s' "${stale_smoke_rows}" >&2
+  echo "Clear them before running hermes_smoke_vps.sh." >&2
+  exit 1
+fi
+
+echo "initial_queue_count=${initial_queue_count}"
 
 echo "Creating smoke submission: ${SMOKE_MARKER}"
 submission_id=""
@@ -147,6 +191,17 @@ while (( SECONDS < deadline )); do
         echo "cleanup_action=request_changes"
       else
         echo "cleanup_action=skipped"
+      fi
+
+      final_queue_count=$(compose exec -T postgres psql -U club -d club_content -At -F '|' -c "
+        SELECT COUNT(*)
+        FROM approval_requests
+        WHERE state = 'pending';
+      ")
+      echo "final_queue_count=${final_queue_count}"
+      if (( final_queue_count > initial_queue_count )); then
+        echo "Approval queue grew during smoke: initial=${initial_queue_count} final=${final_queue_count}" >&2
+        exit 1
       fi
       exit 0
     fi
