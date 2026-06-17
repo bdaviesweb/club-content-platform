@@ -219,6 +219,27 @@ while (( SECONDS < deadline )); do
   fi
 
   if [[ "${status}" == "published" && "${approval_state}" == "approved" && "${publish_state}" == "succeeded" && -n "${external_post_id}" ]]; then
+    detail_json="$(curl -fsS "http://localhost:4000/submissions/${submission_id}")"
+    DETAIL_JSON="${detail_json}" SUBMISSION_ID="${submission_id}" EXTERNAL_POST_ID="${external_post_id}" node <<'NODE'
+const assert = require("node:assert/strict");
+
+const detail = JSON.parse(process.env.DETAIL_JSON);
+const submissionId = process.env.SUBMISSION_ID;
+const externalPostId = process.env.EXTERNAL_POST_ID;
+
+assert.equal(detail.id, submissionId, "Unexpected submission detail id");
+assert.equal(detail.status, "published", "Submission detail did not reach published");
+assert.equal(detail.publishedPost?.externalPostId, externalPostId, "Published post id mismatch");
+assert.equal(detail.publishedPost?.destinationType, "internal_feed", "Destination type mismatch");
+assert.equal(detail.publishedPost?.destinationName, "Internal Club Feed", "Destination name mismatch");
+assert.ok(detail.publishedPost?.publishedAt, "Published timestamp missing");
+assert.ok(detail.latestReviewRun?.summary, "Latest review summary missing");
+assert.ok(detail.latestApprovalRequest?.id, "Latest approval request missing");
+assert.equal(detail.latestApprovalRequest?.state, "approved", "Approval request state mismatch");
+assert.ok(detail.routing_decision?.reviewMode, "Routing decision review mode missing");
+assert.ok(detail.routing_decision?.routingSource, "Routing decision source missing");
+NODE
+
     echo "Approval publish smoke passed."
     echo "submission_id=${submission_id}"
     echo "approval_request_id=${approval_request_id}"
@@ -227,6 +248,14 @@ while (( SECONDS < deadline )); do
     echo "publish_state=${publish_state}"
     echo "external_post_id=${external_post_id}"
     echo "result_summary=${result_summary}"
+    echo "detail_destination=${detail_json}" | node -e '
+const fs = require("node:fs");
+const line = fs.readFileSync(0, "utf8").trim().replace(/^detail_destination=/, "");
+const detail = JSON.parse(line);
+console.log(`detail_destination=${detail.publishedPost.destinationName}`);
+console.log(`detail_routing_source=${detail.routing_decision.routingSource}`);
+console.log(`detail_review_mode=${detail.routing_decision.reviewMode}`);
+'
     final_queue_count=$(query_one "
       SELECT COUNT(*)
       FROM approval_requests
