@@ -26,7 +26,7 @@ import {
 } from "react-native";
 
 const { registerPushToken } = require("./pushRegistration");
-const { buildMobileRolePolicy, submitterMode } = require("./rolePolicy");
+const { buildMobileRolePolicy, reviewerMode, submitterMode } = require("./rolePolicy");
 const {
   getClubFeedImagePreviewUrls,
   getPrimaryClubFeedImagePreviewMedia
@@ -534,6 +534,11 @@ export default function App() {
         return;
       }
 
+      if (action === demoLaunchActions.openReview) {
+        await openDemoReviewQueue(demoWorkspace);
+        return;
+      }
+
       if (action === demoLaunchActions.createPost) {
         setActiveView("status");
         await createDemoPost({
@@ -982,6 +987,37 @@ export default function App() {
       setReviewQueueError(error.message || "Could not load review queue");
       setStatus(error.message || "Could not load review queue");
       return [];
+    } finally {
+      setLoadingReviewQueue(false);
+    }
+  }
+
+  async function openDemoReviewQueue(workspace = buildDefaultDemoWorkspace()) {
+    Keyboard.dismiss();
+    applyDemoWorkspace(workspace);
+    setRoleMode(reviewerMode);
+    setActiveView("review");
+    setStatus("Loading demo review queue...");
+    setLoadingReviewQueue(true);
+    setReviewQueueError("");
+
+    try {
+      const baseUrl = normalizeApiBaseUrl(workspace.apiBaseUrl);
+      const response = await fetch(baseUrl + "/approvals/queue");
+      if (!response.ok) throw new Error("Review queue failed: " + response.status);
+
+      const payload = await response.json();
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      setReviewQueue(items);
+      setReviewQueueLastRefreshedAt(new Date().toISOString());
+      setStatus(
+        items.length
+          ? `Demo review queue loaded with ${items.length} item${items.length === 1 ? "" : "s"}.`
+          : "Demo review queue loaded. No pending reviews right now."
+      );
+    } catch (error) {
+      setReviewQueueError(error.message || "Could not load review queue");
+      setStatus(error.message || "Could not load review queue");
     } finally {
       setLoadingReviewQueue(false);
     }
