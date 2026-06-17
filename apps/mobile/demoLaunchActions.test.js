@@ -27,6 +27,20 @@ test("parseDemoLaunchAction reads query-based create-demo-post URLs", () => {
   );
 });
 
+test("parseDemoLaunchAction reads query-based review URLs", () => {
+  assert.equal(
+    parseDemoLaunchAction("exp://10.0.0.133:8082?demoAction=review"),
+    demoLaunchActions.openReview
+  );
+});
+
+test("parseDemoLaunchAction reads Expo Go review URLs", () => {
+  assert.equal(
+    parseDemoLaunchAction("exp://10.0.0.133:8082/--/demo/review"),
+    demoLaunchActions.openReview
+  );
+});
+
 test("parseDemoLaunchAction ignores unrelated URLs", () => {
   assert.equal(parseDemoLaunchAction("exp://10.0.0.133:8082/--/status"), null);
 });
