@@ -31,6 +31,7 @@ import { loadAppReadiness } from "./app-readiness.js";
 import { buildNotificationDeliveryStatus } from "./notification-delivery-status.js";
 import { recordNotificationWebhookEvent } from "./notification-webhook.js";
 import { parseResendWebhook } from "./notification-webhook-verification.js";
+import { buildSubmissionDetail } from "./submission-detail.js";
 
 const port = Number(process.env.API_PORT || 4000);
 const publicAppName = process.env.PUBLIC_PRODUCT_NAME || "Club Content";
@@ -580,12 +581,16 @@ async function handleGetSubmission(res, submissionId) {
     )
   ]);
 
-  sendJson(res, 200, {
-    ...result.rows[0],
-    latestReviewRun: latestReviewRun.rows[0] || null,
-    latestApprovalRequest: latestApprovalRequest.rows[0] || null,
-    publishedPost: publishedPost.rows[0] || null
-  });
+  sendJson(
+    res,
+    200,
+    buildSubmissionDetail({
+      submission: result.rows[0],
+      latestReviewRun: latestReviewRun.rows[0],
+      latestApprovalRequest: latestApprovalRequest.rows[0],
+      publishedPost: publishedPost.rows[0]
+    })
+  );
 }
 
 async function handleListSubmissions(res, query) {
