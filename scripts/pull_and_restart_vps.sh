@@ -9,6 +9,7 @@ RUN_ADMIN_REVIEW_SMOKE="${RUN_ADMIN_REVIEW_SMOKE:-0}"
 SMOKE_TIMEOUT_SECONDS="${SMOKE_TIMEOUT_SECONDS:-300}"
 HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-60}"
 HEALTH_POLL_SECONDS="${HEALTH_POLL_SECONDS:-2}"
+ADMIN_HEALTH_URL="${ADMIN_HEALTH_URL:-http://localhost:3002/health}"
 
 cd "${REPO_DIR}"
 
@@ -47,6 +48,16 @@ until curl -fsS http://localhost:4000/approvals/queue; do
     exit 1
   fi
   echo "Waiting for approval queue..."
+  sleep "${HEALTH_POLL_SECONDS}"
+done
+printf '\n---\n'
+deadline=$((SECONDS + HEALTH_TIMEOUT_SECONDS))
+until curl -fsS "${ADMIN_HEALTH_URL}"; do
+  if (( SECONDS >= deadline )); then
+    echo "Admin health check timed out after ${HEALTH_TIMEOUT_SECONDS}s." >&2
+    exit 1
+  fi
+  echo "Waiting for admin health..."
   sleep "${HEALTH_POLL_SECONDS}"
 done
 
