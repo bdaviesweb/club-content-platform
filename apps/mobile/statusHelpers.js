@@ -140,6 +140,23 @@ function summarizeSubmissionProgress(item) {
   return "Captured and waiting to enter review.";
 }
 
+function summarizeSubmissionNextStep(item) {
+  const status = normalizeSubmissionStatus(item?.status);
+  if (status === "published") return "Posted. Open the feed or share it from detail.";
+  if (status === "approved") return "Approved. Publishing should finish shortly.";
+  if (status === "publish_failed") {
+    return "Admin follow-up needed before this can go live.";
+  }
+  if (status === "rejected") return "Review is closed for this submission.";
+  if (status === "changes_requested" || status === "needs_metadata") {
+    return "Update the caption or media, then resubmit it.";
+  }
+  if (status === "needs_human_review") {
+    return "Waiting on the reviewer. No action needed from you.";
+  }
+  return "Queued for review. Check back after the workflow runs.";
+}
+
 function countStatuses(items) {
   return items.reduce(
     (accumulator, item) => {
@@ -198,5 +215,6 @@ module.exports = {
   getStatusTone,
   normalizeSubmissionStatus,
   progressStages,
+  summarizeSubmissionNextStep,
   summarizeSubmissionProgress
 };
