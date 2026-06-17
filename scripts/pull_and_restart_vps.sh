@@ -5,6 +5,7 @@ REPO_DIR="${REPO_DIR:-/srv/repos/projects/club-content-platform}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.vps.yml}"
 BRANCH="${BRANCH:-main}"
 RUN_APPROVAL_PUBLISH_SMOKE="${RUN_APPROVAL_PUBLISH_SMOKE:-0}"
+RUN_ADMIN_REVIEW_SMOKE="${RUN_ADMIN_REVIEW_SMOKE:-0}"
 SMOKE_TIMEOUT_SECONDS="${SMOKE_TIMEOUT_SECONDS:-300}"
 HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-60}"
 HEALTH_POLL_SECONDS="${HEALTH_POLL_SECONDS:-2}"
@@ -55,3 +56,17 @@ if [ "${RUN_APPROVAL_PUBLISH_SMOKE}" = "1" ]; then
   echo "Running approval publish smoke"
   TIMEOUT_SECONDS="${SMOKE_TIMEOUT_SECONDS}" ./scripts/approval_publish_smoke_vps.sh
 fi
+
+if [ "${RUN_ADMIN_REVIEW_SMOKE}" = "1" ]; then
+  echo
+  echo "---"
+  echo "Running admin review smoke"
+  TIMEOUT_SECONDS="${SMOKE_TIMEOUT_SECONDS}" ./scripts/admin_review_smoke.sh
+fi
+
+echo
+echo "---"
+echo "Post-deploy QA options"
+echo "  API publish smoke:     RUN_APPROVAL_PUBLISH_SMOKE=1 ./scripts/update_vps.sh"
+echo "  Admin review smoke:    RUN_ADMIN_REVIEW_SMOKE=1 ./scripts/update_vps.sh"
+echo "  Mobile simulator QA:   RUN_SIMULATOR_SMOKE=1 npm run qa:mobile"
