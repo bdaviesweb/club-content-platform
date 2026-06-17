@@ -36,6 +36,8 @@ If Metro and the iOS simulator are already running, include the app-driven smoke
 RUN_SIMULATOR_SMOKE=1 npm run qa:mobile
 ```
 
+Simulator QA uses the dedicated `Club Content iPhone 17 Pro` simulator by default. Do not run Club Content smokes against `booted`; other apps should use their own named simulators too.
+
 - Run the admin reviewer-console smoke when approval UI behavior changes:
 
 ```sh
@@ -69,7 +71,7 @@ EXPO_URL='exp://10.0.0.133:8082' TIMEOUT_SECONDS=300 ./scripts/mobile_demo_revie
 
 Expected result: the script opens the mobile app, creates a demo post through `demoAction=post`, waits for review, approves it through `demoAction=approveFirstReview`, and confirms the post reaches `published`.
 
-This smoke expects the hosted approval queue to start empty so the app's `approveFirstReview` hook cannot approve an unrelated pending item. If old smoke approvals are present, clean them up before running it.
+This smoke creates or boots the dedicated `Club Content iPhone 17 Pro` simulator unless `SIMULATOR_DEVICE` is explicitly set. It expects the hosted approval queue to start empty so the app's `approveFirstReview` hook cannot approve an unrelated pending item. If old smoke approvals are present, clean them up before running it.
 
 If you need the deeper VPS/database smoke and SSH is healthy, run:
 
