@@ -1117,7 +1117,12 @@ async function handleWorkflowEvents(res, searchParams, { pool = getPool() } = {}
   sendJson(res, 200, { items });
 }
 
-async function handleRetryWorkflowEvent(req, res, eventId) {
+async function handleRetryWorkflowEvent(
+  req,
+  res,
+  eventId,
+  { runInTransaction = withTransaction } = {}
+) {
   const body = await readJson(req);
   const { actorEmail, notes } = body;
 
@@ -1126,7 +1131,7 @@ async function handleRetryWorkflowEvent(req, res, eventId) {
     return;
   }
 
-  const result = await withTransaction(async (client) => {
+  const result = await runInTransaction(async (client) => {
     const actor = await client.query(
       `SELECT id FROM users WHERE email = $1`,
       [actorEmail]
@@ -1190,7 +1195,7 @@ async function handleRetryWorkflowEvent(req, res, eventId) {
   sendJson(res, 200, result);
 }
 
-export function createAppServer({ pool } = {}) {
+export function createAppServer({ pool, runInTransaction } = {}) {
   return http.createServer(async (req, res) => {
   try {
     const url = parseUrl(req);
@@ -1329,7 +1334,9 @@ export function createAppServer({ pool } = {}) {
       req.method === "POST" &&
       /^\/workflow-events\/[^/]+\/retry$/.test(url.pathname)
     ) {
-      await handleRetryWorkflowEvent(req, res, url.pathname.split("/")[2]);
+      await handleRetryWorkflowEvent(req, res, url.pathname.split("/")[2], {
+        runInTransaction: runInTransaction || withTransaction
+      });
       return;
     }
 
@@ -1346,9 +1353,9 @@ export function createAppServer({ pool } = {}) {
   });
 }
 
-export async function startAppServer({ listenPort = port, pool } = {}) {
+export async function startAppServer({ listenPort = port, pool, runInTransaction } = {}) {
   await ensureSeedData();
-  const server = createAppServer({ pool });
+  const server = createAppServer({ pool, runInTransaction });
   await new Promise((resolve) => {
     server.listen(listenPort, resolve);
   });

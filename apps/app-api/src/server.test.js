@@ -209,3 +209,91 @@ test("GET /approval-requests/:id returns not found when missing", async () => {
     await once(server, "close");
   }
 });
+
+test("POST /workflow-events/:id/retry validates actorEmail", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/workflow-events/event-1/retry`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ notes: "try again" })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(body, { error: "actorEmail is required" });
+  });
+});
+
+test("POST /workflow-events/:id/retry resets the event and records the retry", async () => {
+  const calls = [];
+  const runInTransaction = async (fn) =>
+    fn({
+      async query(query, params) {
+        calls.push({ query, params });
+
+        if (query.includes("SELECT id FROM users")) {
+          return { rowCount: 1, rows: [{ id: "user-1" }] };
+        }
+
+        if (query.includes("FROM submission_events") && query.includes("FOR UPDATE")) {
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                event_name: "submission_publish_failed",
+                submission_id: "submission-1",
+                processing_error: "publish adapter failed"
+              }
+            ]
+          };
+        }
+
+        if (query.includes("UPDATE submission_events")) {
+          return { rowCount: 1, rows: [] };
+        }
+
+        if (query.includes("INSERT INTO audit_logs")) {
+          return { rowCount: 1, rows: [] };
+        }
+
+        throw new Error(`Unexpected query: ${query}`);
+      }
+    });
+
+  const server = createAppServer({ runInTransaction });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/workflow-events/event-1/retry`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        actorEmail: "coach@example.test",
+        notes: "Retry after config fix"
+      })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      eventId: "event-1",
+      eventName: "submission_publish_failed",
+      submissionId: "submission-1",
+      reset: true
+    });
+    assert.equal(calls.length, 4);
+    assert.match(calls[0].query, /SELECT id FROM users/);
+    assert.match(calls[1].query, /FROM submission_events/);
+    assert.match(calls[2].query, /UPDATE submission_events/);
+    assert.match(calls[3].query, /INSERT INTO audit_logs/);
+    assert.deepEqual(calls[0].params, ["coach@example.test"]);
+    assert.deepEqual(calls[2].params, ["event-1"]);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
