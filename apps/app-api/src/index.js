@@ -31,6 +31,7 @@ import { loadAppReadiness } from "./app-readiness.js";
 import { buildNotificationDeliveryStatus } from "./notification-delivery-status.js";
 import { recordNotificationWebhookEvent } from "./notification-webhook.js";
 import { parseResendWebhook } from "./notification-webhook-verification.js";
+import { loadSubmissionBase } from "./submission-base.js";
 import { buildSubmissionDetail } from "./submission-detail.js";
 import { loadSubmissionWorkflowDetail } from "./submission-workflow-detail.js";
 
@@ -475,35 +476,16 @@ async function handleMediaPreview(res, searchParams) {
 
 async function handleGetSubmission(res, submissionId) {
   const pool = getPool();
-  const result = await pool.query(
-    `
-    SELECT
-      s.*,
-      COALESCE(
-        json_agg(
-          DISTINCT jsonb_build_object(
-            'id', sm.id,
-            'objectKey', sm.object_key,
-            'mediaType', sm.media_type,
-            'mimeType', sm.mime_type
-          )
-        ) FILTER (WHERE sm.id IS NOT NULL),
-        '[]'::json
-      ) AS media
-    FROM submissions s
-    LEFT JOIN submission_media sm ON sm.submission_id = s.id
-    WHERE s.id = $1
-    GROUP BY s.id
-    `,
-    [submissionId]
-  );
+  const submission = await loadSubmissionBase({
+    pool,
+    submissionId,
+    enrichMediaCollection
+  });
 
-  if (!result.rowCount) {
+  if (!submission) {
     sendNotFound(res);
     return;
   }
-
-  result.rows[0].media = enrichMediaCollection(result.rows[0].media);
 
   const workflowDetail = await loadSubmissionWorkflowDetail({ pool, submissionId });
 
@@ -511,7 +493,7 @@ async function handleGetSubmission(res, submissionId) {
     res,
     200,
     buildSubmissionDetail({
-      submission: result.rows[0],
+      submission,
       ...workflowDetail
     })
   );
