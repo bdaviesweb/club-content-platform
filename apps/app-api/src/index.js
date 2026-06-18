@@ -34,6 +34,7 @@ import { buildNotificationDeliveryStatus } from "./notification-delivery-status.
 import { recordNotificationWebhookEvent } from "./notification-webhook.js";
 import { parseResendWebhook } from "./notification-webhook-verification.js";
 import { loadSubmissionRecord } from "./submission-record.js";
+import { loadWorkflowEvents } from "./workflow-events.js";
 
 const port = Number(process.env.API_PORT || 4000);
 const publicAppName = process.env.PUBLIC_PRODUCT_NAME || "Club Content";
@@ -1107,35 +1108,8 @@ async function handleMarkNotificationRead(req, res, notificationId) {
 
 async function handleWorkflowEvents(res, searchParams) {
   const status = searchParams.get("status") || "failed";
-  const where =
-    status === "failed"
-      ? "WHERE processed_at IS NOT NULL AND processing_error IS NOT NULL"
-      : status === "pending"
-        ? "WHERE processed_at IS NULL"
-        : "";
-
-  const result = await getPool().query(
-    `
-    SELECT
-      se.id,
-      se.submission_id,
-      se.event_name,
-      se.payload,
-      se.processed_at,
-      se.processing_error,
-      se.created_at,
-      s.status AS submission_status,
-      s.raw_text,
-      s.caption_draft
-    FROM submission_events se
-    LEFT JOIN submissions s ON s.id = se.submission_id
-    ${where}
-    ORDER BY se.created_at DESC
-    LIMIT 100
-    `
-  );
-
-  sendJson(res, 200, { items: result.rows });
+  const items = await loadWorkflowEvents({ pool: getPool(), status });
+  sendJson(res, 200, { items });
 }
 
 async function handleRetryWorkflowEvent(req, res, eventId) {
