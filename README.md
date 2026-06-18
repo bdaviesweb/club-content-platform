@@ -263,8 +263,8 @@ VPS enablement steps:
 8. Run `./scripts/notification_status_smoke_vps.sh` to confirm the live delivery status contract before deeper notification checks.
 9. Run `./scripts/notification_smoke_vps.sh` after a real demo submission creates at least one notification for the target inbox.
 10. Confirm `GET /notification-delivery/status` reports the expected provider, mode, enabled state, and webhook configuration for that environment.
-11. Check `GET /notifications?userEmail=<your demo inbox>` or the inbox itself to confirm the event progresses from `sent` to `delivered`.
-12. Run `./scripts/notification_webhook_smoke_vps.sh` to confirm the dev webhook endpoint accepts the sample payload and stores a `notification.email.webhook.*` audit row.
+11. Run `./scripts/notification_webhook_smoke_vps.sh` to confirm webhook intake and delivery-state propagation:
+    in inactive dev mode it records an unmatched `notification.email.webhook.*` audit row, and in live Resend mode it matches the latest delivered notification and asserts `GET /notifications` surfaces the new delivery status.
 
 For the current dev VPS, step 10 should match the inactive dev contract above unless you intentionally turn on a real delivery channel.
 
