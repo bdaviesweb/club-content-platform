@@ -1220,6 +1220,112 @@ test("POST /approval-requests/:id/actions approves and enqueues the approved eve
   }
 });
 
+test("POST /approval-requests/:id/actions applies club notification policy to submitter updates", async () => {
+  const approvalActorCalls = [];
+  const notificationCalls = [];
+  const approvalActionRunInTransaction = async (fn) =>
+    fn({
+      async query(query, params) {
+        if (String(query).includes("WHERE c.id = $1")) {
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                clubId: "club-1",
+                clubSlug: "westside",
+                clubName: "Westside",
+                organizationId: "org-1",
+                organizationSlug: "metro",
+                organizationName: "Metro",
+                orgDefaultApproverRole: "team_manager",
+                orgPublicApproverRole: "club_comms",
+                orgMediumRiskApproverRole: "club_admin",
+                orgAllowAgentRouting: true,
+                orgAutoApproveInternalLowRisk: false,
+                orgAutoApproveMaxRisk: "0.35",
+                orgPublishingRule: {},
+                orgNotificationRule: { email: true, push: true },
+                clubDefaultApproverRole: null,
+                clubPublicApproverRole: null,
+                clubMediumRiskApproverRole: null,
+                clubAllowAgentRouting: null,
+                clubAutoApproveInternalLowRisk: null,
+                clubAutoApproveMaxRisk: null,
+                clubPublishingRule: {},
+                clubNotificationRule: { email: false, push: false }
+              }
+            ]
+          };
+        }
+
+        return { rowCount: 1, rows: [] };
+      }
+    });
+
+  const loadApprovalActor = async (_client, approvalRequestId, actedByEmail) => {
+    approvalActorCalls.push({ approvalRequestId, actedByEmail });
+    return {
+      found: true,
+      authorized: true,
+      actor: { id: "user-1" },
+      approvalRequest: {
+        submission_id: "submission-1",
+        submitted_by_user_id: "submitter-1",
+        club_id: "club-1"
+      }
+    };
+  };
+
+  const deliverNotification = async (_client, payload) => {
+    notificationCalls.push(payload);
+  };
+
+  const server = createAppServer({
+    approvalActionRunInTransaction,
+    loadApprovalActor,
+    deliverNotification
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/approval-requests/approval-1/actions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "request_changes",
+        actedByEmail: "reviewer@example.test",
+        notes: "Please remove player names."
+      })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      approvalRequestId: "approval-1",
+      submissionId: "submission-1",
+      action: "request_changes"
+    });
+    assert.deepEqual(approvalActorCalls, [
+      {
+        approvalRequestId: "approval-1",
+        actedByEmail: "reviewer@example.test"
+      }
+    ]);
+    assert.equal(notificationCalls.length, 1);
+    assert.deepEqual(notificationCalls[0].notificationPolicy, {
+      email: false,
+      push: false
+    });
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
 test("GET /notifications validates userEmail", async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/notifications`);

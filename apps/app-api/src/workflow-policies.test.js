@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  loadEffectiveNotificationRuleForClubId,
   loadOrganizationDirectory,
   loadWorkflowPolicyScope,
   updateWorkflowPolicyScope,
@@ -284,4 +285,48 @@ test("loads organization directory with clubs and organization admins", async ()
   assert.equal(result.admins[0].role, "organization_admin");
   assert.match(calls[1].sql, /FROM clubs/);
   assert.match(calls[2].sql, /FROM organization_memberships/);
+});
+
+test("loads effective notification rule for a club id with club override precedence", async () => {
+  const result = await loadEffectiveNotificationRuleForClubId(
+    {
+      async query(sql) {
+        if (String(sql).includes("WHERE c.id = $1")) {
+          return {
+            rows: [
+              {
+                clubId: "club-1",
+                clubSlug: "westside",
+                clubName: "Westside",
+                organizationId: "org-1",
+                organizationSlug: "metro",
+                organizationName: "Metro",
+                orgDefaultApproverRole: "team_manager",
+                orgPublicApproverRole: "club_comms",
+                orgMediumRiskApproverRole: "club_admin",
+                orgAllowAgentRouting: true,
+                orgAutoApproveInternalLowRisk: false,
+                orgAutoApproveMaxRisk: "0.35",
+                orgPublishingRule: { destinations: ["internal_feed"] },
+                orgNotificationRule: { email: true, push: true },
+                clubDefaultApproverRole: null,
+                clubPublicApproverRole: null,
+                clubMediumRiskApproverRole: null,
+                clubAllowAgentRouting: null,
+                clubAutoApproveInternalLowRisk: null,
+                clubAutoApproveMaxRisk: null,
+                clubPublishingRule: {},
+                clubNotificationRule: { email: false, push: false }
+              }
+            ]
+          };
+        }
+
+        throw new Error(`Unexpected query: ${sql}`);
+      }
+    },
+    "club-1"
+  );
+
+  assert.deepEqual(result, { email: false, push: false });
 });

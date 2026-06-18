@@ -37,6 +37,7 @@ import { parseResendWebhook } from "./notification-webhook-verification.js";
 import { loadSubmissionRecord } from "./submission-record.js";
 import { loadWorkflowEvents } from "./workflow-events.js";
 import {
+  loadEffectiveNotificationRuleForClubId,
   loadOrganizationDirectory,
   loadWorkflowPolicyScope,
   updateWorkflowPolicyScope,
@@ -830,7 +831,8 @@ async function handleApprovalAction(
   {
     runInTransaction = withTransaction,
     loadApprovalActor = loadAuthorizedApprovalActor,
-    deliverNotification = createAndDeliverNotification
+    deliverNotification = createAndDeliverNotification,
+    loadNotificationRuleForClubId = loadEffectiveNotificationRuleForClubId
   } = {}
 ) {
   const body = await readJson(req);
@@ -867,6 +869,10 @@ async function handleApprovalAction(
     }
 
     const { actor, approvalRequest } = authorization;
+    const notificationPolicy = await loadNotificationRuleForClubId(
+      client,
+      approvalRequest.club_id
+    );
 
     const stateMap = {
       approve: "approved",
@@ -952,7 +958,8 @@ async function handleApprovalAction(
           notes: notes || null,
           reasonCode: reasonCode || null
         },
-        actorUserId: actor.id
+        actorUserId: actor.id,
+        notificationPolicy
       });
     }
 
@@ -1356,6 +1363,7 @@ export function createAppServer({
   approvalActionRunInTransaction,
   loadApprovalActor,
   deliverNotification,
+  loadNotificationRuleForClubId,
   registerPushTokenFn,
   buildNotificationDeliveryStatusFn,
   parseWebhook,
@@ -1587,7 +1595,9 @@ export function createAppServer({
       await handleApprovalAction(req, res, url.pathname.split("/")[2], {
         runInTransaction: approvalActionRunInTransaction || withTransaction,
         loadApprovalActor: loadApprovalActor || loadAuthorizedApprovalActor,
-        deliverNotification: deliverNotification || createAndDeliverNotification
+        deliverNotification: deliverNotification || createAndDeliverNotification,
+        loadNotificationRuleForClubId:
+          loadNotificationRuleForClubId || loadEffectiveNotificationRuleForClubId
       });
       return;
     }

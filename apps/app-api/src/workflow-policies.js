@@ -388,6 +388,47 @@ async function queryClubPolicyRow(client, clubSlug) {
   return result.rows[0] || null;
 }
 
+async function queryClubPolicyRowById(client, clubId) {
+  const result = await client.query(
+    `
+    SELECT
+      c.id AS "clubId",
+      c.slug AS "clubSlug",
+      c.name AS "clubName",
+      o.id AS "organizationId",
+      o.slug AS "organizationSlug",
+      o.name AS "organizationName",
+      op.default_approver_role AS "orgDefaultApproverRole",
+      op.public_approver_role AS "orgPublicApproverRole",
+      op.medium_risk_approver_role AS "orgMediumRiskApproverRole",
+      op.allow_agent_routing AS "orgAllowAgentRouting",
+      op.auto_approve_internal_low_risk AS "orgAutoApproveInternalLowRisk",
+      op.auto_approve_max_risk AS "orgAutoApproveMaxRisk",
+      op.publishing_rule AS "orgPublishingRule",
+      op.notification_rule AS "orgNotificationRule",
+      cp.default_approver_role AS "clubDefaultApproverRole",
+      cp.public_approver_role AS "clubPublicApproverRole",
+      cp.medium_risk_approver_role AS "clubMediumRiskApproverRole",
+      cp.allow_agent_routing AS "clubAllowAgentRouting",
+      cp.auto_approve_internal_low_risk AS "clubAutoApproveInternalLowRisk",
+      cp.auto_approve_max_risk AS "clubAutoApproveMaxRisk",
+      cp.publishing_rule AS "clubPublishingRule",
+      cp.notification_rule AS "clubNotificationRule"
+    FROM clubs c
+    LEFT JOIN organizations o ON o.id = c.organization_id
+    LEFT JOIN organization_workflow_policies op
+      ON op.organization_id = c.organization_id
+    LEFT JOIN club_workflow_policies cp
+      ON cp.club_id = c.id
+    WHERE c.id = $1
+    LIMIT 1
+    `,
+    [clubId]
+  );
+
+  return result.rows[0] || null;
+}
+
 async function queryOrganizationPolicyRow(client, organizationSlug) {
   const result = await client.query(
     `
@@ -429,6 +470,21 @@ export async function loadWorkflowPolicyScope(pool, { scopeType, scopeSlug }) {
   return buildOrganizationPolicyResponse(
     await queryOrganizationPolicyRow(pool, normalizedSlug)
   );
+}
+
+export async function loadEffectiveNotificationRuleForClubId(pool, clubId) {
+  const normalizedClubId = String(clubId || "").trim();
+
+  if (!normalizedClubId) {
+    return {};
+  }
+
+  const row = await queryClubPolicyRowById(pool, normalizedClubId);
+  if (!row) {
+    return defaultWorkflowPolicy.notificationRule;
+  }
+
+  return buildClubPolicyResponse(row).effectivePolicy.notificationRule || {};
 }
 
 export async function loadOrganizationDirectory(pool, organizationSlug) {

@@ -302,7 +302,8 @@ export async function processSubmissionCreated(client, eventRow) {
       status: "needs_human_review",
       approverRole: approver.role,
       summary: reviewArtifacts.summary
-    }
+    },
+    notificationPolicy: workflowPolicy.notificationRule || {}
   });
 }
 
@@ -464,6 +465,7 @@ export async function processSubmissionApproved(
     payload: buildPublishedNotificationPayload({
       submissionId: submission.id,
       result: { results: publishResults }
-    })
+    }),
+    notificationPolicy: workflowPolicy.notificationRule || {}
   });
 }

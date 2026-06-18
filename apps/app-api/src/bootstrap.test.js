@@ -30,5 +30,6 @@ test("ensureWorkflowPolicyTables upgrades existing workflow policy tables in pla
   assert.match(clubUpgrade, /ADD COLUMN IF NOT EXISTS default_approver_role/);
   assert.match(clubUpgrade, /ADD COLUMN IF NOT EXISTS auto_approve_internal_low_risk/);
   assert.match(clubUpgrade, /ADD COLUMN IF NOT EXISTS publishing_rule/);
+  assert.match(clubUpgrade, /ADD COLUMN IF NOT EXISTS notification_rule/);
   assert.match(orgMembershipTable, /organization_membership_role/);
 });

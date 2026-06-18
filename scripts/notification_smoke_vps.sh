@@ -6,6 +6,8 @@ REMOTE_DIR="${REMOTE_DIR:-/srv/repos/projects/club-content-platform}"
 SUBMITTER_EMAIL="${SUBMITTER_EMAIL:-coach@demo-club.local}"
 NOTIFICATION_LIMIT="${NOTIFICATION_LIMIT:-5}"
 EXPECTED_SUBMISSION_ID="${EXPECTED_SUBMISSION_ID:-}"
+EXPECTED_EMAIL_REASON="${EXPECTED_EMAIL_REASON:-}"
+EXPECTED_PUSH_REASON="${EXPECTED_PUSH_REASON:-}"
 
 status_json="$(
   ssh "${REMOTE_HOST}" \
@@ -60,6 +62,8 @@ node_output="$(
   AUDIT_ROWS="${audit_rows}" \
   SUBMITTER_EMAIL="${SUBMITTER_EMAIL}" \
   EXPECTED_SUBMISSION_ID="${EXPECTED_SUBMISSION_ID}" \
+  EXPECTED_EMAIL_REASON="${EXPECTED_EMAIL_REASON}" \
+  EXPECTED_PUSH_REASON="${EXPECTED_PUSH_REASON}" \
   node <<'NODE'
 const assert = require("node:assert/strict");
 
@@ -68,6 +72,8 @@ const notifications = JSON.parse(process.env.NOTIFICATIONS_JSON);
 const rawAuditRows = process.env.AUDIT_ROWS || "";
 const submitterEmail = process.env.SUBMITTER_EMAIL;
 const expectedSubmissionId = process.env.EXPECTED_SUBMISSION_ID || "";
+const expectedEmailReason = process.env.EXPECTED_EMAIL_REASON || "";
+const expectedPushReason = process.env.EXPECTED_PUSH_REASON || "";
 
 assert.ok(status.email, "notification delivery status must include email state");
 assert.ok(status.push, "notification delivery status must include push state");
@@ -167,6 +173,32 @@ if (expectedSubmissionId) {
     expectedTypes.has("submission_published"),
     `expected a submission_published notification for submission ${expectedSubmissionId}`
   );
+
+  const latestExpectedAudit = auditRows.find(
+    (row) =>
+      row.notificationId === expectedSubmissionNotifications[0]?.id ||
+      row.notificationId === expectedSubmissionNotifications[expectedSubmissionNotifications.length - 1]?.id
+  );
+  assert.ok(
+    latestExpectedAudit,
+    `expected a matching audit row for submission ${expectedSubmissionId}`
+  );
+
+  if (expectedEmailReason) {
+    assert.equal(
+      latestExpectedAudit.emailReason,
+      expectedEmailReason,
+      `expected email reason ${expectedEmailReason} for submission ${expectedSubmissionId}`
+    );
+  }
+
+  if (expectedPushReason) {
+    assert.equal(
+      latestExpectedAudit.pushReason,
+      expectedPushReason,
+      `expected push reason ${expectedPushReason} for submission ${expectedSubmissionId}`
+    );
+  }
 }
 
 console.log("Notification smoke passed.");

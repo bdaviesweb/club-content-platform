@@ -84,7 +84,7 @@ if [[ "${RUN_NOTIFICATION_DEEP_SMOKE}" == "1" ]]; then
   echo
   echo "---"
   echo "Running notification readback smoke"
-  run_checked_step "Notification readback smoke" env REMOTE_HOST="${REMOTE_HOST}" EXPECTED_SUBMISSION_ID="${submission_id}" ./scripts/notification_smoke_vps.sh
+  run_checked_step "Notification readback smoke" env REMOTE_HOST="${REMOTE_HOST}" EXPECTED_SUBMISSION_ID="${submission_id}" EXPECTED_EMAIL_REASON="notification_policy_email_disabled" EXPECTED_PUSH_REASON="notification_policy_push_disabled" ./scripts/notification_smoke_vps.sh
 fi
 
 if [[ "${RUN_NOTIFICATION_WEBHOOK_SMOKE}" == "1" ]]; then

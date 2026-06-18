@@ -414,10 +414,13 @@ export async function ensureSeedData() {
         medium_risk_approver_role,
         allow_agent_routing,
         auto_approve_internal_low_risk,
-        auto_approve_max_risk
+        auto_approve_max_risk,
+        notification_rule
       )
-      VALUES ($1, 'team_manager', 'club_comms', 'club_comms', TRUE, FALSE, 0.35)
-      ON CONFLICT (organization_id) DO NOTHING
+      VALUES ($1, 'team_manager', 'club_comms', 'club_comms', TRUE, FALSE, 0.35, '{"email":true,"push":true}'::jsonb)
+      ON CONFLICT (organization_id) DO UPDATE
+      SET notification_rule = EXCLUDED.notification_rule
+      WHERE organization_workflow_policies.notification_rule = '{}'::jsonb
       `,
       [organizationId]
     );
@@ -431,10 +434,13 @@ export async function ensureSeedData() {
         medium_risk_approver_role,
         allow_agent_routing,
         auto_approve_internal_low_risk,
-        auto_approve_max_risk
+        auto_approve_max_risk,
+        notification_rule
       )
-      VALUES ($1, 'team_manager', 'club_comms', 'club_comms', TRUE, FALSE, 0.35)
-      ON CONFLICT (club_id) DO NOTHING
+      VALUES ($1, 'team_manager', 'club_comms', 'club_comms', TRUE, FALSE, 0.35, '{"email":false,"push":false}'::jsonb)
+      ON CONFLICT (club_id) DO UPDATE
+      SET notification_rule = EXCLUDED.notification_rule
+      WHERE club_workflow_policies.notification_rule = '{}'::jsonb
       `,
       [clubId]
     );
