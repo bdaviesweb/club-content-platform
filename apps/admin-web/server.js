@@ -2099,6 +2099,42 @@ function renderPolicyRulePreview(label, value) {
   </details>`;
 }
 
+function renderContentTypeRoleFields({
+  baseName,
+  label,
+  helper,
+  roleOptions,
+  allowInheritance,
+  values = {}
+}) {
+  const contentTypes = [
+    { key: "photo", label: "Photo" },
+    { key: "video", label: "Video" },
+    { key: "text", label: "Text" },
+    { key: "mixed", label: "Mixed" }
+  ];
+
+  const inputs = contentTypes
+    .map(
+      (contentType) => `<label class="form-field">
+        <span>${escapeHtml(contentType.label)}</span>
+        <select name="${escapeHtml(baseName + contentType.key[0].toUpperCase() + contentType.key.slice(1))}">${renderPolicySelectOptions(roleOptions, values?.[contentType.key] ?? null, {
+          allowEmpty: true,
+          emptyLabel: allowInheritance ? "Inherit organization rule" : "Leave unset"
+        })}</select>
+      </label>`
+    )
+    .join("");
+
+  return `<div class="form-field">
+    <span>${escapeHtml(label)}</span>
+    ${helper ? `<small class="subtle">${escapeHtml(helper)}</small>` : ""}
+    <div class="workflow-settings-grid">
+      ${inputs}
+    </div>
+  </div>`;
+}
+
 function renderWorkflowPolicyForm({
   scopeType,
   scopeSlug,
@@ -2132,8 +2168,15 @@ function renderWorkflowPolicyForm({
     policy?.autoApproveMaxRisk === null || policy?.autoApproveMaxRisk === undefined
       ? ""
       : String(policy.autoApproveMaxRisk);
-  const autoApprovalRule = formatPolicyJson(policy?.autoApprovalRule || {});
-  const routingRule = formatPolicyJson(policy?.routingRule || {});
+  const autoApprovalRule = policy?.autoApprovalRule || {};
+  const routingRule = policy?.routingRule || {};
+  const autoApprovalAllowedContentTypes = formatPolicyList(
+    autoApprovalRule?.allowedContentTypes
+  );
+  const autoApprovalBlockedContentTypes = formatPolicyList(
+    autoApprovalRule?.blockedContentTypes
+  );
+  const routingContentTypeApprovers = routingRule?.contentTypeApprovers || {};
   const approvalRule = policy?.approvalRule || {};
   const publishingRule = policy?.publishingRule || {};
   const notificationRule = policy?.notificationRule || {};
@@ -2252,17 +2295,27 @@ function renderWorkflowPolicyForm({
         input: `<input name="autoApproveMaxRisk" type="number" min="0" max="1" step="0.01" value="${escapeHtml(autoApproveMaxRisk)}" placeholder="${allowInheritance ? "Inherit organization threshold" : "0.35"}" />`
       })}
       ${renderPolicyField({
-        label: "Auto-approval rule JSON",
-        name: "autoApprovalRule",
-        helper: allowInheritance ? "Use an empty object to set a club-specific auto-approval rule, or clear the field to inherit." : "Stored for content-type-specific auto-approval controls.",
-        input: `<textarea name="autoApprovalRule" rows="8" spellcheck="false">${escapeHtml(autoApprovalRule)}</textarea>`
+        label: "Auto-approve only these content types",
+        name: "autoApprovalAllowedContentTypes",
+        helper: "Comma-separated content types. Leave blank to allow any content type that passes the risk threshold.",
+        input: `<input name="autoApprovalAllowedContentTypes" type="text" value="${escapeHtml(autoApprovalAllowedContentTypes)}" placeholder="photo, text" />`
       })}
       ${renderPolicyField({
-        label: "Routing rule JSON",
-        name: "routingRule",
-        helper: allowInheritance ? "Use an empty object to set a club-specific routing rule, or clear the field to inherit." : "Stored for content-type routing and future organization-specific assignment logic.",
-        input: `<textarea name="routingRule" rows="8" spellcheck="false">${escapeHtml(routingRule)}</textarea>`
+        label: "Never auto-approve these content types",
+        name: "autoApprovalBlockedContentTypes",
+        helper: "Comma-separated content types that must always stay in human review.",
+        input: `<input name="autoApprovalBlockedContentTypes" type="text" value="${escapeHtml(autoApprovalBlockedContentTypes)}" placeholder="video, mixed" />`
       })}
+      ${renderPolicyRulePreview("Auto-approval rule", autoApprovalRule)}
+      ${renderContentTypeRoleFields({
+        baseName: "routingRuleApprover",
+        label: "Content-type routing overrides",
+        helper: allowInheritance ? "Set club-specific overrides by content type, or leave fields blank to inherit the organization routing rule." : "Override the normal visibility and risk-based approver for a specific content type.",
+        roleOptions,
+        allowInheritance,
+        values: routingContentTypeApprovers
+      })}
+      ${renderPolicyRulePreview("Routing rule", routingRule)}
       ${renderPolicyField({
         label: "Second approval for public posts",
         name: "approvalRuleRequireSecondApproval",
@@ -2601,6 +2654,41 @@ async function renderWorkflowSettingsPage(clubSlug) {
         return finalizeRuleObject(rule, allowBlankAsNull);
       }
 
+      function buildAutoApprovalRulePayload(formData, allowBlankAsNull) {
+        const rule = {};
+        const allowed = parseCommaList(String(formData.get('autoApprovalAllowedContentTypes') || ''));
+        const blocked = parseCommaList(String(formData.get('autoApprovalBlockedContentTypes') || ''));
+
+        if (allowed.length) {
+          rule.allowedContentTypes = allowed;
+        }
+        if (blocked.length) {
+          rule.blockedContentTypes = blocked;
+        }
+
+        return finalizeRuleObject(rule, allowBlankAsNull);
+      }
+
+      function buildRoutingRulePayload(formData, allowBlankAsNull) {
+        const rule = {};
+        const contentTypeApprovers = {};
+        const contentTypes = ['photo', 'video', 'text', 'mixed'];
+
+        for (const contentType of contentTypes) {
+          const fieldName = 'routingRuleApprover' + contentType[0].toUpperCase() + contentType.slice(1);
+          const role = parseOptionalRole(String(formData.get(fieldName) || ''));
+          if (role !== null) {
+            contentTypeApprovers[contentType] = role;
+          }
+        }
+
+        if (Object.keys(contentTypeApprovers).length) {
+          rule.contentTypeApprovers = contentTypeApprovers;
+        }
+
+        return finalizeRuleObject(rule, allowBlankAsNull);
+      }
+
       function buildPublishingRulePayload(formData, allowBlankAsNull) {
         const rule = {};
         const destinationsRaw = String(formData.get('publishingRuleDestinations') || '').trim();
@@ -2689,8 +2777,8 @@ async function renderWorkflowSettingsPage(clubSlug) {
             autoApproveMaxRisk: String(formData.get('autoApproveMaxRisk') || '').trim() === ''
               ? null
               : Number(formData.get('autoApproveMaxRisk')),
-            autoApprovalRule: parseOptionalJson(String(formData.get('autoApprovalRule') || ''), allowInheritance),
-            routingRule: parseOptionalJson(String(formData.get('routingRule') || ''), allowInheritance),
+            autoApprovalRule: buildAutoApprovalRulePayload(formData, allowInheritance),
+            routingRule: buildRoutingRulePayload(formData, allowInheritance),
             approvalRule: buildApprovalRulePayload(formData, allowInheritance),
             publishingRule: buildPublishingRulePayload(formData, allowInheritance),
             notificationRule: buildNotificationRulePayload(formData, allowInheritance)

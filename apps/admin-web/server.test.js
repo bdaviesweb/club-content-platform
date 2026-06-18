@@ -180,9 +180,14 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Organization directory/);
     assert.match(body, /org-admin@westside.test/);
     assert.match(body, /Auto-approval rule/);
-    assert.match(body, /allowedContentTypes/);
+    assert.match(body, /Auto-approve only these content types/);
+    assert.match(body, /Never auto-approve these content types/);
     assert.match(body, /Routing rule/);
-    assert.match(body, /contentTypeApprovers/);
+    assert.match(body, /Content-type routing overrides/);
+    assert.match(body, /Photo/);
+    assert.match(body, /Video/);
+    assert.match(body, /Text/);
+    assert.match(body, /Mixed/);
     assert.match(body, /Second approval for public posts/);
     assert.match(body, /Second approver role/);
     assert.match(body, /Second approval content types/);
