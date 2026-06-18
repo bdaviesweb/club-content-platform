@@ -71,6 +71,11 @@ run_checked_step "Auto-approval rule smoke" env REMOTE_HOST="${REMOTE_HOST}" REM
 
 echo
 echo "---"
+echo "Running auto-approval override smoke"
+run_checked_step "Auto-approval override smoke" env REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/auto_approval_override_smoke_vps.sh
+
+echo
+echo "---"
 echo "Running approval publish smoke"
 approval_publish_output="$(
   REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/approval_publish_smoke_vps.sh
@@ -105,6 +110,11 @@ else
   echo "Public second approval smoke did not report submission_id."
   exit 1
 fi
+
+echo
+echo "---"
+echo "Running approval override smoke"
+run_checked_step "Approval override smoke" env REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/approval_override_smoke_vps.sh
 
 echo
 echo "---"
