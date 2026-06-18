@@ -31,9 +31,7 @@ import { loadAppReadiness } from "./app-readiness.js";
 import { buildNotificationDeliveryStatus } from "./notification-delivery-status.js";
 import { recordNotificationWebhookEvent } from "./notification-webhook.js";
 import { parseResendWebhook } from "./notification-webhook-verification.js";
-import { loadSubmissionBase } from "./submission-base.js";
-import { buildSubmissionDetail } from "./submission-detail.js";
-import { loadSubmissionWorkflowDetail } from "./submission-workflow-detail.js";
+import { loadSubmissionRecord } from "./submission-record.js";
 
 const port = Number(process.env.API_PORT || 4000);
 const publicAppName = process.env.PUBLIC_PRODUCT_NAME || "Club Content";
@@ -476,7 +474,7 @@ async function handleMediaPreview(res, searchParams) {
 
 async function handleGetSubmission(res, submissionId) {
   const pool = getPool();
-  const submission = await loadSubmissionBase({
+  const submission = await loadSubmissionRecord({
     pool,
     submissionId,
     enrichMediaCollection
@@ -487,16 +485,7 @@ async function handleGetSubmission(res, submissionId) {
     return;
   }
 
-  const workflowDetail = await loadSubmissionWorkflowDetail({ pool, submissionId });
-
-  sendJson(
-    res,
-    200,
-    buildSubmissionDetail({
-      submission,
-      ...workflowDetail
-    })
-  );
+  sendJson(res, 200, submission);
 }
 
 async function handleListSubmissions(res, query) {
