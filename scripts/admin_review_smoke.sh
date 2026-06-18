@@ -255,6 +255,28 @@ async function main() {
   });
 
   console.log(`approval_request_id=${queueItem.id}`);
+  const approvalDetail = await requestJson(
+    apiBaseUrl,
+    `/approval-requests/${encodeURIComponent(queueItem.id)}`
+  );
+  if (
+    approvalDetail.id !== queueItem.id ||
+    approvalDetail.submission_id !== submissionId ||
+    !Array.isArray(approvalDetail.review_runs) ||
+    !Array.isArray(approvalDetail.approval_actions)
+  ) {
+    throw new Error(
+      `Approval request detail did not match the smoke item: ${JSON.stringify({
+        id: approvalDetail.id,
+        submissionId: approvalDetail.submission_id,
+        reviewRunsType: typeof approvalDetail.review_runs,
+        approvalActionsType: typeof approvalDetail.approval_actions
+      })}`
+    );
+  }
+  console.log(`approval_detail_status=${approvalDetail.state}`);
+  console.log(`approval_detail_submission_id=${approvalDetail.submission_id}`);
+
   const quickReviewPath = `/quick-review?approvalRequestId=${encodeURIComponent(queueItem.id)}`;
   const html = await requestAdminHtml(quickReviewPath);
   if (!html.includes("Quick review") || !html.includes(marker)) {
