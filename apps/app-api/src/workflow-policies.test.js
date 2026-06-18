@@ -33,7 +33,8 @@ test("loads club workflow policies with organization fallback detail", async () 
               orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
               orgApprovalRule: {
                 requireSecondApprovalForPublic: true,
-                secondApproverRole: "club_admin"
+                secondApproverRole: "club_admin",
+                secondApprovalContentTypes: ["video"]
               },
               orgPublishingRule: { mode: "org" },
               orgNotificationRule: { email: true },
@@ -70,7 +71,8 @@ test("loads club workflow policies with organization fallback detail", async () 
   assert.deepEqual(result.clubPolicy.approvalRule, null);
   assert.deepEqual(result.effectivePolicy.approvalRule, {
     requireSecondApprovalForPublic: true,
-    secondApproverRole: "club_admin"
+    secondApproverRole: "club_admin",
+    secondApprovalContentTypes: ["video"]
   });
   assert.deepEqual(result.clubPolicy.publishingRule, null);
   assert.deepEqual(result.effectivePolicy.publishingRule, { mode: "org" });
@@ -178,7 +180,8 @@ test("validates workflow policy patch payloads", () => {
       {
         approvalRule: {
           requireSecondApprovalForPublic: true,
-          secondApproverRole: "club_admin"
+          secondApproverRole: "club_admin",
+          secondApprovalContentTypes: ["video"]
         }
       },
       { scopeType: "organization" }
@@ -188,9 +191,42 @@ test("validates workflow policy patch payloads", () => {
       value: {
         approvalRule: {
           requireSecondApprovalForPublic: true,
-          secondApproverRole: "club_admin"
+          secondApproverRole: "club_admin",
+          secondApprovalContentTypes: ["video"]
         }
       }
+    }
+  );
+
+  assert.deepEqual(
+    validateWorkflowPolicyPatch(
+      {
+        approvalRule: {
+          requireSecondApprovalForPublic: true,
+          secondApprovalContentTypes: ["video", "mixed"]
+        }
+      },
+      { scopeType: "organization" }
+    ),
+    {
+      ok: true,
+      value: {
+        approvalRule: {
+          requireSecondApprovalForPublic: true,
+          secondApprovalContentTypes: ["video", "mixed"]
+        }
+      }
+    }
+  );
+
+  assert.deepEqual(
+    validateWorkflowPolicyPatch(
+      { approvalRule: { secondApprovalContentTypes: ["video", ""] } },
+      { scopeType: "club" }
+    ),
+    {
+      ok: false,
+      error: "approvalRule.secondApprovalContentTypes must contain only non-empty strings"
     }
   );
 
@@ -259,7 +295,8 @@ test("updates club workflow policies with authorized actors and preserves cleara
                 },
                 orgApprovalRule: {
                   requireSecondApprovalForPublic: true,
-                  secondApproverRole: "club_admin"
+                  secondApproverRole: "club_admin",
+                  secondApprovalContentTypes: ["video"]
                 },
                 orgPublishingRule: { destinations: ["internal_feed"] },
                 orgNotificationRule: { email: true },
@@ -300,7 +337,8 @@ test("updates club workflow policies with authorized actors and preserves cleara
               },
               orgApprovalRule: {
                 requireSecondApprovalForPublic: true,
-                secondApproverRole: "club_admin"
+                secondApproverRole: "club_admin",
+                secondApprovalContentTypes: ["video"]
               },
               orgPublishingRule: { destinations: ["internal_feed"] },
               orgNotificationRule: { email: true },
@@ -415,7 +453,8 @@ test("loads organization directory with clubs and organization admins", async ()
                 },
                 orgApprovalRule: {
                   requireSecondApprovalForPublic: true,
-                  secondApproverRole: "club_admin"
+                  secondApproverRole: "club_admin",
+                  secondApprovalContentTypes: ["video"]
                 },
                 orgPublishingRule: {},
                 orgNotificationRule: {}
@@ -484,7 +523,8 @@ test("loads effective notification rule for a club id with club override precede
                 },
                 orgApprovalRule: {
                   requireSecondApprovalForPublic: true,
-                  secondApproverRole: "club_admin"
+                  secondApproverRole: "club_admin",
+                  secondApprovalContentTypes: ["video"]
                 },
                 orgPublishingRule: { destinations: ["internal_feed"] },
                 orgNotificationRule: { email: true, push: true },

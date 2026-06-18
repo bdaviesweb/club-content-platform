@@ -161,6 +161,41 @@ function enrichMediaCollection(items) {
   return items.map(enrichMediaAsset);
 }
 
+function shouldRequireSecondApprovalForAction({
+  approvalRequest,
+  approvalRule = {}
+}) {
+  if (approvalRequest?.stage === "secondary") {
+    return false;
+  }
+
+  if (approvalRequest?.visibility_target !== "public") {
+    return false;
+  }
+
+  if (approvalRule?.requireSecondApprovalForPublic !== true) {
+    return false;
+  }
+
+  const contentType = String(approvalRequest?.content_type || "").trim();
+  const secondApprovalContentTypes = Array.isArray(
+    approvalRule?.secondApprovalContentTypes
+  )
+    ? approvalRule.secondApprovalContentTypes
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    : [];
+
+  if (
+    secondApprovalContentTypes.length &&
+    (!contentType || !secondApprovalContentTypes.includes(contentType))
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 async function enrichFeedMediaAsset(item) {
   const enriched = enrichMediaAsset(item);
 
@@ -929,9 +964,10 @@ async function handleApprovalAction(
 
     const requiresSecondApproval =
       normalizedAction === "approve" &&
-      approvalRequest.stage !== "secondary" &&
-      approvalRequest.visibility_target === "public" &&
-      approvalRule?.requireSecondApprovalForPublic === true;
+      shouldRequireSecondApprovalForAction({
+        approvalRequest,
+        approvalRule
+      });
     const secondApproverRole =
       approvalRule?.secondApproverRole || "club_admin";
 

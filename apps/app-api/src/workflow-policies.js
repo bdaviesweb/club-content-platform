@@ -452,6 +452,16 @@ export function validateWorkflowPolicyPatch(input, { scopeType }) {
           error: `approvalRule.secondApproverRole must be one of ${reviewerWorkflowRoles.join(", ")}`
         };
       }
+
+      if (Object.hasOwn(value, "secondApprovalContentTypes")) {
+        const validation = validateStringList(
+          value.secondApprovalContentTypes,
+          "approvalRule.secondApprovalContentTypes"
+        );
+        if (!validation.ok) {
+          return validation;
+        }
+      }
     }
 
     if (

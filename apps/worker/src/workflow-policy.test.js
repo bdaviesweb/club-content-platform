@@ -342,13 +342,14 @@ test("requires second approval for public submissions when policy enables it", (
     ...defaultWorkflowPolicy,
     approvalRule: {
       requireSecondApprovalForPublic: true,
-      secondApproverRole: "club_admin"
+      secondApproverRole: "club_admin",
+      secondApprovalContentTypes: ["video"]
     }
   };
 
   assert.deepEqual(
     shouldRequireSecondApproval({
-      submission: { visibility_target: "public" },
+      submission: { visibility_target: "public", content_type: "video" },
       policy
     }),
     {
@@ -360,12 +361,41 @@ test("requires second approval for public submissions when policy enables it", (
 
   assert.deepEqual(
     shouldRequireSecondApproval({
-      submission: { visibility_target: "internal" },
+      submission: { visibility_target: "internal", content_type: "video" },
       policy
     }),
     {
       required: false,
       reason: "visibility_not_public"
+    }
+  );
+
+  assert.deepEqual(
+    shouldRequireSecondApproval({
+      submission: { visibility_target: "public", content_type: "photo" },
+      policy
+    }),
+    {
+      required: false,
+      reason: "content_type_single_approval"
+    }
+  );
+
+  assert.deepEqual(
+    shouldRequireSecondApproval({
+      submission: { visibility_target: "public", content_type: "photo" },
+      policy: {
+        ...defaultWorkflowPolicy,
+        approvalRule: {
+          requireSecondApprovalForPublic: true,
+          secondApproverRole: "club_admin"
+        }
+      }
+    }),
+    {
+      required: true,
+      reason: "policy_requires_second_public_approval",
+      secondApproverRole: "club_admin"
     }
   );
 });

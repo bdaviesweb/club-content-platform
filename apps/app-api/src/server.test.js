@@ -1425,6 +1425,7 @@ test("POST /approval-requests/:id/actions creates a secondary approval for publi
         submitted_by_user_id: "submitter-2",
         club_id: "club-1",
         team_id: null,
+        content_type: "video",
         visibility_target: "public",
         stage: "primary"
       }
@@ -1435,7 +1436,8 @@ test("POST /approval-requests/:id/actions creates a secondary approval for publi
     approvalRuleCalls.push(clubId);
     return {
       requireSecondApprovalForPublic: true,
-      secondApproverRole: "club_admin"
+      secondApproverRole: "club_admin",
+      secondApprovalContentTypes: ["video"]
     };
   };
 
@@ -1510,6 +1512,90 @@ test("POST /approval-requests/:id/actions creates a secondary approval for publi
       originallyRequestedRole: "club_admin",
       previousApprovalRequestId: "approval-2"
     });
+    assert.equal(notificationCalled, false);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("POST /approval-requests/:id/actions skips secondary approval when the public content type is not covered", async () => {
+  const calls = [];
+  const approvalActionRunInTransaction = async (fn) =>
+    fn({
+      async query(query, params = []) {
+        calls.push({ query: String(query), params });
+        return { rowCount: 1, rows: [] };
+      }
+    });
+
+  const loadApprovalActor = async () => ({
+    found: true,
+    authorized: true,
+    actor: { id: "user-1" },
+    approvalRequest: {
+      submission_id: "submission-3",
+      submitted_by_user_id: "submitter-3",
+      club_id: "club-1",
+      team_id: null,
+      content_type: "photo",
+      visibility_target: "public",
+      stage: "primary"
+    }
+  });
+
+  const loadApprovalRuleForClubId = async () => ({
+    requireSecondApprovalForPublic: true,
+    secondApproverRole: "club_admin",
+    secondApprovalContentTypes: ["video"]
+  });
+
+  let notificationCalled = false;
+  const deliverNotification = async () => {
+    notificationCalled = true;
+  };
+
+  const server = createAppServer({
+    approvalActionRunInTransaction,
+    loadApprovalActor,
+    loadApprovalRuleForClubId,
+    deliverNotification
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/approval-requests/approval-3/actions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "approve",
+        actedByEmail: "reviewer@example.test",
+        notes: "Photo can publish after primary approval"
+      })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      approvalRequestId: "approval-3",
+      submissionId: "submission-3",
+      action: "approve",
+      stage: "primary",
+      nextStage: null
+    });
+
+    const submissionUpdate = calls.find(({ query }) =>
+      query.includes("UPDATE submissions")
+    );
+    assert.equal(submissionUpdate.params[1], "approved_internal");
+    assert.equal(
+      calls.some(({ query }) => query.includes("INSERT INTO approval_requests")),
+      false
+    );
     assert.equal(notificationCalled, false);
   } finally {
     server.close();

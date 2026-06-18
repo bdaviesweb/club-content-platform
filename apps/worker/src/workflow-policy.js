@@ -293,6 +293,20 @@ export function shouldRequireSecondApproval({
     return { required: false, reason: "visibility_not_public" };
   }
 
+  const contentType = String(submission.content_type || "").trim();
+  const secondApprovalContentTypes = Array.isArray(rule?.secondApprovalContentTypes)
+    ? rule.secondApprovalContentTypes
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    : [];
+
+  if (
+    secondApprovalContentTypes.length &&
+    (!contentType || !secondApprovalContentTypes.includes(contentType))
+  ) {
+    return { required: false, reason: "content_type_single_approval" };
+  }
+
   return {
     required: true,
     reason: "policy_requires_second_public_approval",

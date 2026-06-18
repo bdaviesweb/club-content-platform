@@ -13,6 +13,7 @@ export async function loadAuthorizedApprovalActor(client, approvalRequestId, act
       s.team_id,
       s.id AS submission_id,
       s.submitted_by_user_id,
+      s.content_type,
       s.visibility_target
     FROM approval_requests ar
     JOIN submissions s ON s.id = ar.submission_id

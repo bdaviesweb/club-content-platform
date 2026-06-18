@@ -86,7 +86,8 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
               },
               approvalRule: {
                 requireSecondApprovalForPublic: true,
-                secondApproverRole: "club_admin"
+                secondApproverRole: "club_admin",
+                secondApprovalContentTypes: ["video"]
               },
               publishingRule: { destinations: ["internal_feed"] },
               notificationRule: { push: true }
@@ -164,6 +165,7 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /contentTypeApprovers/);
     assert.match(body, /Approval rule/);
     assert.match(body, /requireSecondApprovalForPublic/);
+    assert.match(body, /secondApprovalContentTypes/);
     assert.match(body, /Save club policy/);
     assert.match(body, /Save organization policy/);
     assert.deepEqual(calls, [

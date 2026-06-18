@@ -4,9 +4,12 @@ set -euo pipefail
 REMOTE_HOST="${REMOTE_HOST:-hermes-dev}"
 REMOTE_DIR="${REMOTE_DIR:-/srv/repos/projects/club-content-platform}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.vps.yml}"
+ORGANIZATION_SLUG="${ORGANIZATION_SLUG:-demo-sports-org}"
 CLUB_SLUG="${CLUB_SLUG:-demo-soccer-club}"
 TEAM_SLUG="${TEAM_SLUG:-u14-girls}"
 SUBMITTER_EMAIL="${SUBMITTER_EMAIL:-coach@demo-club.local}"
+ORGANIZATION_ADMIN_EMAIL="${ORGANIZATION_ADMIN_EMAIL:-org-admin@demo-club.local}"
+CLUB_ADMIN_EMAIL="${CLUB_ADMIN_EMAIL:-comms@demo-club.local}"
 PRIMARY_REVIEWER_EMAIL="${PRIMARY_REVIEWER_EMAIL:-comms@demo-club.local}"
 SECOND_REVIEWER_EMAIL="${SECOND_REVIEWER_EMAIL:-comms@demo-club.local}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-300}"
@@ -23,12 +26,15 @@ if [[ "${CLUB_CONTENT_SMOKE_ON_VPS:-0}" != "1" ]]; then
   if [[ "${current_dir}" != "${REMOTE_DIR}" || ! -f "${COMPOSE_FILE}" ]]; then
     remote_dir_quoted="$(shell_quote "${REMOTE_DIR}")"
     remote_command=$(
-      printf "cd %s && CLUB_CONTENT_SMOKE_ON_VPS=1 COMPOSE_FILE=%s CLUB_SLUG=%s TEAM_SLUG=%s SUBMITTER_EMAIL=%s PRIMARY_REVIEWER_EMAIL=%s SECOND_REVIEWER_EMAIL=%s TIMEOUT_SECONDS=%s POLL_SECONDS=%s SMOKE_MARKER=%s bash -s" \
+      printf "cd %s && CLUB_CONTENT_SMOKE_ON_VPS=1 COMPOSE_FILE=%s ORGANIZATION_SLUG=%s CLUB_SLUG=%s TEAM_SLUG=%s SUBMITTER_EMAIL=%s ORGANIZATION_ADMIN_EMAIL=%s CLUB_ADMIN_EMAIL=%s PRIMARY_REVIEWER_EMAIL=%s SECOND_REVIEWER_EMAIL=%s TIMEOUT_SECONDS=%s POLL_SECONDS=%s SMOKE_MARKER=%s bash -s" \
         "${remote_dir_quoted}" \
         "$(shell_quote "${COMPOSE_FILE}")" \
+        "$(shell_quote "${ORGANIZATION_SLUG}")" \
         "$(shell_quote "${CLUB_SLUG}")" \
         "$(shell_quote "${TEAM_SLUG}")" \
         "$(shell_quote "${SUBMITTER_EMAIL}")" \
+        "$(shell_quote "${ORGANIZATION_ADMIN_EMAIL}")" \
+        "$(shell_quote "${CLUB_ADMIN_EMAIL}")" \
         "$(shell_quote "${PRIMARY_REVIEWER_EMAIL}")" \
         "$(shell_quote "${SECOND_REVIEWER_EMAIL}")" \
         "$(shell_quote "${TIMEOUT_SECONDS}")" \
@@ -54,10 +60,22 @@ echo "Checking API health..."
 curl -fsS http://localhost:4000/health
 echo
 
+echo "Applying organization second-approval rule for public video..."
+curl -fsS \
+  -H "content-type: application/json" \
+  -d '{"actorEmail":"'"${ORGANIZATION_ADMIN_EMAIL}"'","approvalRule":{"requireSecondApprovalForPublic":true,"secondApproverRole":"club_admin","secondApprovalContentTypes":["video"]}}' \
+  "http://localhost:4000/workflow-policies/organizations/${ORGANIZATION_SLUG}" >/dev/null
+
+echo "Clearing club approval override so the organization rule is authoritative..."
+curl -fsS \
+  -H "content-type: application/json" \
+  -d '{"actorEmail":"'"${CLUB_ADMIN_EMAIL}"'","approvalRule":null}' \
+  "http://localhost:4000/workflow-policies/clubs/${CLUB_SLUG}" >/dev/null
+
 echo "Creating public second-approval smoke submission: ${SMOKE_MARKER}"
 curl -fsS \
   -H "content-type: application/json" \
-  -d '{"clubSlug":"'"${CLUB_SLUG}"'","teamSlug":"'"${TEAM_SLUG}"'","submitterEmail":"'"${SUBMITTER_EMAIL}"'","contentType":"photo","visibilityTarget":"public","rawText":"'"${SMOKE_MARKER}"'","media":[]}' \
+  -d '{"clubSlug":"'"${CLUB_SLUG}"'","teamSlug":"'"${TEAM_SLUG}"'","submitterEmail":"'"${SUBMITTER_EMAIL}"'","contentType":"video","visibilityTarget":"public","rawText":"'"${SMOKE_MARKER}"'","media":[]}' \
   http://localhost:4000/submissions >/dev/null
 
 submission_id=""
