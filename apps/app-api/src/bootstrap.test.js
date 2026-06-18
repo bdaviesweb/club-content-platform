@@ -19,6 +19,9 @@ test("ensureWorkflowPolicyTables upgrades existing workflow policy tables in pla
   const clubUpgrade = queries.find((sql) =>
     sql.includes("ALTER TABLE club_workflow_policies")
   );
+  const orgMembershipTable = queries.find((sql) =>
+    sql.includes("CREATE TABLE IF NOT EXISTS organization_memberships")
+  );
 
   assert.match(orgUpgrade, /ADD COLUMN IF NOT EXISTS default_approver_role/);
   assert.match(orgUpgrade, /ADD COLUMN IF NOT EXISTS auto_approve_max_risk/);
@@ -27,4 +30,5 @@ test("ensureWorkflowPolicyTables upgrades existing workflow policy tables in pla
   assert.match(clubUpgrade, /ADD COLUMN IF NOT EXISTS default_approver_role/);
   assert.match(clubUpgrade, /ADD COLUMN IF NOT EXISTS auto_approve_internal_low_risk/);
   assert.match(clubUpgrade, /ADD COLUMN IF NOT EXISTS publishing_rule/);
+  assert.match(orgMembershipTable, /organization_membership_role/);
 });

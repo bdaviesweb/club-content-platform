@@ -10,6 +10,11 @@ CREATE TYPE membership_role AS ENUM (
   'publisher'
 );
 
+CREATE TYPE organization_membership_role AS ENUM (
+  'organization_admin',
+  'organization_ops'
+);
+
 CREATE TYPE submission_content_type AS ENUM (
   'photo',
   'video',
@@ -94,6 +99,15 @@ CREATE TABLE memberships (
   role membership_role NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (club_id, team_id, user_id, role)
+);
+
+CREATE TABLE organization_memberships (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role organization_membership_role NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (organization_id, user_id, role)
 );
 
 CREATE TABLE events (
@@ -292,3 +306,4 @@ CREATE INDEX idx_submission_events_processed_at ON submission_events(processed_a
 CREATE INDEX idx_publishing_jobs_submission_id ON publishing_jobs(submission_id);
 CREATE INDEX idx_notifications_user_id ON notifications(user_id);
 CREATE INDEX idx_clubs_organization_id ON clubs(organization_id);
+CREATE INDEX idx_organization_memberships_org_user_role ON organization_memberships(organization_id, user_id, role);

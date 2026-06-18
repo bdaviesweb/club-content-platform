@@ -305,6 +305,75 @@ test("GET /workflow-policies/organizations/:slug returns organization policy det
   }
 });
 
+test("GET /organizations/:slug returns organization directory detail", async () => {
+  const queries = [];
+  const pool = {
+    async query(query, params) {
+      queries.push({ query, params });
+
+      if (String(query).includes("FROM organizations o")) {
+        return {
+          rows: [
+            {
+              organizationId: "org-1",
+              organizationSlug: "metro",
+              organizationName: "Metro Sports",
+              orgDefaultApproverRole: "team_manager",
+              orgPublicApproverRole: "club_comms",
+              orgMediumRiskApproverRole: "club_admin",
+              orgAllowAgentRouting: true,
+              orgAutoApproveInternalLowRisk: false,
+              orgAutoApproveMaxRisk: "0.35",
+              orgPublishingRule: {},
+              orgNotificationRule: {}
+            }
+          ]
+        };
+      }
+
+      if (String(query).includes("FROM clubs")) {
+        return {
+          rows: [{ id: "club-1", slug: "westside", name: "Westside" }]
+        };
+      }
+
+      if (String(query).includes("FROM organization_memberships")) {
+        return {
+          rows: [
+            {
+              role: "organization_admin",
+              email: "org-admin@example.test",
+              fullName: "Org Admin"
+            }
+          ]
+        };
+      }
+
+      throw new Error(`Unexpected query: ${query}`);
+    }
+  };
+
+  const server = createAppServer({ pool });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/organizations/metro`);
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.organization.slug, "metro");
+    assert.equal(body.clubs[0].slug, "westside");
+    assert.equal(body.admins[0].role, "organization_admin");
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
 test("POST /workflow-policies/organizations/:slug updates organization policy through the workflow manager flow", async () => {
   const calls = [];
   const runInTransaction = async (fn) =>
@@ -356,8 +425,8 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
           return { rowCount: 1, rows: [{ id: "user-1", email: "admin@example.test" }] };
         }
 
-        if (String(query).includes("FROM memberships m")) {
-          return { rowCount: 1, rows: [{ role: "club_admin" }] };
+        if (String(query).includes("FROM organization_memberships")) {
+          return { rowCount: 1, rows: [{ role: "organization_admin" }] };
         }
 
         if (String(query).includes("INSERT INTO organization_workflow_policies")) {

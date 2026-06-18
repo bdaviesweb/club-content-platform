@@ -11,7 +11,7 @@ const defaultWorkflowPolicy = {
 
 const reviewerWorkflowRoles = ["team_manager", "club_admin", "club_comms"];
 const clubPolicyManagerRoles = ["club_admin", "club_comms"];
-const organizationPolicyManagerRoles = ["club_admin"];
+const organizationPolicyManagerRoles = ["organization_admin", "organization_ops"];
 
 function normalizeSlug(value) {
   const normalized = String(value || "").trim();
@@ -401,6 +401,59 @@ export async function loadWorkflowPolicyScope(pool, { scopeType, scopeSlug }) {
   );
 }
 
+export async function loadOrganizationDirectory(pool, organizationSlug) {
+  const organizationRow = await queryOrganizationPolicyRow(pool, organizationSlug);
+
+  if (!organizationRow) {
+    return { found: false };
+  }
+
+  const clubsResult = await pool.query(
+    `
+    SELECT id, slug, name
+    FROM clubs
+    WHERE organization_id = $1
+    ORDER BY name ASC, created_at ASC
+    `,
+    [organizationRow.organizationId]
+  );
+
+  const adminsResult = await pool.query(
+    `
+    SELECT
+      om.role,
+      u.email,
+      u.full_name AS "fullName"
+    FROM organization_memberships om
+    JOIN users u ON u.id = om.user_id
+    WHERE om.organization_id = $1
+    ORDER BY
+      CASE WHEN om.role = 'organization_admin' THEN 0 ELSE 1 END,
+      om.created_at ASC
+    `,
+    [organizationRow.organizationId]
+  );
+
+  return {
+    found: true,
+    organization: {
+      id: organizationRow.organizationId,
+      slug: organizationRow.organizationSlug,
+      name: organizationRow.organizationName
+    },
+    clubs: clubsResult.rows.map((row) => ({
+      id: row.id,
+      slug: row.slug,
+      name: row.name
+    })),
+    admins: adminsResult.rows.map((row) => ({
+      role: row.role,
+      email: row.email,
+      fullName: row.fullName
+    }))
+  };
+}
+
 async function authorizeWorkflowPolicyActor(
   client,
   { scopeType, row, actorEmail }
@@ -448,13 +501,14 @@ async function authorizeWorkflowPolicyActor(
 
   const membership = await client.query(
     `
-    SELECT m.role
-    FROM memberships m
-    JOIN clubs c ON c.id = m.club_id
-    WHERE c.organization_id = $1
-      AND m.user_id = $2
-      AND m.role = ANY($3::membership_role[])
-    ORDER BY m.created_at ASC
+    SELECT role
+    FROM organization_memberships
+    WHERE organization_id = $1
+      AND user_id = $2
+      AND role = ANY($3::organization_membership_role[])
+    ORDER BY
+      CASE WHEN role = 'organization_admin' THEN 0 ELSE 1 END,
+      created_at ASC
     LIMIT 1
     `,
     [row.organization.id, actor.rows[0].id, organizationPolicyManagerRoles]
@@ -464,7 +518,7 @@ async function authorizeWorkflowPolicyActor(
     return {
       ok: false,
       status: 403,
-      error: "Only club admins within the organization can manage organization workflow policies"
+      error: "Only organization admins or ops can manage organization workflow policies"
     };
   }
 

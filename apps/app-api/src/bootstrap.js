@@ -5,6 +5,8 @@ import { ensureBucket } from "./storage.js";
 const defaultClubSeed = {
   organizationSlug: "demo-sports-org",
   organizationName: "Demo Sports Organization",
+  organizationAdminEmail: "org-admin@demo-club.local",
+  organizationAdminName: "Organization Admin",
   slug: "demo-soccer-club",
   name: "Demo Soccer Club",
   teamSlug: "u14-girls",
@@ -21,6 +23,14 @@ export function getClubSeed(env = process.env) {
       env.DEMO_ORGANIZATION_SLUG || defaultClubSeed.organizationSlug,
     organizationName:
       env.DEMO_ORGANIZATION_NAME || defaultClubSeed.organizationName,
+    organizationAdminEmail:
+      env.DEMO_ORGANIZATION_ADMIN_EMAIL ||
+      env.DEMO_ORG_ADMIN_EMAIL ||
+      defaultClubSeed.organizationAdminEmail,
+    organizationAdminName:
+      env.DEMO_ORGANIZATION_ADMIN_NAME ||
+      env.DEMO_ORG_ADMIN_NAME ||
+      defaultClubSeed.organizationAdminName,
     slug: env.DEMO_CLUB_SLUG || defaultClubSeed.slug,
     name: env.DEMO_CLUB_NAME || defaultClubSeed.name,
     teamSlug: env.DEMO_TEAM_SLUG || defaultClubSeed.teamSlug,
@@ -49,6 +59,23 @@ export async function ensureWorkflowPolicyTables(client) {
       slug TEXT NOT NULL UNIQUE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `);
+
+  await client.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_type
+        WHERE typname = 'organization_membership_role'
+      ) THEN
+        CREATE TYPE organization_membership_role AS ENUM (
+          'organization_admin',
+          'organization_ops'
+        );
+      END IF;
+    END
+    $$;
   `);
 
   await client.query(`
@@ -138,6 +165,27 @@ export async function ensureWorkflowPolicyTables(client) {
     ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS organization_memberships (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      role organization_membership_role NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (organization_id, user_id, role)
+    )
+  `);
+
+  await client.query(`
+    ALTER TABLE organization_memberships
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_organization_memberships_org_user_role
+    ON organization_memberships(organization_id, user_id, role)
+  `);
 }
 
 async function ensureRoleMembership(client, { clubId, teamId, role, email, name }) {
@@ -221,6 +269,58 @@ async function ensureRoleMembership(client, { clubId, teamId, role, email, name 
     `,
     [clubId, teamId, userId, role]
   );
+
+  return userId;
+}
+
+async function ensureOrganizationMembership(
+  client,
+  { organizationId, role, email, name }
+) {
+  const targetUser = await client.query(
+    `
+    SELECT id
+    FROM users
+    WHERE email = $1
+    LIMIT 1
+    `,
+    [email]
+  );
+
+  let userId = targetUser.rows[0]?.id;
+
+  if (userId) {
+    await client.query(
+      `
+      UPDATE users
+      SET full_name = $1
+      WHERE id = $2
+      `,
+      [name, userId]
+    );
+  } else {
+    const createdUser = await client.query(
+      `
+      INSERT INTO users (email, full_name)
+      VALUES ($1, $2)
+      RETURNING id
+      `,
+      [email, name]
+    );
+
+    userId = createdUser.rows[0].id;
+  }
+
+  await client.query(
+    `
+    INSERT INTO organization_memberships (organization_id, user_id, role)
+    VALUES ($1, $2, $3)
+    ON CONFLICT DO NOTHING
+    `,
+    [organizationId, userId, role]
+  );
+
+  return userId;
 }
 
 export async function ensureSeedData() {
@@ -283,6 +383,13 @@ export async function ensureSeedData() {
       role: "submitter_coach",
       email: clubSeed.submitterEmail,
       name: clubSeed.submitterName
+    });
+
+    await ensureOrganizationMembership(client, {
+      organizationId,
+      role: "organization_admin",
+      email: clubSeed.organizationAdminEmail,
+      name: clubSeed.organizationAdminName
     });
 
     await client.query(

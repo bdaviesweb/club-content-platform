@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  loadOrganizationDirectory,
   loadWorkflowPolicyScope,
   updateWorkflowPolicyScope,
   validateWorkflowPolicyPatch
@@ -197,4 +198,66 @@ test("updates club workflow policies with authorized actors and preserves cleara
   assert.equal(upsert.params[5], true);
   assert.equal(upsert.params[6], 0.15);
   assert.equal(upsert.params[7], JSON.stringify({}));
+});
+
+test("loads organization directory with clubs and organization admins", async () => {
+  const calls = [];
+  const result = await loadOrganizationDirectory(
+    {
+      async query(sql, params = []) {
+        calls.push({ sql: String(sql), params });
+
+        if (String(sql).includes("FROM organizations o")) {
+          return {
+            rows: [
+              {
+                organizationId: "org-1",
+                organizationSlug: "metro",
+                organizationName: "Metro Sports",
+                orgDefaultApproverRole: "team_manager",
+                orgPublicApproverRole: "club_comms",
+                orgMediumRiskApproverRole: "club_comms",
+                orgAllowAgentRouting: true,
+                orgAutoApproveInternalLowRisk: false,
+                orgAutoApproveMaxRisk: "0.35",
+                orgPublishingRule: {},
+                orgNotificationRule: {}
+              }
+            ]
+          };
+        }
+
+        if (String(sql).includes("FROM clubs")) {
+          return {
+            rows: [
+              { id: "club-1", slug: "westside", name: "Westside" },
+              { id: "club-2", slug: "eastside", name: "Eastside" }
+            ]
+          };
+        }
+
+        if (String(sql).includes("FROM organization_memberships")) {
+          return {
+            rows: [
+              {
+                role: "organization_admin",
+                email: "org-admin@example.test",
+                fullName: "Org Admin"
+              }
+            ]
+          };
+        }
+
+        throw new Error(`Unexpected query: ${sql}`);
+      }
+    },
+    "metro"
+  );
+
+  assert.equal(result.found, true);
+  assert.equal(result.organization.slug, "metro");
+  assert.equal(result.clubs.length, 2);
+  assert.equal(result.admins[0].role, "organization_admin");
+  assert.match(calls[1].sql, /FROM clubs/);
+  assert.match(calls[2].sql, /FROM organization_memberships/);
 });

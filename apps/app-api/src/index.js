@@ -37,6 +37,7 @@ import { parseResendWebhook } from "./notification-webhook-verification.js";
 import { loadSubmissionRecord } from "./submission-record.js";
 import { loadWorkflowEvents } from "./workflow-events.js";
 import {
+  loadOrganizationDirectory,
   loadWorkflowPolicyScope,
   updateWorkflowPolicyScope,
   validateWorkflowPolicyPatch
@@ -462,6 +463,17 @@ async function handleGetWorkflowPolicy(
   }
 
   sendJson(res, 200, policy);
+}
+
+async function handleGetOrganization(res, organizationSlug, { pool = getPool() } = {}) {
+  const directory = await loadOrganizationDirectory(pool, organizationSlug);
+
+  if (!directory.found) {
+    sendNotFound(res);
+    return;
+  }
+
+  sendJson(res, 200, directory);
 }
 
 async function handleUpdateWorkflowPolicy(
@@ -1428,6 +1440,18 @@ export function createAppServer({
         res,
         "organization",
         decodeURIComponent(url.pathname.split("/")[3]),
+        { pool: pool || getPool() }
+      );
+      return;
+    }
+
+    if (
+      req.method === "GET" &&
+      /^\/organizations\/[^/]+$/.test(url.pathname)
+    ) {
+      await handleGetOrganization(
+        res,
+        decodeURIComponent(url.pathname.split("/")[2]),
         { pool: pool || getPool() }
       );
       return;

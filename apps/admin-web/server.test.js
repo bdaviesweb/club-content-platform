@@ -106,6 +106,25 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
       };
     }
 
+    if (String(url).endsWith("/organizations/metro")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubs: [{ slug: "westside", name: "Westside" }],
+            admins: [
+              {
+                role: "organization_admin",
+                email: "org-admin@westside.test",
+                fullName: "Org Admin"
+              }
+            ]
+          };
+        }
+      };
+    }
+
     throw new Error(`Unexpected fetch: ${url}`);
   };
 
@@ -124,12 +143,15 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Set routing rules by club or by organization/);
     assert.match(body, /Westside/);
     assert.match(body, /Metro Sports/);
+    assert.match(body, /Organization directory/);
+    assert.match(body, /org-admin@westside.test/);
     assert.match(body, /Save club policy/);
     assert.match(body, /Save organization policy/);
     assert.deepEqual(calls, [
       "http://app-api:4000/app/readiness",
       "http://app-api:4000/workflow-policies/clubs/westside",
-      "http://app-api:4000/workflow-policies/organizations/metro"
+      "http://app-api:4000/workflow-policies/organizations/metro",
+      "http://app-api:4000/organizations/metro"
     ]);
   } finally {
     globalThis.fetch = originalFetch;

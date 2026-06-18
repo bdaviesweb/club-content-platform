@@ -46,6 +46,17 @@ if [[ -n "${ADMIN_BASIC_AUTH_USER:-}" && -n "${ADMIN_BASIC_AUTH_PASSWORD:-}" ]];
   admin_curl_args=(-u "${ADMIN_BASIC_AUTH_USER}:${ADMIN_BASIC_AUTH_PASSWORD}")
 fi
 
+admin_curl() {
+  local url="$1"
+
+  if [[ ${#admin_curl_args[@]} -gt 0 ]]; then
+    curl -fsS "${admin_curl_args[@]}" "$url"
+    return
+  fi
+
+  curl -fsS "$url"
+}
+
 api_health="$(curl -fsS http://localhost:4000/health)"
 app_readiness="$(curl -fsS http://localhost:4000/app/readiness)"
 admin_health="$(curl -fsS http://localhost:3002/health)"
@@ -68,7 +79,8 @@ if [[ -z "${organization_slug}" ]]; then
 fi
 
 organization_workflow_policy="$(curl -fsS "http://localhost:4000/workflow-policies/organizations/${organization_slug}")"
-workflow_settings_html="$(curl -fsS "${admin_curl_args[@]}" "http://localhost:3002/workflow-settings?clubSlug=${demo_club_slug}")"
+organization_directory="$(curl -fsS "http://localhost:4000/organizations/${organization_slug}")"
+workflow_settings_html="$(admin_curl "http://localhost:3002/workflow-settings?clubSlug=${demo_club_slug}")"
 
 API_HEALTH="${api_health}" \
 APP_READINESS="${app_readiness}" \
@@ -78,6 +90,7 @@ WORKFLOW_EVENTS="${workflow_events}" \
 NOTIFICATION_DELIVERY_STATUS="${notification_delivery_status}" \
 CLUB_WORKFLOW_POLICY="${club_workflow_policy}" \
 ORGANIZATION_WORKFLOW_POLICY="${organization_workflow_policy}" \
+ORGANIZATION_DIRECTORY="${organization_directory}" \
 WORKFLOW_SETTINGS_HTML="${workflow_settings_html}" \
 node <<'NODE'
 const assert = require('node:assert/strict');
@@ -90,6 +103,7 @@ const workflowEvents = JSON.parse(process.env.WORKFLOW_EVENTS);
 const notificationDeliveryStatus = JSON.parse(process.env.NOTIFICATION_DELIVERY_STATUS);
 const clubWorkflowPolicy = JSON.parse(process.env.CLUB_WORKFLOW_POLICY);
 const organizationWorkflowPolicy = JSON.parse(process.env.ORGANIZATION_WORKFLOW_POLICY);
+const organizationDirectory = JSON.parse(process.env.ORGANIZATION_DIRECTORY);
 const workflowSettingsHtml = process.env.WORKFLOW_SETTINGS_HTML;
 
 assert.equal(apiHealth.service, 'app-api');
@@ -115,6 +129,17 @@ assert.ok(clubWorkflowPolicy.organization?.slug, 'club workflow policy must expo
 assert.ok(clubWorkflowPolicy.effectivePolicy, 'club workflow policy must expose effective policy');
 assert.equal(organizationWorkflowPolicy.scopeType, 'organization');
 assert.equal(organizationWorkflowPolicy.organization?.slug, clubWorkflowPolicy.organization.slug);
+assert.equal(organizationDirectory.organization?.slug, clubWorkflowPolicy.organization.slug);
+assert.ok(Array.isArray(organizationDirectory.clubs), 'organization directory must expose clubs');
+assert.ok(Array.isArray(organizationDirectory.admins), 'organization directory must expose admins');
+assert.ok(
+  organizationDirectory.clubs.some((club) => club?.slug === appReadiness.demo.clubSlug),
+  'organization directory must include the demo club'
+);
+assert.ok(
+  organizationDirectory.admins.some((admin) => admin?.role === 'organization_admin' && admin?.email),
+  'organization directory must include at least one organization admin'
+);
 assert.match(workflowSettingsHtml, /Workflow settings/i);
 assert.match(workflowSettingsHtml, /Set routing rules by club or by organization/i);
 assert.match(workflowSettingsHtml, new RegExp(appReadiness.demo.clubSlug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
@@ -123,11 +148,14 @@ console.log('api_health=ok');
 console.log('app_readiness=ok');
 console.log('admin_health=ok');
 console.log('workflow_settings=ok');
+console.log('organization_directory=ok');
 console.log('approval_queue_items=' + approvalQueue.items.length);
 console.log('workflow_failed_items=' + workflowEvents.items.length);
 console.log('notification_email_mode=' + notificationDeliveryStatus.email.mode);
 console.log('notification_push_mode=' + notificationDeliveryStatus.push.mode);
 console.log('workflow_policy_org=' + clubWorkflowPolicy.organization.slug);
+console.log('organization_club_count=' + organizationDirectory.clubs.length);
+console.log('organization_admin_count=' + organizationDirectory.admins.length);
 if (approvalQueue.items[0]) {
   console.log('approval_queue_first_id=' + approvalQueue.items[0].id);
 }

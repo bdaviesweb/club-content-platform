@@ -2251,6 +2251,55 @@ function renderEffectivePolicySummary(policy) {
   </section>`;
 }
 
+function renderOrganizationDirectory(directory) {
+  if (!directory) {
+    return "";
+  }
+
+  const clubList = directory.clubs?.length
+    ? directory.clubs
+        .map(
+          (club) => `<div class="summary-item">
+            <strong>${escapeHtml(club.name)}</strong>
+            <p class="subtle">${escapeHtml(club.slug)}</p>
+          </div>`
+        )
+        .join("")
+    : `<p class="subtle">No clubs linked to this organization yet.</p>`;
+
+  const adminList = directory.admins?.length
+    ? directory.admins
+        .map(
+          (admin) => `<div class="summary-item">
+            <strong>${escapeHtml(admin.fullName || admin.email)}</strong>
+            <p class="subtle">${escapeHtml(admin.email)} • ${escapeHtml(formatLabel(admin.role))}</p>
+          </div>`
+        )
+        .join("")
+    : `<p class="subtle">No organization admins or ops recorded yet.</p>`;
+
+  return `<section class="panel">
+    <div class="section-header">
+      <div>
+        <div class="eyebrow">Organization directory</div>
+        <h2>${escapeHtml(directory.organization?.name || "Organization")}</h2>
+        <p class="subtle" style="margin-top:8px;">Use this as the authority view for which clubs and admins belong to the organization.</p>
+      </div>
+      <span class="badge badge-neutral">${escapeHtml(directory.organization?.slug || "n/a")}</span>
+    </div>
+    <div class="footer-panels" style="margin-top:0;">
+      <div class="panel" style="background: rgba(255,255,255,0.72);">
+        <h3>Clubs in this organization</h3>
+        <div class="summary-stack" style="margin-top:12px;">${clubList}</div>
+      </div>
+      <div class="panel" style="background: rgba(255,255,255,0.72);">
+        <h3>Organization admins</h3>
+        <div class="summary-stack" style="margin-top:12px;">${adminList}</div>
+      </div>
+    </div>
+  </section>`;
+}
+
 async function renderWorkflowSettingsPage(clubSlug) {
   const readiness = await fetchJson("/app/readiness");
   const selectedClubSlug = clubSlug || readiness?.demo?.clubSlug || "demo-soccer-club";
@@ -2258,6 +2307,9 @@ async function renderWorkflowSettingsPage(clubSlug) {
   const organizationSlug = clubPolicy.organization?.slug || null;
   const organizationPolicy = organizationSlug
     ? await fetchJson(`/workflow-policies/organizations/${encodeURIComponent(organizationSlug)}`)
+    : null;
+  const organizationDirectory = organizationSlug
+    ? await fetchJson(`/organizations/${encodeURIComponent(organizationSlug)}`)
     : null;
   const reviewerEmail = readiness?.demo?.reviewerEmail || "comms@demo-club.local";
 
@@ -2289,6 +2341,7 @@ async function renderWorkflowSettingsPage(clubSlug) {
     </section>
 
     ${renderEffectivePolicySummary(clubPolicy.effectivePolicy)}
+    ${renderOrganizationDirectory(organizationDirectory)}
 
     <section class="workflow-settings-grid">
       ${renderWorkflowPolicyForm({
