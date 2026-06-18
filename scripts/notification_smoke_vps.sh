@@ -55,11 +55,47 @@ audit_rows="$(
       LIMIT ${NOTIFICATION_LIMIT};
     \""
 )"
+expected_submission_rows="$(
+  ssh "${REMOTE_HOST}" \
+    "cd '${REMOTE_DIR}' && docker compose -f docker-compose.vps.yml exec -T postgres psql -U club -d club_content -At -F '|' -c \"
+      SELECT
+        n.id,
+        n.type,
+        COALESCE(n.payload->>'submissionId', ''),
+        COALESCE(email_log.metadata->'delivery'->>'reason', ''),
+        COALESCE(push_log.metadata->'delivery'->>'reason', '')
+      FROM notifications n
+      JOIN users u ON u.id = n.user_id
+      LEFT JOIN LATERAL (
+        SELECT metadata
+        FROM audit_logs
+        WHERE entity_type = 'notification'
+          AND entity_id = n.id
+          AND action LIKE 'notification.email.%'
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) email_log ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT metadata
+        FROM audit_logs
+        WHERE entity_type = 'notification'
+          AND entity_id = n.id
+          AND action LIKE 'notification.push.%'
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) push_log ON TRUE
+      WHERE u.email = '${SUBMITTER_EMAIL}'
+        AND '${EXPECTED_SUBMISSION_ID}' <> ''
+        AND n.payload->>'submissionId' = '${EXPECTED_SUBMISSION_ID}'
+      ORDER BY n.created_at DESC;
+    \""
+)"
 
 node_output="$(
   STATUS_JSON="${status_json}" \
   NOTIFICATIONS_JSON="${notifications_json}" \
   AUDIT_ROWS="${audit_rows}" \
+  EXPECTED_SUBMISSION_ROWS="${expected_submission_rows}" \
   SUBMITTER_EMAIL="${SUBMITTER_EMAIL}" \
   EXPECTED_SUBMISSION_ID="${EXPECTED_SUBMISSION_ID}" \
   EXPECTED_EMAIL_REASON="${EXPECTED_EMAIL_REASON}" \
@@ -70,6 +106,7 @@ const assert = require("node:assert/strict");
 const status = JSON.parse(process.env.STATUS_JSON);
 const notifications = JSON.parse(process.env.NOTIFICATIONS_JSON);
 const rawAuditRows = process.env.AUDIT_ROWS || "";
+const rawExpectedSubmissionRows = process.env.EXPECTED_SUBMISSION_ROWS || "";
 const submitterEmail = process.env.SUBMITTER_EMAIL;
 const expectedSubmissionId = process.env.EXPECTED_SUBMISSION_ID || "";
 const expectedEmailReason = process.env.EXPECTED_EMAIL_REASON || "";
@@ -153,9 +190,24 @@ assert.ok(
 
 let expectedSubmissionNotifications = null;
 if (expectedSubmissionId) {
-  expectedSubmissionNotifications = notifications.items.filter(
-    (item) => item?.payload?.submissionId === expectedSubmissionId
-  );
+  expectedSubmissionNotifications = rawExpectedSubmissionRows
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((row) => {
+      const [notificationId, type, submissionId, emailReason, pushReason] =
+        row.split("|");
+
+      return {
+        id: notificationId,
+        type,
+        payload: {
+          submissionId
+        },
+        emailReason,
+        pushReason
+      };
+    });
 
   assert.ok(
     expectedSubmissionNotifications.length > 0,
@@ -177,16 +229,14 @@ if (expectedSubmissionId) {
   const latestExpectedAudit = auditRows.find(
     (row) =>
       row.notificationId === expectedSubmissionNotifications[0]?.id ||
-      row.notificationId === expectedSubmissionNotifications[expectedSubmissionNotifications.length - 1]?.id
-  );
-  assert.ok(
-    latestExpectedAudit,
-    `expected a matching audit row for submission ${expectedSubmissionId}`
-  );
+      row.notificationId ===
+        expectedSubmissionNotifications[expectedSubmissionNotifications.length - 1]?.id
+  ) || null;
 
   if (expectedEmailReason) {
     assert.equal(
-      latestExpectedAudit.emailReason,
+      expectedSubmissionNotifications[0]?.emailReason ||
+        latestExpectedAudit?.emailReason,
       expectedEmailReason,
       `expected email reason ${expectedEmailReason} for submission ${expectedSubmissionId}`
     );
@@ -194,7 +244,8 @@ if (expectedSubmissionId) {
 
   if (expectedPushReason) {
     assert.equal(
-      latestExpectedAudit.pushReason,
+      expectedSubmissionNotifications[0]?.pushReason ||
+        latestExpectedAudit?.pushReason,
       expectedPushReason,
       `expected push reason ${expectedPushReason} for submission ${expectedSubmissionId}`
     );

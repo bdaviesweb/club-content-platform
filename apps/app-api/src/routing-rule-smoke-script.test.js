@@ -74,7 +74,7 @@ process.exit(0);
 const args = process.argv.slice(2).join(" ");
 
 if (args.includes("SELECT") && args.includes("routing_decision->>'approverRole'")) {
-  process.stdout.write("submission-1|needs_review|approval-1|team_manager|team_manager|routing_rule_content_type|workflow_policy|");
+  process.stdout.write("submission-1|needs_review|approval-1|club_comms|team_manager|team_manager|routing_rule_content_type|workflow_policy|");
   process.exit(0);
 }
 
@@ -128,7 +128,8 @@ test("routing rule smoke proves club overrides win over organization defaults", 
     );
 
     assert.match(output, /Routing rule smoke passed\./);
-    assert.match(output, /approver_role=team_manager/);
+    assert.match(output, /approver_role=club_comms/);
+    assert.match(output, /originally_requested_role=team_manager/);
     assert.match(output, /organization_video_role=club_admin/);
     assert.match(output, /club_video_role=team_manager/);
     assert.match(output, /effective_video_role=team_manager/);
@@ -148,7 +149,7 @@ test("routing rule smoke proves club overrides win over organization defaults", 
     assert.ok(cleanupCall, "Expected cleanup approval action call");
     assert.match(
       cleanupCall.body,
-      /"actedByEmail":"coach@demo-club\.local"/
+      /"actedByEmail":"comms@demo-club\.local"/
     );
   } finally {
     fakeBin.cleanup();
