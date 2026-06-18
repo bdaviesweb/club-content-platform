@@ -89,8 +89,18 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
                 secondApproverRole: "club_admin",
                 secondApprovalContentTypes: ["video"]
               },
-              publishingRule: { destinations: ["internal_feed"] },
-              notificationRule: { push: true }
+              publishingRule: {
+                visibilityDestinations: {
+                  internal: ["internal_feed"],
+                  public: ["internal_feed"]
+                }
+              },
+              notificationRule: {
+                push: true,
+                eventChannels: {
+                  submission_review_started: { email: false }
+                }
+              }
             }
           };
         }
@@ -112,8 +122,18 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
               autoApproveMaxRisk: 0.35,
               autoApprovalRule: { allowedContentTypes: ["photo"] },
               routingRule: { contentTypeApprovers: { video: "club_admin" } },
-              publishingRule: { destinations: ["internal_feed"] },
-              notificationRule: { email: true }
+              publishingRule: {
+                visibilityDestinations: {
+                  internal: ["internal_feed"],
+                  public: ["internal_feed"]
+                }
+              },
+              notificationRule: {
+                email: true,
+                eventChannels: {
+                  submission_published: { email: true }
+                }
+              }
             }
           };
         }
@@ -163,9 +183,15 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /allowedContentTypes/);
     assert.match(body, /Routing rule/);
     assert.match(body, /contentTypeApprovers/);
-    assert.match(body, /Approval rule/);
-    assert.match(body, /requireSecondApprovalForPublic/);
-    assert.match(body, /secondApprovalContentTypes/);
+    assert.match(body, /Second approval for public posts/);
+    assert.match(body, /Second approver role/);
+    assert.match(body, /Second approval content types/);
+    assert.match(body, /Default publishing destinations/);
+    assert.match(body, /Internal visibility destinations/);
+    assert.match(body, /Public visibility destinations/);
+    assert.match(body, /Notification email channel/);
+    assert.match(body, /Review started email/);
+    assert.match(body, /Published push/);
     assert.match(body, /Save club policy/);
     assert.match(body, /Save organization policy/);
     assert.deepEqual(calls, [
@@ -220,7 +246,20 @@ test("POST /ui/workflow-policies/clubs/:slug proxies policy updates to the API",
           allowAgentRouting: false,
           autoApprovalRule: { allowedContentTypes: ["photo"] },
           routingRule: { contentTypeApprovers: { video: "team_manager" } },
-          approvalRule: { requireSecondApprovalForPublic: true }
+          approvalRule: { requireSecondApprovalForPublic: true },
+          publishingRule: {
+            visibilityDestinations: {
+              public: ["internal_feed", "booster_email"]
+            }
+          },
+          notificationRule: {
+            email: true,
+            eventChannels: {
+              submission_review_started: {
+                email: false
+              }
+            }
+          }
         })
       }
     );
@@ -238,7 +277,20 @@ test("POST /ui/workflow-policies/clubs/:slug proxies policy updates to the API",
           allowAgentRouting: false,
           autoApprovalRule: { allowedContentTypes: ["photo"] },
           routingRule: { contentTypeApprovers: { video: "team_manager" } },
-          approvalRule: { requireSecondApprovalForPublic: true }
+          approvalRule: { requireSecondApprovalForPublic: true },
+          publishingRule: {
+            visibilityDestinations: {
+              public: ["internal_feed", "booster_email"]
+            }
+          },
+          notificationRule: {
+            email: true,
+            eventChannels: {
+              submission_review_started: {
+                email: false
+              }
+            }
+          }
         }
       }
     ]);

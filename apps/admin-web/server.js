@@ -82,6 +82,17 @@ function formatPolicyJson(value) {
   }
 }
 
+function formatPolicyList(value) {
+  if (!Array.isArray(value)) {
+    return "";
+  }
+
+  return value
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean)
+    .join(", ");
+}
+
 function renderPolicySelectOptions(options, selectedValue, { allowEmpty = false, emptyLabel = "Inherit organization default" } = {}) {
   const rows = [];
 
@@ -2081,6 +2092,13 @@ function renderPolicyField({
   </label>`;
 }
 
+function renderPolicyRulePreview(label, value) {
+  return `<details class="policy-rule-preview">
+    <summary>${escapeHtml(label)} preview</summary>
+    <pre>${escapeHtml(formatPolicyJson(value || {}))}</pre>
+  </details>`;
+}
+
 function renderWorkflowPolicyForm({
   scopeType,
   scopeSlug,
@@ -2116,9 +2134,55 @@ function renderWorkflowPolicyForm({
       : String(policy.autoApproveMaxRisk);
   const autoApprovalRule = formatPolicyJson(policy?.autoApprovalRule || {});
   const routingRule = formatPolicyJson(policy?.routingRule || {});
-  const approvalRule = formatPolicyJson(policy?.approvalRule || {});
-  const publishingRule = formatPolicyJson(policy?.publishingRule || {});
-  const notificationRule = formatPolicyJson(policy?.notificationRule || {});
+  const approvalRule = policy?.approvalRule || {};
+  const publishingRule = policy?.publishingRule || {};
+  const notificationRule = policy?.notificationRule || {};
+  const approvalRuleSecondApproval =
+    approvalRule?.requireSecondApprovalForPublic === null ||
+    approvalRule?.requireSecondApprovalForPublic === undefined
+      ? null
+      : String(Boolean(approvalRule.requireSecondApprovalForPublic));
+  const approvalRuleSecondApproverRole = approvalRule?.secondApproverRole ?? null;
+  const approvalRuleSecondApprovalContentTypes = formatPolicyList(
+    approvalRule?.secondApprovalContentTypes
+  );
+  const publishingRuleDestinations = formatPolicyList(
+    publishingRule?.destinations
+  );
+  const publishingRuleInternalDestinations = formatPolicyList(
+    publishingRule?.visibilityDestinations?.internal
+  );
+  const publishingRulePublicDestinations = formatPolicyList(
+    publishingRule?.visibilityDestinations?.public
+  );
+  const notificationRuleEmail =
+    notificationRule?.email === null || notificationRule?.email === undefined
+      ? null
+      : String(Boolean(notificationRule.email));
+  const notificationRulePush =
+    notificationRule?.push === null || notificationRule?.push === undefined
+      ? null
+      : String(Boolean(notificationRule.push));
+  const reviewStartedEmail =
+    notificationRule?.eventChannels?.submission_review_started?.email === null ||
+    notificationRule?.eventChannels?.submission_review_started?.email === undefined
+      ? null
+      : String(Boolean(notificationRule.eventChannels.submission_review_started.email));
+  const reviewStartedPush =
+    notificationRule?.eventChannels?.submission_review_started?.push === null ||
+    notificationRule?.eventChannels?.submission_review_started?.push === undefined
+      ? null
+      : String(Boolean(notificationRule.eventChannels.submission_review_started.push));
+  const publishedEmail =
+    notificationRule?.eventChannels?.submission_published?.email === null ||
+    notificationRule?.eventChannels?.submission_published?.email === undefined
+      ? null
+      : String(Boolean(notificationRule.eventChannels.submission_published.email));
+  const publishedPush =
+    notificationRule?.eventChannels?.submission_published?.push === null ||
+    notificationRule?.eventChannels?.submission_published?.push === undefined
+      ? null
+      : String(Boolean(notificationRule.eventChannels.submission_published.push));
 
   return `<section class="panel workflow-form-panel">
     <div class="section-header">
@@ -2200,23 +2264,104 @@ function renderWorkflowPolicyForm({
         input: `<textarea name="routingRule" rows="8" spellcheck="false">${escapeHtml(routingRule)}</textarea>`
       })}
       ${renderPolicyField({
-        label: "Approval rule JSON",
-        name: "approvalRule",
-        helper: allowInheritance ? "Use an empty object to set a club-specific approval chain, or clear the field to inherit." : "Stored for secondary approval and escalation logic.",
-        input: `<textarea name="approvalRule" rows="7" spellcheck="false">${escapeHtml(approvalRule)}</textarea>`
+        label: "Second approval for public posts",
+        name: "approvalRuleRequireSecondApproval",
+        helper: allowInheritance ? "Leave blank to inherit the organization approval chain." : "Require a second reviewer before public content is published.",
+        input: `<select name="approvalRuleRequireSecondApproval">${renderPolicySelectOptions(booleanOptions, approvalRuleSecondApproval, {
+          allowEmpty: true,
+          emptyLabel: allowInheritance ? "Inherit organization rule" : "Leave unset"
+        })}</select>`
       })}
       ${renderPolicyField({
-        label: "Publishing rule JSON",
-        name: "publishingRule",
-        helper: allowInheritance ? "Use an empty object to set a club-specific rule, or clear the field to inherit." : "Stored for downstream destination and publishing logic.",
-        input: `<textarea name="publishingRule" rows="8" spellcheck="false">${escapeHtml(publishingRule)}</textarea>`
+        label: "Second approver role",
+        name: "approvalRuleSecondApproverRole",
+        helper: allowInheritance ? "Leave blank to inherit the organization secondary reviewer." : "Falls back to club admin if left unset.",
+        input: `<select name="approvalRuleSecondApproverRole">${renderPolicySelectOptions(roleOptions, approvalRuleSecondApproverRole, {
+          allowEmpty: true,
+          emptyLabel: allowInheritance ? "Inherit organization role" : "Leave unset"
+        })}</select>`
       })}
       ${renderPolicyField({
-        label: "Notification rule JSON",
-        name: "notificationRule",
-        helper: allowInheritance ? "Use an empty object to set a club-specific rule, or clear the field to inherit." : "Stored for downstream delivery and escalation logic.",
-        input: `<textarea name="notificationRule" rows="8" spellcheck="false">${escapeHtml(notificationRule)}</textarea>`
+        label: "Second approval content types",
+        name: "approvalRuleSecondApprovalContentTypes",
+        helper: "Comma-separated content types such as video, mixed. Leave blank to apply the public rule to every content type.",
+        input: `<input name="approvalRuleSecondApprovalContentTypes" type="text" value="${escapeHtml(approvalRuleSecondApprovalContentTypes)}" placeholder="video, mixed" />`
       })}
+      ${renderPolicyRulePreview("Approval rule", approvalRule)}
+      ${renderPolicyField({
+        label: "Default publishing destinations",
+        name: "publishingRuleDestinations",
+        helper: "Comma-separated destination types used when no visibility-specific rule matches.",
+        input: `<input name="publishingRuleDestinations" type="text" value="${escapeHtml(publishingRuleDestinations)}" placeholder="internal_feed, booster_email" />`
+      })}
+      ${renderPolicyField({
+        label: "Internal visibility destinations",
+        name: "publishingRuleInternalDestinations",
+        helper: "Comma-separated destination types for internal submissions.",
+        input: `<input name="publishingRuleInternalDestinations" type="text" value="${escapeHtml(publishingRuleInternalDestinations)}" placeholder="internal_feed" />`
+      })}
+      ${renderPolicyField({
+        label: "Public visibility destinations",
+        name: "publishingRulePublicDestinations",
+        helper: "Comma-separated destination types for public submissions.",
+        input: `<input name="publishingRulePublicDestinations" type="text" value="${escapeHtml(publishingRulePublicDestinations)}" placeholder="internal_feed, booster_email" />`
+      })}
+      ${renderPolicyRulePreview("Publishing rule", publishingRule)}
+      ${renderPolicyField({
+        label: "Notification email channel",
+        name: "notificationRuleEmail",
+        helper: allowInheritance ? "Leave blank to inherit the organization default notification channel." : "Turns submission email updates on or off overall.",
+        input: `<select name="notificationRuleEmail">${renderPolicySelectOptions(booleanOptions, notificationRuleEmail, {
+          allowEmpty: true,
+          emptyLabel: allowInheritance ? "Inherit organization channel" : "Leave unset"
+        })}</select>`
+      })}
+      ${renderPolicyField({
+        label: "Notification push channel",
+        name: "notificationRulePush",
+        helper: allowInheritance ? "Leave blank to inherit the organization default push setting." : "Turns submission push updates on or off overall.",
+        input: `<select name="notificationRulePush">${renderPolicySelectOptions(booleanOptions, notificationRulePush, {
+          allowEmpty: true,
+          emptyLabel: allowInheritance ? "Inherit organization channel" : "Leave unset"
+        })}</select>`
+      })}
+      ${renderPolicyField({
+        label: "Review started email",
+        name: "notificationRuleReviewStartedEmail",
+        helper: "Optional event-specific override for the review-started notification.",
+        input: `<select name="notificationRuleReviewStartedEmail">${renderPolicySelectOptions(booleanOptions, reviewStartedEmail, {
+          allowEmpty: true,
+          emptyLabel: allowInheritance ? "Inherit organization event rule" : "Leave unset"
+        })}</select>`
+      })}
+      ${renderPolicyField({
+        label: "Review started push",
+        name: "notificationRuleReviewStartedPush",
+        helper: "Optional event-specific override for the review-started notification.",
+        input: `<select name="notificationRuleReviewStartedPush">${renderPolicySelectOptions(booleanOptions, reviewStartedPush, {
+          allowEmpty: true,
+          emptyLabel: allowInheritance ? "Inherit organization event rule" : "Leave unset"
+        })}</select>`
+      })}
+      ${renderPolicyField({
+        label: "Published email",
+        name: "notificationRulePublishedEmail",
+        helper: "Optional event-specific override for the published notification.",
+        input: `<select name="notificationRulePublishedEmail">${renderPolicySelectOptions(booleanOptions, publishedEmail, {
+          allowEmpty: true,
+          emptyLabel: allowInheritance ? "Inherit organization event rule" : "Leave unset"
+        })}</select>`
+      })}
+      ${renderPolicyField({
+        label: "Published push",
+        name: "notificationRulePublishedPush",
+        helper: "Optional event-specific override for the published notification.",
+        input: `<select name="notificationRulePublishedPush">${renderPolicySelectOptions(booleanOptions, publishedPush, {
+          allowEmpty: true,
+          emptyLabel: allowInheritance ? "Inherit organization event rule" : "Leave unset"
+        })}</select>`
+      })}
+      ${renderPolicyRulePreview("Notification rule", notificationRule)}
       <div class="policy-actions">
         <button type="submit" class="button-primary">Save ${escapeHtml(scopeType)} policy</button>
         <span class="subtle policy-status" data-policy-status>Ready</span>
@@ -2419,6 +2564,107 @@ async function renderWorkflowSettingsPage(clubSlug) {
         return JSON.parse(trimmed);
       }
 
+      function parseCommaList(value) {
+        return String(value || '')
+          .split(',')
+          .map((entry) => entry.trim())
+          .filter(Boolean);
+      }
+
+      function parseRuleBoolean(value) {
+        if (value === '') {
+          return undefined;
+        }
+        return value === 'true';
+      }
+
+      function finalizeRuleObject(rule, allowBlankAsNull) {
+        return Object.keys(rule).length ? rule : (allowBlankAsNull ? null : {});
+      }
+
+      function buildApprovalRulePayload(formData, allowBlankAsNull) {
+        const rule = {};
+        const requireSecondApproval = parseRuleBoolean(String(formData.get('approvalRuleRequireSecondApproval') || ''));
+        const secondApproverRole = parseOptionalRole(String(formData.get('approvalRuleSecondApproverRole') || ''));
+        const secondApprovalContentTypesRaw = String(formData.get('approvalRuleSecondApprovalContentTypes') || '').trim();
+
+        if (requireSecondApproval !== undefined) {
+          rule.requireSecondApprovalForPublic = requireSecondApproval;
+        }
+        if (secondApproverRole !== null) {
+          rule.secondApproverRole = secondApproverRole;
+        }
+        if (secondApprovalContentTypesRaw) {
+          rule.secondApprovalContentTypes = parseCommaList(secondApprovalContentTypesRaw);
+        }
+
+        return finalizeRuleObject(rule, allowBlankAsNull);
+      }
+
+      function buildPublishingRulePayload(formData, allowBlankAsNull) {
+        const rule = {};
+        const destinationsRaw = String(formData.get('publishingRuleDestinations') || '').trim();
+        const internalRaw = String(formData.get('publishingRuleInternalDestinations') || '').trim();
+        const publicRaw = String(formData.get('publishingRulePublicDestinations') || '').trim();
+        const visibilityDestinations = {};
+
+        if (destinationsRaw) {
+          rule.destinations = parseCommaList(destinationsRaw);
+        }
+        if (internalRaw) {
+          visibilityDestinations.internal = parseCommaList(internalRaw);
+        }
+        if (publicRaw) {
+          visibilityDestinations.public = parseCommaList(publicRaw);
+        }
+        if (Object.keys(visibilityDestinations).length) {
+          rule.visibilityDestinations = visibilityDestinations;
+        }
+
+        return finalizeRuleObject(rule, allowBlankAsNull);
+      }
+
+      function buildNotificationRulePayload(formData, allowBlankAsNull) {
+        const rule = {};
+        const email = parseRuleBoolean(String(formData.get('notificationRuleEmail') || ''));
+        const push = parseRuleBoolean(String(formData.get('notificationRulePush') || ''));
+        const reviewStartedEmail = parseRuleBoolean(String(formData.get('notificationRuleReviewStartedEmail') || ''));
+        const reviewStartedPush = parseRuleBoolean(String(formData.get('notificationRuleReviewStartedPush') || ''));
+        const publishedEmail = parseRuleBoolean(String(formData.get('notificationRulePublishedEmail') || ''));
+        const publishedPush = parseRuleBoolean(String(formData.get('notificationRulePublishedPush') || ''));
+        const eventChannels = {};
+
+        if (email !== undefined) {
+          rule.email = email;
+        }
+        if (push !== undefined) {
+          rule.push = push;
+        }
+        if (reviewStartedEmail !== undefined || reviewStartedPush !== undefined) {
+          eventChannels.submission_review_started = {};
+          if (reviewStartedEmail !== undefined) {
+            eventChannels.submission_review_started.email = reviewStartedEmail;
+          }
+          if (reviewStartedPush !== undefined) {
+            eventChannels.submission_review_started.push = reviewStartedPush;
+          }
+        }
+        if (publishedEmail !== undefined || publishedPush !== undefined) {
+          eventChannels.submission_published = {};
+          if (publishedEmail !== undefined) {
+            eventChannels.submission_published.email = publishedEmail;
+          }
+          if (publishedPush !== undefined) {
+            eventChannels.submission_published.push = publishedPush;
+          }
+        }
+        if (Object.keys(eventChannels).length) {
+          rule.eventChannels = eventChannels;
+        }
+
+        return finalizeRuleObject(rule, allowBlankAsNull);
+      }
+
       async function submitPolicyForm(form) {
         const scopeType = form.dataset.scopeType;
         const scopeSlug = form.dataset.scopeSlug;
@@ -2445,12 +2691,12 @@ async function renderWorkflowSettingsPage(clubSlug) {
               : Number(formData.get('autoApproveMaxRisk')),
             autoApprovalRule: parseOptionalJson(String(formData.get('autoApprovalRule') || ''), allowInheritance),
             routingRule: parseOptionalJson(String(formData.get('routingRule') || ''), allowInheritance),
-            approvalRule: parseOptionalJson(String(formData.get('approvalRule') || ''), allowInheritance),
-            publishingRule: parseOptionalJson(String(formData.get('publishingRule') || ''), allowInheritance),
-            notificationRule: parseOptionalJson(String(formData.get('notificationRule') || ''), allowInheritance)
+            approvalRule: buildApprovalRulePayload(formData, allowInheritance),
+            publishingRule: buildPublishingRulePayload(formData, allowInheritance),
+            notificationRule: buildNotificationRulePayload(formData, allowInheritance)
           };
         } catch (error) {
-          status.textContent = 'Fix the JSON before saving.';
+          status.textContent = 'Fix the policy fields before saving.';
           return;
         }
 
