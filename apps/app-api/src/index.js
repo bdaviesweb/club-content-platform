@@ -26,6 +26,7 @@ import {
   maskPushToken,
   registerPushToken
 } from "./push-tokens.js";
+import { loadApprovalQueue } from "./approval-queue.js";
 import { buildInternalFeedSmokeFilter } from "./feedFilters.js";
 import { loadApprovalRequestDetail } from "./approval-request-detail.js";
 import { loadAppReadiness } from "./app-readiness.js";
@@ -690,36 +691,8 @@ async function handleResubmitSubmission(req, res, submissionId) {
 }
 
 async function handleApprovalQueue(res) {
-  const result = await getPool().query(
-    `
-    SELECT
-      ar.id,
-      ar.state,
-      ar.created_at,
-      s.id AS submission_id,
-      s.status AS submission_status,
-      s.raw_text,
-      s.risk_score,
-      ar.approver_role AS "approverRole",
-      s.routing_decision,
-      u.full_name AS approver_name,
-      rv.summary AS latest_review_summary
-    FROM approval_requests ar
-    JOIN submissions s ON s.id = ar.submission_id
-    JOIN users u ON u.id = ar.approver_user_id
-    LEFT JOIN LATERAL (
-      SELECT summary
-      FROM review_runs
-      WHERE submission_id = s.id
-      ORDER BY created_at DESC
-      LIMIT 1
-    ) rv ON TRUE
-    WHERE ar.state = 'pending'
-    ORDER BY ar.created_at ASC
-    `
-  );
-
-  sendJson(res, 200, { items: result.rows });
+  const items = await loadApprovalQueue({ pool: getPool() });
+  sendJson(res, 200, { items });
 }
 
 async function handleApprovalRequestDetail(res, approvalRequestId) {
