@@ -77,6 +77,11 @@ fi
 
 echo
 echo "---"
+echo "Running public second approval smoke"
+run_checked_step "Public second approval smoke" env REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/public_second_approval_smoke_vps.sh
+
+echo
+echo "---"
 echo "Running notification status smoke"
 run_checked_step "Notification status smoke" env REMOTE_HOST="${REMOTE_HOST}" ./scripts/notification_status_smoke_vps.sh
 

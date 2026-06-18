@@ -5,6 +5,7 @@ const defaultWorkflowPolicy = {
   allowAgentRouting: true,
   autoApproveInternalLowRisk: false,
   autoApproveMaxRisk: 0.35,
+  approvalRule: {},
   publishingRule: {},
   notificationRule: {}
 };
@@ -104,6 +105,9 @@ function normalizeStoredPolicyRow(row, { scopeType }) {
       row.autoApproveMaxRisk === null || row.autoApproveMaxRisk === undefined
         ? null
         : Number(row.autoApproveMaxRisk),
+    approvalRule: normalizePolicyObject(row.approvalRule, {
+      treatEmptyAsNull
+    }),
     publishingRule: normalizePolicyObject(row.publishingRule, {
       treatEmptyAsNull
     }),
@@ -126,6 +130,7 @@ function buildClubPolicyResponse(row) {
       allowAgentRouting: row.orgAllowAgentRouting,
       autoApproveInternalLowRisk: row.orgAutoApproveInternalLowRisk,
       autoApproveMaxRisk: row.orgAutoApproveMaxRisk,
+      approvalRule: row.orgApprovalRule,
       publishingRule: row.orgPublishingRule,
       notificationRule: row.orgNotificationRule
     },
@@ -140,6 +145,7 @@ function buildClubPolicyResponse(row) {
       allowAgentRouting: row.clubAllowAgentRouting,
       autoApproveInternalLowRisk: row.clubAutoApproveInternalLowRisk,
       autoApproveMaxRisk: row.clubAutoApproveMaxRisk,
+      approvalRule: row.clubApprovalRule,
       publishingRule: row.clubPublishingRule,
       notificationRule: row.clubNotificationRule
     },
@@ -194,6 +200,11 @@ function buildClubPolicyResponse(row) {
         organizationPolicy?.autoApproveMaxRisk,
         defaultWorkflowPolicy.autoApproveMaxRisk
       ),
+      approvalRule: pickOverride(
+        clubPolicy.approvalRule,
+        organizationPolicy?.approvalRule,
+        defaultWorkflowPolicy.approvalRule
+      ),
       publishingRule: pickOverride(
         clubPolicy.publishingRule,
         organizationPolicy?.publishingRule,
@@ -229,6 +240,7 @@ function buildOrganizationPolicyResponse(row) {
         allowAgentRouting: row.orgAllowAgentRouting,
         autoApproveInternalLowRisk: row.orgAutoApproveInternalLowRisk,
         autoApproveMaxRisk: row.orgAutoApproveMaxRisk,
+        approvalRule: row.orgApprovalRule,
         publishingRule: row.orgPublishingRule,
         notificationRule: row.orgNotificationRule
       },
@@ -315,7 +327,7 @@ export function validateWorkflowPolicyPatch(input, { scopeType }) {
     }
   }
 
-  for (const objectField of ["publishingRule", "notificationRule"]) {
+  for (const objectField of ["approvalRule", "publishingRule", "notificationRule"]) {
     if (!Object.hasOwn(input, objectField)) {
       continue;
     }
@@ -329,6 +341,28 @@ export function validateWorkflowPolicyPatch(input, { scopeType }) {
 
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       return { ok: false, error: `${objectField} must be an object` };
+    }
+
+    if (objectField === "approvalRule") {
+      if (
+        Object.hasOwn(value, "requireSecondApprovalForPublic") &&
+        typeof value.requireSecondApprovalForPublic !== "boolean"
+      ) {
+        return {
+          ok: false,
+          error: "approvalRule.requireSecondApprovalForPublic must be a boolean"
+        };
+      }
+
+      if (
+        Object.hasOwn(value, "secondApproverRole") &&
+        !reviewerWorkflowRoles.includes(value.secondApproverRole)
+      ) {
+        return {
+          ok: false,
+          error: `approvalRule.secondApproverRole must be one of ${reviewerWorkflowRoles.join(", ")}`
+        };
+      }
     }
 
     if (
@@ -363,6 +397,7 @@ async function queryClubPolicyRow(client, clubSlug) {
       op.allow_agent_routing AS "orgAllowAgentRouting",
       op.auto_approve_internal_low_risk AS "orgAutoApproveInternalLowRisk",
       op.auto_approve_max_risk AS "orgAutoApproveMaxRisk",
+      op.approval_rule AS "orgApprovalRule",
       op.publishing_rule AS "orgPublishingRule",
       op.notification_rule AS "orgNotificationRule",
       cp.default_approver_role AS "clubDefaultApproverRole",
@@ -371,6 +406,7 @@ async function queryClubPolicyRow(client, clubSlug) {
       cp.allow_agent_routing AS "clubAllowAgentRouting",
       cp.auto_approve_internal_low_risk AS "clubAutoApproveInternalLowRisk",
       cp.auto_approve_max_risk AS "clubAutoApproveMaxRisk",
+      cp.approval_rule AS "clubApprovalRule",
       cp.publishing_rule AS "clubPublishingRule",
       cp.notification_rule AS "clubNotificationRule"
     FROM clubs c
@@ -404,6 +440,7 @@ async function queryClubPolicyRowById(client, clubId) {
       op.allow_agent_routing AS "orgAllowAgentRouting",
       op.auto_approve_internal_low_risk AS "orgAutoApproveInternalLowRisk",
       op.auto_approve_max_risk AS "orgAutoApproveMaxRisk",
+      op.approval_rule AS "orgApprovalRule",
       op.publishing_rule AS "orgPublishingRule",
       op.notification_rule AS "orgNotificationRule",
       cp.default_approver_role AS "clubDefaultApproverRole",
@@ -412,6 +449,7 @@ async function queryClubPolicyRowById(client, clubId) {
       cp.allow_agent_routing AS "clubAllowAgentRouting",
       cp.auto_approve_internal_low_risk AS "clubAutoApproveInternalLowRisk",
       cp.auto_approve_max_risk AS "clubAutoApproveMaxRisk",
+      cp.approval_rule AS "clubApprovalRule",
       cp.publishing_rule AS "clubPublishingRule",
       cp.notification_rule AS "clubNotificationRule"
     FROM clubs c
@@ -442,6 +480,7 @@ async function queryOrganizationPolicyRow(client, organizationSlug) {
       op.allow_agent_routing AS "orgAllowAgentRouting",
       op.auto_approve_internal_low_risk AS "orgAutoApproveInternalLowRisk",
       op.auto_approve_max_risk AS "orgAutoApproveMaxRisk",
+      op.approval_rule AS "orgApprovalRule",
       op.publishing_rule AS "orgPublishingRule",
       op.notification_rule AS "orgNotificationRule"
     FROM organizations o
@@ -485,6 +524,21 @@ export async function loadEffectiveNotificationRuleForClubId(pool, clubId) {
   }
 
   return buildClubPolicyResponse(row).effectivePolicy.notificationRule || {};
+}
+
+export async function loadEffectiveApprovalRuleForClubId(pool, clubId) {
+  const normalizedClubId = String(clubId || "").trim();
+
+  if (!normalizedClubId) {
+    return {};
+  }
+
+  const row = await queryClubPolicyRowById(pool, normalizedClubId);
+  if (!row) {
+    return defaultWorkflowPolicy.approvalRule;
+  }
+
+  return buildClubPolicyResponse(row).effectivePolicy.approvalRule || {};
 }
 
 export async function loadOrganizationDirectory(pool, organizationSlug) {
@@ -668,6 +722,11 @@ export async function updateWorkflowPolicyScope(
         patch,
         "autoApproveMaxRisk"
       ),
+      approvalRule: applyPatchValue(
+        currentClubPolicy.approvalRule ?? null,
+        patch,
+        "approvalRule"
+      ),
       publishingRule: applyPatchValue(
         currentClubPolicy.publishingRule ?? null,
         patch,
@@ -690,11 +749,12 @@ export async function updateWorkflowPolicyScope(
         allow_agent_routing,
         auto_approve_internal_low_risk,
         auto_approve_max_risk,
+        approval_rule,
         publishing_rule,
         notification_rule,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, NOW())
       ON CONFLICT (club_id) DO UPDATE SET
         default_approver_role = EXCLUDED.default_approver_role,
         public_approver_role = EXCLUDED.public_approver_role,
@@ -702,6 +762,7 @@ export async function updateWorkflowPolicyScope(
         allow_agent_routing = EXCLUDED.allow_agent_routing,
         auto_approve_internal_low_risk = EXCLUDED.auto_approve_internal_low_risk,
         auto_approve_max_risk = EXCLUDED.auto_approve_max_risk,
+        approval_rule = EXCLUDED.approval_rule,
         publishing_rule = EXCLUDED.publishing_rule,
         notification_rule = EXCLUDED.notification_rule,
         updated_at = NOW()
@@ -714,6 +775,7 @@ export async function updateWorkflowPolicyScope(
         nextPolicy.allowAgentRouting,
         nextPolicy.autoApproveInternalLowRisk,
         nextPolicy.autoApproveMaxRisk,
+        JSON.stringify(nextPolicy.approvalRule || {}),
         JSON.stringify(nextPolicy.publishingRule || {}),
         JSON.stringify(nextPolicy.notificationRule || {})
       ]
@@ -751,6 +813,11 @@ export async function updateWorkflowPolicyScope(
         patch,
         "autoApproveMaxRisk"
       ),
+      approvalRule: applyPatchValue(
+        currentOrganizationPolicy.approvalRule,
+        patch,
+        "approvalRule"
+      ),
       publishingRule: applyPatchValue(
         currentOrganizationPolicy.publishingRule,
         patch,
@@ -773,11 +840,12 @@ export async function updateWorkflowPolicyScope(
         allow_agent_routing,
         auto_approve_internal_low_risk,
         auto_approve_max_risk,
+        approval_rule,
         publishing_rule,
         notification_rule,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, NOW())
       ON CONFLICT (organization_id) DO UPDATE SET
         default_approver_role = EXCLUDED.default_approver_role,
         public_approver_role = EXCLUDED.public_approver_role,
@@ -785,6 +853,7 @@ export async function updateWorkflowPolicyScope(
         allow_agent_routing = EXCLUDED.allow_agent_routing,
         auto_approve_internal_low_risk = EXCLUDED.auto_approve_internal_low_risk,
         auto_approve_max_risk = EXCLUDED.auto_approve_max_risk,
+        approval_rule = EXCLUDED.approval_rule,
         publishing_rule = EXCLUDED.publishing_rule,
         notification_rule = EXCLUDED.notification_rule,
         updated_at = NOW()
@@ -797,6 +866,7 @@ export async function updateWorkflowPolicyScope(
         nextPolicy.allowAgentRouting,
         nextPolicy.autoApproveInternalLowRisk,
         nextPolicy.autoApproveMaxRisk,
+        JSON.stringify(nextPolicy.approvalRule || {}),
         JSON.stringify(nextPolicy.publishingRule || {}),
         JSON.stringify(nextPolicy.notificationRule || {})
       ]

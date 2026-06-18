@@ -6,6 +6,7 @@ import {
   choosePolicyApproverRole,
   defaultWorkflowPolicy,
   loadEffectiveWorkflowPolicy,
+  shouldRequireSecondApproval,
   shouldAutoApproveSubmission
 } from "./workflow-policy.js";
 
@@ -27,6 +28,7 @@ test("loads club workflow policy overrides ahead of organization defaults", asyn
               orgAllowAgentRouting: true,
               orgAutoApproveInternalLowRisk: false,
               orgAutoApproveMaxRisk: "0.35",
+              orgApprovalRule: { requireSecondApprovalForPublic: true, secondApproverRole: "club_admin" },
               orgPublishingRule: { mode: "internal" },
               orgNotificationRule: { email: true },
               clubDefaultApproverRole: "club_admin",
@@ -35,6 +37,7 @@ test("loads club workflow policy overrides ahead of organization defaults", asyn
               clubAllowAgentRouting: false,
               clubAutoApproveInternalLowRisk: true,
               clubAutoApproveMaxRisk: "0.20",
+              clubApprovalRule: { requireSecondApprovalForPublic: false },
               clubPublishingRule: { mode: "club-specific" },
               clubNotificationRule: null
             }
@@ -54,6 +57,9 @@ test("loads club workflow policy overrides ahead of organization defaults", asyn
   assert.equal(policy.allowAgentRouting, false);
   assert.equal(policy.autoApproveInternalLowRisk, true);
   assert.equal(policy.autoApproveMaxRisk, 0.2);
+  assert.deepEqual(policy.approvalRule, {
+    requireSecondApprovalForPublic: false
+  });
   assert.deepEqual(policy.publishingRule, { mode: "club-specific" });
   assert.deepEqual(policy.notificationRule, { email: true });
 });
@@ -74,6 +80,10 @@ test("falls back to organization publish and notification rules when club overri
               orgAllowAgentRouting: true,
               orgAutoApproveInternalLowRisk: false,
               orgAutoApproveMaxRisk: "0.35",
+              orgApprovalRule: {
+                requireSecondApprovalForPublic: true,
+                secondApproverRole: "club_admin"
+              },
               orgPublishingRule: { destinations: ["internal_feed"] },
               orgNotificationRule: { email: true, push: false },
               clubDefaultApproverRole: null,
@@ -92,6 +102,10 @@ test("falls back to organization publish and notification rules when club overri
     "club-1"
   );
 
+  assert.deepEqual(policy.approvalRule, {
+    requireSecondApprovalForPublic: true,
+    secondApproverRole: "club_admin"
+  });
   assert.deepEqual(policy.publishingRule, { destinations: ["internal_feed"] });
   assert.deepEqual(policy.notificationRule, { email: true, push: false });
 });
@@ -215,4 +229,37 @@ test("chooses publish destinations from policy and falls back to internal feed",
   assert.deepEqual(choosePublishingDestinationTypes(defaultWorkflowPolicy), [
     "internal_feed"
   ]);
+});
+
+test("requires second approval for public submissions when policy enables it", () => {
+  const policy = {
+    ...defaultWorkflowPolicy,
+    approvalRule: {
+      requireSecondApprovalForPublic: true,
+      secondApproverRole: "club_admin"
+    }
+  };
+
+  assert.deepEqual(
+    shouldRequireSecondApproval({
+      submission: { visibility_target: "public" },
+      policy
+    }),
+    {
+      required: true,
+      reason: "policy_requires_second_public_approval",
+      secondApproverRole: "club_admin"
+    }
+  );
+
+  assert.deepEqual(
+    shouldRequireSecondApproval({
+      submission: { visibility_target: "internal" },
+      policy
+    }),
+    {
+      required: false,
+      reason: "visibility_not_public"
+    }
+  );
 });

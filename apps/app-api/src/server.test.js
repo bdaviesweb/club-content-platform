@@ -1199,7 +1199,9 @@ test("POST /approval-requests/:id/actions approves and enqueues the approved eve
     assert.deepEqual(body, {
       approvalRequestId: "approval-1",
       submissionId: "submission-1",
-      action: "approve"
+      action: "approve",
+      stage: "primary",
+      nextStage: null
     });
     assert.deepEqual(approvalActorCalls, [
       {
@@ -1307,7 +1309,9 @@ test("POST /approval-requests/:id/actions applies club notification policy to su
     assert.deepEqual(body, {
       approvalRequestId: "approval-1",
       submissionId: "submission-1",
-      action: "request_changes"
+      action: "request_changes",
+      stage: "primary",
+      nextStage: null
     });
     assert.deepEqual(approvalActorCalls, [
       {
@@ -1320,6 +1324,129 @@ test("POST /approval-requests/:id/actions applies club notification policy to su
       email: false,
       push: false
     });
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("POST /approval-requests/:id/actions creates a secondary approval for public submissions when policy requires it", async () => {
+  const calls = [];
+  const approvalActorCalls = [];
+  const approvalRuleCalls = [];
+  const approvalActionRunInTransaction = async (fn) =>
+    fn({
+      async query(query, params = []) {
+        calls.push({ query: String(query), params });
+
+        if (String(query).includes("FROM memberships")) {
+          return {
+            rowCount: 1,
+            rows: [{ id: "user-2", role: "club_admin" }]
+          };
+        }
+
+        return { rowCount: 1, rows: [] };
+      }
+    });
+
+  const loadApprovalActor = async (_client, approvalRequestId, actedByEmail) => {
+    approvalActorCalls.push({ approvalRequestId, actedByEmail });
+    return {
+      found: true,
+      authorized: true,
+      actor: { id: "user-1" },
+      approvalRequest: {
+        submission_id: "submission-2",
+        submitted_by_user_id: "submitter-2",
+        club_id: "club-1",
+        team_id: null,
+        visibility_target: "public",
+        stage: "primary"
+      }
+    };
+  };
+
+  const loadApprovalRuleForClubId = async (_client, clubId) => {
+    approvalRuleCalls.push(clubId);
+    return {
+      requireSecondApprovalForPublic: true,
+      secondApproverRole: "club_admin"
+    };
+  };
+
+  let notificationCalled = false;
+  const deliverNotification = async () => {
+    notificationCalled = true;
+  };
+
+  const server = createAppServer({
+    approvalActionRunInTransaction,
+    loadApprovalActor,
+    loadApprovalRuleForClubId,
+    deliverNotification
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/approval-requests/approval-2/actions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "approve",
+        actedByEmail: "reviewer@example.test",
+        notes: "Primary approval complete"
+      })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      approvalRequestId: "approval-2",
+      submissionId: "submission-2",
+      action: "approve",
+      stage: "primary",
+      nextStage: "secondary"
+    });
+    assert.deepEqual(approvalActorCalls, [
+      {
+        approvalRequestId: "approval-2",
+        actedByEmail: "reviewer@example.test"
+      }
+    ]);
+    assert.deepEqual(approvalRuleCalls, ["club-1"]);
+
+    const submissionUpdate = calls.find(({ query }) =>
+      query.includes("UPDATE submissions")
+    );
+    assert.equal(submissionUpdate.params[1], "needs_human_review");
+
+    const secondaryInsert = calls.find(({ query }) =>
+      query.includes("INSERT INTO approval_requests")
+    );
+    assert.ok(secondaryInsert);
+    assert.deepEqual(secondaryInsert.params, [
+      "submission-2",
+      "user-2",
+      "club_admin"
+    ]);
+
+    const secondaryEvent = calls.find(
+      ({ query, params }) =>
+        query.includes("INSERT INTO submission_events") &&
+        params[1] === "submission.approval.requested"
+    );
+    assert.deepEqual(JSON.parse(secondaryEvent.params[2]), {
+      stage: "secondary",
+      approverRole: "club_admin",
+      originallyRequestedRole: "club_admin",
+      previousApprovalRequestId: "approval-2"
+    });
+    assert.equal(notificationCalled, false);
   } finally {
     server.close();
     await once(server, "close");

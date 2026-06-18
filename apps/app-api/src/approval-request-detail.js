@@ -2,6 +2,7 @@ const approvalRequestDetailQuery = `
   SELECT
     ar.id,
     ar.state,
+    ar.stage,
     ar.approver_role,
     ar.created_at,
     ar.updated_at,

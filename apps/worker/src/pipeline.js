@@ -272,9 +272,10 @@ export async function processSubmissionCreated(client, eventRow) {
       submission_id,
       approver_user_id,
       approver_role,
+      stage,
       state
     )
-    VALUES ($1, $2, $3, 'pending')
+    VALUES ($1, $2, $3, 'primary', 'pending')
     `,
     [submission.id, approver.userId, approver.role]
   );
@@ -288,6 +289,7 @@ export async function processSubmissionCreated(client, eventRow) {
       submission.id,
       submissionEvents.approvalRequested,
       JSON.stringify({
+        stage: "primary",
         approverRole: approver.role,
         originallyRequestedRole: approverRole
       })

@@ -271,11 +271,16 @@ test("routes approval requests with the Hermes agent decision", async () => {
           params[2] === "club_admin"
       )
     );
+    const approvalInsert = queries.find(({ sql }) =>
+      sql.includes("INSERT INTO approval_requests")
+    );
+    assert.match(approvalInsert.sql, /stage/);
     assert.ok(
       queries.some(
         ({ sql, params }) =>
           sql.includes("INSERT INTO submission_events") &&
           params[1] === "submission.approval.requested" &&
+          JSON.parse(params[2]).stage === "primary" &&
           JSON.parse(params[2]).originallyRequestedRole === "club_admin"
       )
     );

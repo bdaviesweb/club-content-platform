@@ -21,6 +21,7 @@ test("loads pending approval queue items in created order", async () => {
     {
       id: "approval-1",
       state: "pending",
+      stage: "primary",
       submission_id: "submission-1",
       submission_status: "pending_approval",
       raw_text: "Post 1",
@@ -33,6 +34,7 @@ test("loads pending approval queue items in created order", async () => {
     {
       id: "approval-2",
       state: "pending",
+      stage: "secondary",
       submission_id: "submission-2",
       submission_status: "pending_approval",
       raw_text: "Post 2",

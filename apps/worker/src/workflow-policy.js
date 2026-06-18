@@ -10,6 +10,7 @@ export const defaultWorkflowPolicy = {
   allowAgentRouting: true,
   autoApproveInternalLowRisk: false,
   autoApproveMaxRisk: reviewThresholds.mediumRisk,
+  approvalRule: {},
   publishingRule: {},
   notificationRule: {}
 };
@@ -69,6 +70,7 @@ export async function loadEffectiveWorkflowPolicy(client, clubId) {
       op.allow_agent_routing AS "orgAllowAgentRouting",
       op.auto_approve_internal_low_risk AS "orgAutoApproveInternalLowRisk",
       op.auto_approve_max_risk AS "orgAutoApproveMaxRisk",
+      op.approval_rule AS "orgApprovalRule",
       op.publishing_rule AS "orgPublishingRule",
       op.notification_rule AS "orgNotificationRule",
       cp.default_approver_role AS "clubDefaultApproverRole",
@@ -77,6 +79,7 @@ export async function loadEffectiveWorkflowPolicy(client, clubId) {
       cp.allow_agent_routing AS "clubAllowAgentRouting",
       cp.auto_approve_internal_low_risk AS "clubAutoApproveInternalLowRisk",
       cp.auto_approve_max_risk AS "clubAutoApproveMaxRisk",
+      cp.approval_rule AS "clubApprovalRule",
       cp.publishing_rule AS "clubPublishingRule",
       cp.notification_rule AS "clubNotificationRule"
     FROM clubs c
@@ -131,6 +134,11 @@ export async function loadEffectiveWorkflowPolicy(client, clubId) {
         defaultWorkflowPolicy.autoApproveMaxRisk
       ),
       defaultWorkflowPolicy.autoApproveMaxRisk
+    ),
+    approvalRule: pickOverride(
+      parseOverrideJson(row.clubApprovalRule),
+      parseMaybeJson(row.orgApprovalRule, null),
+      defaultWorkflowPolicy.approvalRule
     ),
     publishingRule: pickOverride(
       parseOverrideJson(row.clubPublishingRule),
@@ -203,4 +211,25 @@ export function choosePublishingDestinationTypes(
   }
 
   return [...new Set(normalized)];
+}
+
+export function shouldRequireSecondApproval({
+  submission,
+  policy = defaultWorkflowPolicy
+}) {
+  const rule = policy?.approvalRule || {};
+
+  if (!rule?.requireSecondApprovalForPublic) {
+    return { required: false, reason: "policy_disabled" };
+  }
+
+  if (submission.visibility_target !== "public") {
+    return { required: false, reason: "visibility_not_public" };
+  }
+
+  return {
+    required: true,
+    reason: "policy_requires_second_public_approval",
+    secondApproverRole: rule.secondApproverRole || "club_admin"
+  };
 }

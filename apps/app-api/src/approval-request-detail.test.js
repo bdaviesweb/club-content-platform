@@ -34,6 +34,7 @@ test("loads approval request detail and enriches submission media", async () => 
           {
             id: approvalRequestId,
             state: "pending",
+            stage: "secondary",
             approver_role: "club_admin",
             submission_id: "submission-1",
             submission_status: "pending_approval",
@@ -76,6 +77,7 @@ test("loads approval request detail and enriches submission media", async () => 
   assert.deepEqual(result, {
     id: approvalRequestId,
     state: "pending",
+    stage: "secondary",
     approver_role: "club_admin",
     submission_id: "submission-1",
     submission_status: "pending_approval",

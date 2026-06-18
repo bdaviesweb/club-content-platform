@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  loadEffectiveApprovalRuleForClubId,
   loadEffectiveNotificationRuleForClubId,
   loadOrganizationDirectory,
   loadWorkflowPolicyScope,
@@ -28,6 +29,10 @@ test("loads club workflow policies with organization fallback detail", async () 
               orgAllowAgentRouting: true,
               orgAutoApproveInternalLowRisk: false,
               orgAutoApproveMaxRisk: "0.35",
+              orgApprovalRule: {
+                requireSecondApprovalForPublic: true,
+                secondApproverRole: "club_admin"
+              },
               orgPublishingRule: { mode: "org" },
               orgNotificationRule: { email: true },
               clubDefaultApproverRole: "club_admin",
@@ -36,6 +41,7 @@ test("loads club workflow policies with organization fallback detail", async () 
               clubAllowAgentRouting: false,
               clubAutoApproveInternalLowRisk: true,
               clubAutoApproveMaxRisk: "0.20",
+              clubApprovalRule: {},
               clubPublishingRule: {},
               clubNotificationRule: { sms: false }
             }
@@ -49,6 +55,11 @@ test("loads club workflow policies with organization fallback detail", async () 
   assert.equal(result.found, true);
   assert.equal(result.organization.slug, "metro");
   assert.equal(result.club.slug, "westside");
+  assert.deepEqual(result.clubPolicy.approvalRule, null);
+  assert.deepEqual(result.effectivePolicy.approvalRule, {
+    requireSecondApprovalForPublic: true,
+    secondApproverRole: "club_admin"
+  });
   assert.deepEqual(result.clubPolicy.publishingRule, null);
   assert.deepEqual(result.effectivePolicy.publishingRule, { mode: "org" });
   assert.deepEqual(result.effectivePolicy.notificationRule, { sms: false });
@@ -83,6 +94,38 @@ test("validates workflow policy patch payloads", () => {
     {
       ok: false,
       error: "allowAgentRouting cannot be null for organization policies"
+    }
+  );
+
+  assert.deepEqual(
+    validateWorkflowPolicyPatch(
+      {
+        approvalRule: {
+          requireSecondApprovalForPublic: true,
+          secondApproverRole: "club_admin"
+        }
+      },
+      { scopeType: "organization" }
+    ),
+    {
+      ok: true,
+      value: {
+        approvalRule: {
+          requireSecondApprovalForPublic: true,
+          secondApproverRole: "club_admin"
+        }
+      }
+    }
+  );
+
+  assert.deepEqual(
+    validateWorkflowPolicyPatch(
+      { approvalRule: { requireSecondApprovalForPublic: "yes" } },
+      { scopeType: "club" }
+    ),
+    {
+      ok: false,
+      error: "approvalRule.requireSecondApprovalForPublic must be a boolean"
     }
   );
 
@@ -134,6 +177,10 @@ test("updates club workflow policies with authorized actors and preserves cleara
                 orgAllowAgentRouting: true,
                 orgAutoApproveInternalLowRisk: false,
                 orgAutoApproveMaxRisk: "0.35",
+                orgApprovalRule: {
+                  requireSecondApprovalForPublic: true,
+                  secondApproverRole: "club_admin"
+                },
                 orgPublishingRule: { destinations: ["internal_feed"] },
                 orgNotificationRule: { email: true },
                 clubDefaultApproverRole: null,
@@ -142,6 +189,7 @@ test("updates club workflow policies with authorized actors and preserves cleara
                 clubAllowAgentRouting: null,
                 clubAutoApproveInternalLowRisk: null,
                 clubAutoApproveMaxRisk: null,
+                clubApprovalRule: {},
                 clubPublishingRule: {},
                 clubNotificationRule: {}
               }
@@ -164,6 +212,10 @@ test("updates club workflow policies with authorized actors and preserves cleara
               orgAllowAgentRouting: true,
               orgAutoApproveInternalLowRisk: false,
               orgAutoApproveMaxRisk: "0.35",
+              orgApprovalRule: {
+                requireSecondApprovalForPublic: true,
+                secondApproverRole: "club_admin"
+              },
               orgPublishingRule: { destinations: ["internal_feed"] },
               orgNotificationRule: { email: true },
               clubDefaultApproverRole: "club_admin",
@@ -172,6 +224,7 @@ test("updates club workflow policies with authorized actors and preserves cleara
               clubAllowAgentRouting: false,
               clubAutoApproveInternalLowRisk: true,
               clubAutoApproveMaxRisk: "0.15",
+              clubApprovalRule: { requireSecondApprovalForPublic: false },
               clubPublishingRule: {},
               clubNotificationRule: { push: true }
             }
@@ -204,6 +257,7 @@ test("updates club workflow policies with authorized actors and preserves cleara
       allowAgentRouting: false,
       autoApproveInternalLowRisk: true,
       autoApproveMaxRisk: 0.15,
+      approvalRule: { requireSecondApprovalForPublic: false },
       notificationRule: { push: true }
     }
   });
@@ -217,12 +271,19 @@ test("updates club workflow policies with authorized actors and preserves cleara
   assert.deepEqual(result.effectivePolicy.publishingRule, {
     destinations: ["internal_feed"]
   });
+  assert.deepEqual(result.clubPolicy.approvalRule, {
+    requireSecondApprovalForPublic: false
+  });
   assert.deepEqual(result.clubPolicy.notificationRule, { push: true });
   assert.equal(upsert.params[1], "club_admin");
   assert.equal(upsert.params[4], false);
   assert.equal(upsert.params[5], true);
   assert.equal(upsert.params[6], 0.15);
-  assert.equal(upsert.params[7], JSON.stringify({}));
+  assert.equal(
+    upsert.params[7],
+    JSON.stringify({ requireSecondApprovalForPublic: false })
+  );
+  assert.equal(upsert.params[8], JSON.stringify({}));
 });
 
 test("loads organization directory with clubs and organization admins", async () => {
@@ -245,6 +306,10 @@ test("loads organization directory with clubs and organization admins", async ()
                 orgAllowAgentRouting: true,
                 orgAutoApproveInternalLowRisk: false,
                 orgAutoApproveMaxRisk: "0.35",
+                orgApprovalRule: {
+                  requireSecondApprovalForPublic: true,
+                  secondApproverRole: "club_admin"
+                },
                 orgPublishingRule: {},
                 orgNotificationRule: {}
               }
@@ -307,6 +372,10 @@ test("loads effective notification rule for a club id with club override precede
                 orgAllowAgentRouting: true,
                 orgAutoApproveInternalLowRisk: false,
                 orgAutoApproveMaxRisk: "0.35",
+                orgApprovalRule: {
+                  requireSecondApprovalForPublic: true,
+                  secondApproverRole: "club_admin"
+                },
                 orgPublishingRule: { destinations: ["internal_feed"] },
                 orgNotificationRule: { email: true, push: true },
                 clubDefaultApproverRole: null,
@@ -315,6 +384,7 @@ test("loads effective notification rule for a club id with club override precede
                 clubAllowAgentRouting: null,
                 clubAutoApproveInternalLowRisk: null,
                 clubAutoApproveMaxRisk: null,
+                clubApprovalRule: {},
                 clubPublishingRule: {},
                 clubNotificationRule: { email: false, push: false }
               }
@@ -329,4 +399,53 @@ test("loads effective notification rule for a club id with club override precede
   );
 
   assert.deepEqual(result, { email: false, push: false });
+});
+
+test("loads effective approval rule for a club id with club override precedence", async () => {
+  const result = await loadEffectiveApprovalRuleForClubId(
+    {
+      async query(sql) {
+        if (String(sql).includes("WHERE c.id = $1")) {
+          return {
+            rows: [
+              {
+                clubId: "club-1",
+                clubSlug: "westside",
+                clubName: "Westside",
+                organizationId: "org-1",
+                organizationSlug: "metro",
+                organizationName: "Metro",
+                orgDefaultApproverRole: "team_manager",
+                orgPublicApproverRole: "club_comms",
+                orgMediumRiskApproverRole: "club_admin",
+                orgAllowAgentRouting: true,
+                orgAutoApproveInternalLowRisk: false,
+                orgAutoApproveMaxRisk: "0.35",
+                orgApprovalRule: {
+                  requireSecondApprovalForPublic: true,
+                  secondApproverRole: "club_admin"
+                },
+                orgPublishingRule: { destinations: ["internal_feed"] },
+                orgNotificationRule: { email: true, push: true },
+                clubDefaultApproverRole: null,
+                clubPublicApproverRole: null,
+                clubMediumRiskApproverRole: null,
+                clubAllowAgentRouting: null,
+                clubAutoApproveInternalLowRisk: null,
+                clubAutoApproveMaxRisk: null,
+                clubApprovalRule: { requireSecondApprovalForPublic: false },
+                clubPublishingRule: {},
+                clubNotificationRule: { email: false, push: false }
+              }
+            ]
+          };
+        }
+
+        throw new Error(`Unexpected query: ${sql}`);
+      }
+    },
+    "club-1"
+  );
+
+  assert.deepEqual(result, { requireSecondApprovalForPublic: false });
 });

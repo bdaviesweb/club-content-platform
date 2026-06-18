@@ -37,6 +37,7 @@ import { parseResendWebhook } from "./notification-webhook-verification.js";
 import { loadSubmissionRecord } from "./submission-record.js";
 import { loadWorkflowEvents } from "./workflow-events.js";
 import {
+  loadEffectiveApprovalRuleForClubId,
   loadEffectiveNotificationRuleForClubId,
   loadOrganizationDirectory,
   loadWorkflowPolicyScope,
@@ -104,6 +105,41 @@ function normalizeOptionalString(value) {
 
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+
+async function findApprovalStageApprover(client, clubId, teamId, preferredRole) {
+  const fallbackRoles = [preferredRole, "club_comms", "club_admin"];
+
+  for (const role of fallbackRoles) {
+    const result = await client.query(
+      `
+      SELECT u.id
+      FROM memberships m
+      JOIN users u ON u.id = m.user_id
+      WHERE m.club_id = $1
+        AND m.role = $2
+        AND (
+          m.team_id IS NULL
+          OR m.team_id = $3
+          OR $3::uuid IS NULL
+        )
+      ORDER BY
+        CASE WHEN m.role = $2 THEN 0 ELSE 1 END,
+        m.created_at ASC
+      LIMIT 1
+      `,
+      [clubId, role, teamId]
+    );
+
+    if (result.rowCount) {
+      return {
+        userId: result.rows[0].id,
+        role
+      };
+    }
+  }
+
+  return null;
 }
 
 function enrichMediaAsset(item) {
@@ -832,7 +868,8 @@ async function handleApprovalAction(
     runInTransaction = withTransaction,
     loadApprovalActor = loadAuthorizedApprovalActor,
     deliverNotification = createAndDeliverNotification,
-    loadNotificationRuleForClubId = loadEffectiveNotificationRuleForClubId
+    loadNotificationRuleForClubId = loadEffectiveNotificationRuleForClubId,
+    loadApprovalRuleForClubId = loadEffectiveApprovalRuleForClubId
   } = {}
 ) {
   const body = await readJson(req);
@@ -869,6 +906,10 @@ async function handleApprovalAction(
     }
 
     const { actor, approvalRequest } = authorization;
+    const approvalRule = await loadApprovalRuleForClubId(
+      client,
+      approvalRequest.club_id
+    );
     const notificationPolicy = await loadNotificationRuleForClubId(
       client,
       approvalRequest.club_id
@@ -885,6 +926,14 @@ async function handleApprovalAction(
       reject: "rejected",
       request_changes: "needs_metadata"
     };
+
+    const requiresSecondApproval =
+      normalizedAction === "approve" &&
+      approvalRequest.stage !== "secondary" &&
+      approvalRequest.visibility_target === "public" &&
+      approvalRule?.requireSecondApprovalForPublic === true;
+    const secondApproverRole =
+      approvalRule?.secondApproverRole || "club_admin";
 
     await client.query(
       `
@@ -914,10 +963,63 @@ async function handleApprovalAction(
       SET status = $2, updated_at = NOW()
       WHERE id = $1
       `,
-      [approvalRequest.submission_id, submissionStatusMap[normalizedAction]]
+      [
+        approvalRequest.submission_id,
+        requiresSecondApproval
+          ? "needs_human_review"
+          : submissionStatusMap[normalizedAction]
+      ]
     );
 
-    if (normalizedAction === "approve") {
+    if (requiresSecondApproval) {
+      const secondaryApprover = await findApprovalStageApprover(
+        client,
+        approvalRequest.club_id,
+        approvalRequest.team_id,
+        secondApproverRole
+      );
+
+      if (!secondaryApprover) {
+        throw new Error(
+          `No approver found for secondary approval role ${secondApproverRole}`
+        );
+      }
+
+      await client.query(
+        `
+        INSERT INTO approval_requests (
+          submission_id,
+          approver_user_id,
+          approver_role,
+          stage,
+          state
+        )
+        VALUES ($1, $2, $3, 'secondary', 'pending')
+        `,
+        [
+          approvalRequest.submission_id,
+          secondaryApprover.userId,
+          secondaryApprover.role
+        ]
+      );
+
+      await client.query(
+        `
+        INSERT INTO submission_events (submission_id, event_name, payload)
+        VALUES ($1, $2, $3::jsonb)
+        `,
+        [
+          approvalRequest.submission_id,
+          submissionEvents.approvalRequested,
+          JSON.stringify({
+            stage: "secondary",
+            approverRole: secondaryApprover.role,
+            originallyRequestedRole: secondApproverRole,
+            previousApprovalRequestId: approvalRequestId
+          })
+        ]
+      );
+    } else if (normalizedAction === "approve") {
       await client.query(
         `
         INSERT INTO submission_events (submission_id, event_name, payload)
@@ -926,7 +1028,10 @@ async function handleApprovalAction(
         [
           approvalRequest.submission_id,
           submissionEvents.approved,
-          JSON.stringify({ approvalRequestId })
+          JSON.stringify({
+            approvalRequestId,
+            stage: approvalRequest.stage || "primary"
+          })
         ]
       );
     }
@@ -940,7 +1045,11 @@ async function handleApprovalAction(
         actor.id,
         approvalRequestId,
         normalizedAction,
-        JSON.stringify({ notes: notes || null, reasonCode: reasonCode || null })
+        JSON.stringify({
+          notes: notes || null,
+          reasonCode: reasonCode || null,
+          stage: approvalRequest.stage || "primary"
+        })
       ]
     );
 
@@ -966,7 +1075,9 @@ async function handleApprovalAction(
     return {
       approvalRequestId,
       submissionId: approvalRequest.submission_id,
-      action: normalizedAction
+      action: normalizedAction,
+      stage: approvalRequest.stage || "primary",
+      nextStage: requiresSecondApproval ? "secondary" : null
     };
   });
 
@@ -1364,6 +1475,7 @@ export function createAppServer({
   loadApprovalActor,
   deliverNotification,
   loadNotificationRuleForClubId,
+  loadApprovalRuleForClubId,
   registerPushTokenFn,
   buildNotificationDeliveryStatusFn,
   parseWebhook,
@@ -1597,7 +1709,9 @@ export function createAppServer({
         loadApprovalActor: loadApprovalActor || loadAuthorizedApprovalActor,
         deliverNotification: deliverNotification || createAndDeliverNotification,
         loadNotificationRuleForClubId:
-          loadNotificationRuleForClubId || loadEffectiveNotificationRuleForClubId
+          loadNotificationRuleForClubId || loadEffectiveNotificationRuleForClubId,
+        loadApprovalRuleForClubId:
+          loadApprovalRuleForClubId || loadEffectiveApprovalRuleForClubId
       });
       return;
     }

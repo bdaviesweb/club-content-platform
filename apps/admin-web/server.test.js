@@ -67,6 +67,7 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
               allowAgentRouting: false,
               autoApproveInternalLowRisk: true,
               autoApproveMaxRisk: 0.15,
+              approvalRule: { requireSecondApprovalForPublic: false },
               publishingRule: {},
               notificationRule: { push: true }
             },
@@ -77,6 +78,10 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
               allowAgentRouting: false,
               autoApproveInternalLowRisk: true,
               autoApproveMaxRisk: 0.15,
+              approvalRule: {
+                requireSecondApprovalForPublic: true,
+                secondApproverRole: "club_admin"
+              },
               publishingRule: { destinations: ["internal_feed"] },
               notificationRule: { push: true }
             }
@@ -145,6 +150,8 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Metro Sports/);
     assert.match(body, /Organization directory/);
     assert.match(body, /org-admin@westside.test/);
+    assert.match(body, /Approval rule/);
+    assert.match(body, /requireSecondApprovalForPublic/);
     assert.match(body, /Save club policy/);
     assert.match(body, /Save organization policy/);
     assert.deepEqual(calls, [
@@ -196,7 +203,8 @@ test("POST /ui/workflow-policies/clubs/:slug proxies policy updates to the API",
         body: JSON.stringify({
           actorEmail: "admin@example.test",
           defaultApproverRole: "club_admin",
-          allowAgentRouting: false
+          allowAgentRouting: false,
+          approvalRule: { requireSecondApprovalForPublic: true }
         })
       }
     );
@@ -211,7 +219,8 @@ test("POST /ui/workflow-policies/clubs/:slug proxies policy updates to the API",
         body: {
           actorEmail: "admin@example.test",
           defaultApproverRole: "club_admin",
-          allowAgentRouting: false
+          allowAgentRouting: false,
+          approvalRule: { requireSecondApprovalForPublic: true }
         }
       }
     ]);
