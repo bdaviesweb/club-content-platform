@@ -61,6 +61,11 @@ REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/smoke_vps.sh
 
 echo
 echo "---"
+echo "Running routing rule smoke"
+run_checked_step "Routing rule smoke" env REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/routing_rule_smoke_vps.sh
+
+echo
+echo "---"
 echo "Running approval publish smoke"
 approval_publish_output="$(
   REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/approval_publish_smoke_vps.sh

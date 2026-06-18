@@ -202,6 +202,7 @@ test("routes approval requests with the Hermes agent decision", async () => {
               orgAllowAgentRouting: true,
               orgAutoApproveInternalLowRisk: false,
               orgAutoApproveMaxRisk: "0.35",
+              orgRoutingRule: {},
               orgPublishingRule: {},
               orgNotificationRule: {},
               clubDefaultApproverRole: null,
@@ -210,6 +211,7 @@ test("routes approval requests with the Hermes agent decision", async () => {
               clubAllowAgentRouting: true,
               clubAutoApproveInternalLowRisk: false,
               clubAutoApproveMaxRisk: null,
+              clubRoutingRule: {},
               clubPublishingRule: {},
               clubNotificationRule: {}
             }
@@ -263,6 +265,7 @@ test("routes approval requests with the Hermes agent decision", async () => {
       routingDecision.agentRationale,
       "Medical context needs senior club review."
     );
+    assert.equal(routingDecision.localPolicySource, "workflow_policy_medium_risk");
 
     assert.ok(
       queries.some(
@@ -299,6 +302,255 @@ test("routes approval requests with the Hermes agent decision", async () => {
 
     globalThis.fetch = originalFetch;
   }
+});
+
+test("prefers explicit content-type routing rules over Hermes agent overrides", async () => {
+  const originalUrl = process.env.HERMES_REVIEW_AGENT_URL;
+  const originalApiKey = process.env.HERMES_REVIEW_AGENT_API_KEY;
+  const originalFetch = globalThis.fetch;
+  const queries = [];
+  const submission = {
+    id: "submission-video-hermes-1",
+    club_id: "club-1",
+    submitted_by_user_id: "submitter-1",
+    raw_text: "Video recap with player interviews.",
+    visibility_target: "internal",
+    content_type: "video",
+    submitter_name: "Coach"
+  };
+
+  process.env.HERMES_REVIEW_AGENT_URL = "https://hermes.example.test/review";
+  process.env.HERMES_REVIEW_AGENT_API_KEY = "secret";
+  globalThis.fetch = async () => ({
+    ok: true,
+    async json() {
+      return {
+        id: "run-video-1",
+        model: "hermes-v1",
+        review: {
+          risk_level: "medium",
+          confidence: 0.8,
+          summary: "Agent would normally choose club comms.",
+          caption_draft: "Video recap",
+          routing_decision: {
+            approver_role: "club_comms",
+            rationale: "Agent suggests comms review."
+          },
+          findings: []
+        }
+      };
+    }
+  });
+
+  const client = {
+    async query(sql, params = []) {
+      queries.push({ sql, params });
+
+      if (sql.includes("FROM submissions s")) {
+        return { rowCount: 1, rows: [submission] };
+      }
+
+      if (sql.includes("FROM clubs c")) {
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              clubId: "club-1",
+              organizationId: "org-1",
+              orgDefaultApproverRole: "team_manager",
+              orgPublicApproverRole: "club_comms",
+              orgMediumRiskApproverRole: "club_comms",
+              orgAllowAgentRouting: true,
+              orgAutoApproveInternalLowRisk: false,
+              orgAutoApproveMaxRisk: "0.35",
+              orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
+              orgPublishingRule: {},
+              orgNotificationRule: {},
+              clubDefaultApproverRole: null,
+              clubPublicApproverRole: null,
+              clubMediumRiskApproverRole: null,
+              clubAllowAgentRouting: null,
+              clubAutoApproveInternalLowRisk: null,
+              clubAutoApproveMaxRisk: null,
+              clubRoutingRule: {},
+              clubPublishingRule: {},
+              clubNotificationRule: {}
+            }
+          ]
+        };
+      }
+
+      if (sql.includes("INSERT INTO review_runs")) {
+        return { rowCount: 1, rows: [{ id: "review-run-video-hermes-1" }] };
+      }
+
+      if (sql.includes("FROM memberships")) {
+        return { rowCount: 1, rows: [{ id: "approver-video-hermes-1" }] };
+      }
+
+      if (sql.includes("INSERT INTO notifications")) {
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              id: "notification-video-hermes-1",
+              user_id: params[0],
+              type: params[1],
+              payload: JSON.parse(params[2]),
+              created_at: new Date().toISOString()
+            }
+          ]
+        };
+      }
+
+      if (sql.includes("SELECT email, full_name")) {
+        return {
+          rowCount: 1,
+          rows: [{ email: "submitter@example.test", full_name: "Submitter" }]
+        };
+      }
+
+      if (sql.includes("WITH latest_push_state")) {
+        return { rowCount: 0, rows: [] };
+      }
+
+      return { rowCount: 1, rows: [] };
+    }
+  };
+
+  try {
+    await processSubmissionCreated(client, { submission_id: submission.id });
+
+    const update = queries.find(({ sql }) => sql.includes("routing_decision"));
+    const routingDecision = JSON.parse(update.params[4]);
+    assert.equal(routingDecision.approverRole, "club_admin");
+    assert.equal(routingDecision.routingSource, "local_rules");
+    assert.equal(routingDecision.policySource, "routing_rule_content_type");
+    assert.equal(routingDecision.agentRationale, null);
+    assert.equal(routingDecision.localFallbackApproverRole, null);
+  } finally {
+    if (originalUrl === undefined) {
+      delete process.env.HERMES_REVIEW_AGENT_URL;
+    } else {
+      process.env.HERMES_REVIEW_AGENT_URL = originalUrl;
+    }
+
+    if (originalApiKey === undefined) {
+      delete process.env.HERMES_REVIEW_AGENT_API_KEY;
+    } else {
+      process.env.HERMES_REVIEW_AGENT_API_KEY = originalApiKey;
+    }
+
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("routes configured content types to organization-defined approvers", async () => {
+  const queries = [];
+  const submission = {
+    id: "submission-video-1",
+    club_id: "club-1",
+    submitted_by_user_id: "submitter-1",
+    raw_text: "Match highlight clip.",
+    visibility_target: "internal",
+    content_type: "video",
+    submitter_name: "Coach"
+  };
+
+  process.env.REVIEW_PROVIDER_MODE = "disabled";
+
+  const client = {
+    async query(sql, params = []) {
+      queries.push({ sql, params });
+
+      if (sql.includes("FROM submissions s")) {
+        return { rowCount: 1, rows: [submission] };
+      }
+
+      if (sql.includes("FROM clubs c")) {
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              clubId: "club-1",
+              organizationId: "org-1",
+              orgDefaultApproverRole: "team_manager",
+              orgPublicApproverRole: "club_comms",
+              orgMediumRiskApproverRole: "club_comms",
+              orgAllowAgentRouting: false,
+              orgAutoApproveInternalLowRisk: false,
+              orgAutoApproveMaxRisk: "0.35",
+              orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
+              orgPublishingRule: {},
+              orgNotificationRule: {},
+              clubDefaultApproverRole: null,
+              clubPublicApproverRole: null,
+              clubMediumRiskApproverRole: null,
+              clubAllowAgentRouting: null,
+              clubAutoApproveInternalLowRisk: null,
+              clubAutoApproveMaxRisk: null,
+              clubRoutingRule: {},
+              clubPublishingRule: {},
+              clubNotificationRule: {}
+            }
+          ]
+        };
+      }
+
+      if (sql.includes("INSERT INTO review_runs")) {
+        return { rowCount: 1, rows: [{ id: "review-run-video-1" }] };
+      }
+
+      if (sql.includes("FROM memberships")) {
+        return { rowCount: 1, rows: [{ id: "approver-video-1" }] };
+      }
+
+      if (sql.includes("INSERT INTO notifications")) {
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              id: "notification-video-1",
+              user_id: params[0],
+              type: params[1],
+              payload: JSON.parse(params[2]),
+              created_at: new Date().toISOString()
+            }
+          ]
+        };
+      }
+
+      if (sql.includes("SELECT email, full_name")) {
+        return {
+          rowCount: 1,
+          rows: [{ email: "submitter@example.test", full_name: "Submitter" }]
+        };
+      }
+
+      if (sql.includes("WITH latest_push_state")) {
+        return { rowCount: 0, rows: [] };
+      }
+
+      return { rowCount: 1, rows: [] };
+    }
+  };
+
+  await processSubmissionCreated(client, { submission_id: submission.id });
+
+  const update = queries.find(({ sql }) => sql.includes("routing_decision"));
+  const routingDecision = JSON.parse(update.params[4]);
+  assert.equal(routingDecision.approverRole, "club_admin");
+  assert.equal(routingDecision.policySource, "routing_rule_content_type");
+  assert.equal(routingDecision.routingSource, "disabled");
+  assert.equal(routingDecision.localPolicySource, null);
+
+  assert.ok(
+    queries.some(
+      ({ sql, params }) =>
+        sql.includes("INSERT INTO approval_requests") &&
+        params[2] === "club_admin"
+    )
+  );
 });
 
 test("auto-approves low-risk internal submissions when club policy allows it", async () => {
@@ -371,7 +623,7 @@ test("auto-approves low-risk internal submissions when club policy allows it", a
       routingDecision.autoApproveReason,
       "policy_auto_approve_low_risk_internal"
     );
-    assert.equal(routingDecision.policySource, "workflow_policy");
+    assert.equal(routingDecision.policySource, "workflow_policy_default");
 
     assert.equal(
       queries.some(({ sql }) => sql.includes("INSERT INTO approval_requests")),

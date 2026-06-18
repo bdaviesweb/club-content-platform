@@ -2114,6 +2114,7 @@ function renderWorkflowPolicyForm({
     policy?.autoApproveMaxRisk === null || policy?.autoApproveMaxRisk === undefined
       ? ""
       : String(policy.autoApproveMaxRisk);
+  const routingRule = formatPolicyJson(policy?.routingRule || {});
   const approvalRule = formatPolicyJson(policy?.approvalRule || {});
   const publishingRule = formatPolicyJson(policy?.publishingRule || {});
   const notificationRule = formatPolicyJson(policy?.notificationRule || {});
@@ -2186,6 +2187,12 @@ function renderWorkflowPolicyForm({
         input: `<input name="autoApproveMaxRisk" type="number" min="0" max="1" step="0.01" value="${escapeHtml(autoApproveMaxRisk)}" placeholder="${allowInheritance ? "Inherit organization threshold" : "0.35"}" />`
       })}
       ${renderPolicyField({
+        label: "Routing rule JSON",
+        name: "routingRule",
+        helper: allowInheritance ? "Use an empty object to set a club-specific routing rule, or clear the field to inherit." : "Stored for content-type routing and future organization-specific assignment logic.",
+        input: `<textarea name="routingRule" rows="8" spellcheck="false">${escapeHtml(routingRule)}</textarea>`
+      })}
+      ${renderPolicyField({
         label: "Approval rule JSON",
         name: "approvalRule",
         helper: allowInheritance ? "Use an empty object to set a club-specific approval chain, or clear the field to inherit." : "Stored for secondary approval and escalation logic.",
@@ -2246,6 +2253,10 @@ function renderEffectivePolicySummary(policy) {
       ${renderStatusBadge(policy.autoApproveInternalLowRisk ? "Low-risk internal auto-approve on" : "Low-risk internal auto-approve off", policy.autoApproveInternalLowRisk ? "good" : "neutral")}
     </div>
     <div class="signal-list" style="margin-top:16px;">
+      <div class="signal-card">
+        <strong>Routing rule</strong>
+        <pre>${escapeHtml(formatPolicyJson(policy.routingRule || {}))}</pre>
+      </div>
       <div class="signal-card">
         <strong>Approval rule</strong>
         <pre>${escapeHtml(formatPolicyJson(policy.approvalRule || {}))}</pre>
@@ -2421,6 +2432,7 @@ async function renderWorkflowSettingsPage(clubSlug) {
             autoApproveMaxRisk: String(formData.get('autoApproveMaxRisk') || '').trim() === ''
               ? null
               : Number(formData.get('autoApproveMaxRisk')),
+            routingRule: parseOptionalJson(String(formData.get('routingRule') || ''), allowInheritance),
             approvalRule: parseOptionalJson(String(formData.get('approvalRule') || ''), allowInheritance),
             publishingRule: parseOptionalJson(String(formData.get('publishingRule') || ''), allowInheritance),
             notificationRule: parseOptionalJson(String(formData.get('notificationRule') || ''), allowInheritance)

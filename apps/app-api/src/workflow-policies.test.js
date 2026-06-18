@@ -29,6 +29,7 @@ test("loads club workflow policies with organization fallback detail", async () 
               orgAllowAgentRouting: true,
               orgAutoApproveInternalLowRisk: false,
               orgAutoApproveMaxRisk: "0.35",
+              orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
               orgApprovalRule: {
                 requireSecondApprovalForPublic: true,
                 secondApproverRole: "club_admin"
@@ -41,6 +42,7 @@ test("loads club workflow policies with organization fallback detail", async () 
               clubAllowAgentRouting: false,
               clubAutoApproveInternalLowRisk: true,
               clubAutoApproveMaxRisk: "0.20",
+              clubRoutingRule: {},
               clubApprovalRule: {},
               clubPublishingRule: {},
               clubNotificationRule: { sms: false }
@@ -55,6 +57,10 @@ test("loads club workflow policies with organization fallback detail", async () 
   assert.equal(result.found, true);
   assert.equal(result.organization.slug, "metro");
   assert.equal(result.club.slug, "westside");
+  assert.deepEqual(result.clubPolicy.routingRule, null);
+  assert.deepEqual(result.effectivePolicy.routingRule, {
+    contentTypeApprovers: { video: "club_admin" }
+  });
   assert.deepEqual(result.clubPolicy.approvalRule, null);
   assert.deepEqual(result.effectivePolicy.approvalRule, {
     requireSecondApprovalForPublic: true,
@@ -94,6 +100,36 @@ test("validates workflow policy patch payloads", () => {
     {
       ok: false,
       error: "allowAgentRouting cannot be null for organization policies"
+    }
+  );
+
+  assert.deepEqual(
+    validateWorkflowPolicyPatch(
+      {
+        routingRule: {
+          contentTypeApprovers: { video: "club_admin" }
+        }
+      },
+      { scopeType: "organization" }
+    ),
+    {
+      ok: true,
+      value: {
+        routingRule: {
+          contentTypeApprovers: { video: "club_admin" }
+        }
+      }
+    }
+  );
+
+  assert.deepEqual(
+    validateWorkflowPolicyPatch(
+      { routingRule: { contentTypeApprovers: { video: "bad_role" } } },
+      { scopeType: "club" }
+    ),
+    {
+      ok: false,
+      error: "routingRule.contentTypeApprovers values must be one of team_manager, club_admin, club_comms"
     }
   );
 
@@ -177,6 +213,9 @@ test("updates club workflow policies with authorized actors and preserves cleara
                 orgAllowAgentRouting: true,
                 orgAutoApproveInternalLowRisk: false,
                 orgAutoApproveMaxRisk: "0.35",
+                orgRoutingRule: {
+                  contentTypeApprovers: { video: "club_admin" }
+                },
                 orgApprovalRule: {
                   requireSecondApprovalForPublic: true,
                   secondApproverRole: "club_admin"
@@ -189,6 +228,7 @@ test("updates club workflow policies with authorized actors and preserves cleara
                 clubAllowAgentRouting: null,
                 clubAutoApproveInternalLowRisk: null,
                 clubAutoApproveMaxRisk: null,
+                clubRoutingRule: {},
                 clubApprovalRule: {},
                 clubPublishingRule: {},
                 clubNotificationRule: {}
@@ -212,6 +252,9 @@ test("updates club workflow policies with authorized actors and preserves cleara
               orgAllowAgentRouting: true,
               orgAutoApproveInternalLowRisk: false,
               orgAutoApproveMaxRisk: "0.35",
+              orgRoutingRule: {
+                contentTypeApprovers: { video: "club_admin" }
+              },
               orgApprovalRule: {
                 requireSecondApprovalForPublic: true,
                 secondApproverRole: "club_admin"
@@ -224,6 +267,7 @@ test("updates club workflow policies with authorized actors and preserves cleara
               clubAllowAgentRouting: false,
               clubAutoApproveInternalLowRisk: true,
               clubAutoApproveMaxRisk: "0.15",
+              clubRoutingRule: { contentTypeApprovers: { video: "team_manager" } },
               clubApprovalRule: { requireSecondApprovalForPublic: false },
               clubPublishingRule: {},
               clubNotificationRule: { push: true }
@@ -257,6 +301,7 @@ test("updates club workflow policies with authorized actors and preserves cleara
       allowAgentRouting: false,
       autoApproveInternalLowRisk: true,
       autoApproveMaxRisk: 0.15,
+      routingRule: { contentTypeApprovers: { video: "team_manager" } },
       approvalRule: { requireSecondApprovalForPublic: false },
       notificationRule: { push: true }
     }
@@ -271,6 +316,9 @@ test("updates club workflow policies with authorized actors and preserves cleara
   assert.deepEqual(result.effectivePolicy.publishingRule, {
     destinations: ["internal_feed"]
   });
+  assert.deepEqual(result.clubPolicy.routingRule, {
+    contentTypeApprovers: { video: "team_manager" }
+  });
   assert.deepEqual(result.clubPolicy.approvalRule, {
     requireSecondApprovalForPublic: false
   });
@@ -281,9 +329,13 @@ test("updates club workflow policies with authorized actors and preserves cleara
   assert.equal(upsert.params[6], 0.15);
   assert.equal(
     upsert.params[7],
+    JSON.stringify({ contentTypeApprovers: { video: "team_manager" } })
+  );
+  assert.equal(
+    upsert.params[8],
     JSON.stringify({ requireSecondApprovalForPublic: false })
   );
-  assert.equal(upsert.params[8], JSON.stringify({}));
+  assert.equal(upsert.params[9], JSON.stringify({}));
 });
 
 test("loads organization directory with clubs and organization admins", async () => {
@@ -306,6 +358,9 @@ test("loads organization directory with clubs and organization admins", async ()
                 orgAllowAgentRouting: true,
                 orgAutoApproveInternalLowRisk: false,
                 orgAutoApproveMaxRisk: "0.35",
+                orgRoutingRule: {
+                  contentTypeApprovers: { video: "club_admin" }
+                },
                 orgApprovalRule: {
                   requireSecondApprovalForPublic: true,
                   secondApproverRole: "club_admin"
@@ -372,6 +427,9 @@ test("loads effective notification rule for a club id with club override precede
                 orgAllowAgentRouting: true,
                 orgAutoApproveInternalLowRisk: false,
                 orgAutoApproveMaxRisk: "0.35",
+                orgRoutingRule: {
+                  contentTypeApprovers: { video: "club_admin" }
+                },
                 orgApprovalRule: {
                   requireSecondApprovalForPublic: true,
                   secondApproverRole: "club_admin"
@@ -384,6 +442,7 @@ test("loads effective notification rule for a club id with club override precede
                 clubAllowAgentRouting: null,
                 clubAutoApproveInternalLowRisk: null,
                 clubAutoApproveMaxRisk: null,
+                clubRoutingRule: {},
                 clubApprovalRule: {},
                 clubPublishingRule: {},
                 clubNotificationRule: { email: false, push: false }

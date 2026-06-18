@@ -114,6 +114,7 @@ export async function ensureWorkflowPolicyTables(client) {
       allow_agent_routing BOOLEAN NOT NULL DEFAULT TRUE,
       auto_approve_internal_low_risk BOOLEAN NOT NULL DEFAULT FALSE,
       auto_approve_max_risk NUMERIC(5,2),
+      routing_rule JSONB NOT NULL DEFAULT '{}'::JSONB,
       approval_rule JSONB NOT NULL DEFAULT '{}'::JSONB,
       publishing_rule JSONB NOT NULL DEFAULT '{}'::JSONB,
       notification_rule JSONB NOT NULL DEFAULT '{}'::JSONB,
@@ -130,6 +131,7 @@ export async function ensureWorkflowPolicyTables(client) {
     ADD COLUMN IF NOT EXISTS allow_agent_routing BOOLEAN NOT NULL DEFAULT TRUE,
     ADD COLUMN IF NOT EXISTS auto_approve_internal_low_risk BOOLEAN NOT NULL DEFAULT FALSE,
     ADD COLUMN IF NOT EXISTS auto_approve_max_risk NUMERIC(5,2),
+    ADD COLUMN IF NOT EXISTS routing_rule JSONB NOT NULL DEFAULT '{}'::JSONB,
     ADD COLUMN IF NOT EXISTS approval_rule JSONB NOT NULL DEFAULT '{}'::JSONB,
     ADD COLUMN IF NOT EXISTS publishing_rule JSONB NOT NULL DEFAULT '{}'::JSONB,
     ADD COLUMN IF NOT EXISTS notification_rule JSONB NOT NULL DEFAULT '{}'::JSONB,
@@ -147,6 +149,7 @@ export async function ensureWorkflowPolicyTables(client) {
       allow_agent_routing BOOLEAN,
       auto_approve_internal_low_risk BOOLEAN,
       auto_approve_max_risk NUMERIC(5,2),
+      routing_rule JSONB NOT NULL DEFAULT '{}'::JSONB,
       approval_rule JSONB NOT NULL DEFAULT '{}'::JSONB,
       publishing_rule JSONB NOT NULL DEFAULT '{}'::JSONB,
       notification_rule JSONB NOT NULL DEFAULT '{}'::JSONB,
@@ -163,6 +166,7 @@ export async function ensureWorkflowPolicyTables(client) {
     ADD COLUMN IF NOT EXISTS allow_agent_routing BOOLEAN,
     ADD COLUMN IF NOT EXISTS auto_approve_internal_low_risk BOOLEAN,
     ADD COLUMN IF NOT EXISTS auto_approve_max_risk NUMERIC(5,2),
+    ADD COLUMN IF NOT EXISTS routing_rule JSONB NOT NULL DEFAULT '{}'::JSONB,
     ADD COLUMN IF NOT EXISTS approval_rule JSONB NOT NULL DEFAULT '{}'::JSONB,
     ADD COLUMN IF NOT EXISTS publishing_rule JSONB NOT NULL DEFAULT '{}'::JSONB,
     ADD COLUMN IF NOT EXISTS notification_rule JSONB NOT NULL DEFAULT '{}'::JSONB,
@@ -432,12 +436,18 @@ export async function ensureSeedData() {
         allow_agent_routing,
         auto_approve_internal_low_risk,
         auto_approve_max_risk,
+        routing_rule,
         approval_rule,
         notification_rule
       )
-      VALUES ($1, 'team_manager', 'club_comms', 'club_comms', TRUE, FALSE, 0.35, '{"requireSecondApprovalForPublic":true,"secondApproverRole":"club_admin"}'::jsonb, '{"email":true,"push":true}'::jsonb)
+      VALUES ($1, 'team_manager', 'club_comms', 'club_comms', TRUE, FALSE, 0.35, '{"contentTypeApprovers":{"video":"club_admin"}}'::jsonb, '{"requireSecondApprovalForPublic":true,"secondApproverRole":"club_admin"}'::jsonb, '{"email":true,"push":true}'::jsonb)
       ON CONFLICT (organization_id) DO UPDATE
       SET
+        routing_rule = CASE
+          WHEN organization_workflow_policies.routing_rule = '{}'::jsonb
+            THEN EXCLUDED.routing_rule
+          ELSE organization_workflow_policies.routing_rule
+        END,
         approval_rule = CASE
           WHEN organization_workflow_policies.approval_rule = '{}'::jsonb
             THEN EXCLUDED.approval_rule
@@ -448,7 +458,8 @@ export async function ensureSeedData() {
             THEN EXCLUDED.notification_rule
           ELSE organization_workflow_policies.notification_rule
         END
-      WHERE organization_workflow_policies.approval_rule = '{}'::jsonb
+      WHERE organization_workflow_policies.routing_rule = '{}'::jsonb
+         OR organization_workflow_policies.approval_rule = '{}'::jsonb
          OR organization_workflow_policies.notification_rule = '{}'::jsonb
       `,
       [organizationId]
@@ -464,10 +475,11 @@ export async function ensureSeedData() {
         allow_agent_routing,
         auto_approve_internal_low_risk,
         auto_approve_max_risk,
+        routing_rule,
         approval_rule,
         notification_rule
       )
-      VALUES ($1, 'team_manager', 'club_comms', 'club_comms', TRUE, FALSE, 0.35, '{}'::jsonb, '{"email":false,"push":false}'::jsonb)
+      VALUES ($1, 'team_manager', 'club_comms', 'club_comms', TRUE, FALSE, 0.35, '{}'::jsonb, '{}'::jsonb, '{"email":false,"push":false}'::jsonb)
       ON CONFLICT (club_id) DO UPDATE
       SET notification_rule = EXCLUDED.notification_rule
       WHERE club_workflow_policies.notification_rule = '{}'::jsonb

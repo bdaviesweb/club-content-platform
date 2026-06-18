@@ -14,6 +14,7 @@ import {
 import { buildReviewArtifacts } from "./review-provider.js";
 import {
   choosePublishingDestinationTypes,
+  describePolicyApproverSource,
   choosePolicyApproverRole,
   loadEffectiveWorkflowPolicy,
   shouldAutoApproveSubmission
@@ -25,11 +26,19 @@ function chooseRoutingDecision(submission, reviewArtifacts, policy) {
   const policyApproverRole = choosePolicyApproverRole({
     visibilityTarget: submission.visibility_target,
     riskScore: reviewArtifacts.riskScore,
+    contentType: submission.content_type,
+    policy
+  });
+  const policyApproverSource = describePolicyApproverSource({
+    visibilityTarget: submission.visibility_target,
+    riskScore: reviewArtifacts.riskScore,
+    contentType: submission.content_type,
     policy
   });
   const agentRouting = reviewArtifacts.structured?.review?.routing_decision;
 
   if (
+    policyApproverSource !== "routing_rule_content_type" &&
     policy.allowAgentRouting &&
     reviewArtifacts.mode === "hermes" &&
     agentRouting?.approver_role
@@ -39,7 +48,8 @@ function chooseRoutingDecision(submission, reviewArtifacts, policy) {
       routingSource: "hermes_agent",
       agentRationale: agentRouting.rationale || null,
       localFallbackApproverRole: policyApproverRole,
-      policySource: "agent_override"
+      policySource: "agent_override",
+      localPolicySource: policyApproverSource
     };
   }
 
@@ -49,7 +59,7 @@ function chooseRoutingDecision(submission, reviewArtifacts, policy) {
       reviewArtifacts.mode === "hermes" ? "local_rules" : reviewArtifacts.mode,
     agentRationale: null,
     localFallbackApproverRole: null,
-    policySource: "workflow_policy"
+    policySource: policyApproverSource
   };
 }
 
@@ -132,6 +142,7 @@ export async function processSubmissionCreated(client, eventRow) {
         routingSource: routingDecision.routingSource,
         policySource: routingDecision.policySource,
         agentRationale: routingDecision.agentRationale,
+        localPolicySource: routingDecision.localPolicySource || null,
         localFallbackApproverRole: routingDecision.localFallbackApproverRole,
         autoApproved: autoApproval.allowed,
         autoApproveReason: autoApproval.allowed ? autoApproval.reason : null,

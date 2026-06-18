@@ -87,6 +87,7 @@ test("GET /workflow-policies/clubs/:slug returns club and organization policy de
             orgAllowAgentRouting: true,
             orgAutoApproveInternalLowRisk: false,
             orgAutoApproveMaxRisk: "0.35",
+            orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
             orgPublishingRule: { mode: "org" },
             orgNotificationRule: { email: true },
             clubDefaultApproverRole: "club_admin",
@@ -95,6 +96,7 @@ test("GET /workflow-policies/clubs/:slug returns club and organization policy de
             clubAllowAgentRouting: false,
             clubAutoApproveInternalLowRisk: true,
             clubAutoApproveMaxRisk: "0.20",
+            clubRoutingRule: {},
             clubPublishingRule: {},
             clubNotificationRule: { push: true }
           }
@@ -117,6 +119,9 @@ test("GET /workflow-policies/clubs/:slug returns club and organization policy de
     assert.equal(response.status, 200);
     assert.equal(body.club.slug, "westside");
     assert.equal(body.organization.slug, "metro");
+    assert.deepEqual(body.effectivePolicy.routingRule, {
+      contentTypeApprovers: { video: "club_admin" }
+    });
     assert.deepEqual(body.effectivePolicy.publishingRule, { mode: "org" });
     assert.deepEqual(body.clubPolicy.notificationRule, { push: true });
     assert.match(queries[0].query, /FROM clubs c/);
@@ -151,6 +156,7 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
                   orgAllowAgentRouting: true,
                   orgAutoApproveInternalLowRisk: false,
                   orgAutoApproveMaxRisk: "0.35",
+                  orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
                   orgPublishingRule: { destinations: ["internal_feed"] },
                   orgNotificationRule: { email: true },
                   clubDefaultApproverRole: null,
@@ -159,6 +165,7 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
                   clubAllowAgentRouting: null,
                   clubAutoApproveInternalLowRisk: null,
                   clubAutoApproveMaxRisk: null,
+                  clubRoutingRule: {},
                   clubPublishingRule: {},
                   clubNotificationRule: {}
                 }
@@ -181,6 +188,7 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
                 orgAllowAgentRouting: true,
                 orgAutoApproveInternalLowRisk: false,
                 orgAutoApproveMaxRisk: "0.35",
+                orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
                 orgPublishingRule: { destinations: ["internal_feed"] },
                 orgNotificationRule: { email: true },
                 clubDefaultApproverRole: "club_admin",
@@ -189,6 +197,7 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
                 clubAllowAgentRouting: false,
                 clubAutoApproveInternalLowRisk: true,
                 clubAutoApproveMaxRisk: "0.15",
+                clubRoutingRule: { contentTypeApprovers: { video: "team_manager" } },
                 clubPublishingRule: {},
                 clubNotificationRule: { push: true }
               }
@@ -229,6 +238,7 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
         allowAgentRouting: false,
         autoApproveInternalLowRisk: true,
         autoApproveMaxRisk: 0.15,
+        routingRule: { contentTypeApprovers: { video: "team_manager" } },
         notificationRule: { push: true }
       })
     });
@@ -237,6 +247,9 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
     assert.equal(response.status, 200);
     assert.equal(body.clubPolicy.defaultApproverRole, "club_admin");
     assert.equal(body.effectivePolicy.allowAgentRouting, false);
+    assert.deepEqual(body.clubPolicy.routingRule, {
+      contentTypeApprovers: { video: "team_manager" }
+    });
     assert.deepEqual(body.effectivePolicy.publishingRule, {
       destinations: ["internal_feed"]
     });
@@ -249,6 +262,10 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
     assert.equal(upsert.params[4], false);
     assert.equal(upsert.params[5], true);
     assert.equal(upsert.params[6], 0.15);
+    assert.equal(
+      upsert.params[7],
+      JSON.stringify({ contentTypeApprovers: { video: "team_manager" } })
+    );
   } finally {
     server.close();
     await once(server, "close");
@@ -272,6 +289,7 @@ test("GET /workflow-policies/organizations/:slug returns organization policy det
             orgAllowAgentRouting: true,
             orgAutoApproveInternalLowRisk: false,
             orgAutoApproveMaxRisk: "0.35",
+            orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
             orgPublishingRule: { destinations: ["internal_feed"] },
             orgNotificationRule: { email: true }
           }
@@ -294,6 +312,9 @@ test("GET /workflow-policies/organizations/:slug returns organization policy det
     assert.equal(response.status, 200);
     assert.equal(body.organization.slug, "metro");
     assert.equal(body.organizationPolicy.mediumRiskApproverRole, "club_admin");
+    assert.deepEqual(body.organizationPolicy.routingRule, {
+      contentTypeApprovers: { video: "club_admin" }
+    });
     assert.deepEqual(body.organizationPolicy.publishingRule, {
       destinations: ["internal_feed"]
     });
@@ -324,6 +345,7 @@ test("GET /organizations/:slug returns organization directory detail", async () 
               orgAllowAgentRouting: true,
               orgAutoApproveInternalLowRisk: false,
               orgAutoApproveMaxRisk: "0.35",
+              orgRoutingRule: {},
               orgPublishingRule: {},
               orgNotificationRule: {}
             }
@@ -395,6 +417,7 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
                   orgAllowAgentRouting: true,
                   orgAutoApproveInternalLowRisk: false,
                   orgAutoApproveMaxRisk: "0.35",
+                  orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
                   orgPublishingRule: { destinations: ["internal_feed"] },
                   orgNotificationRule: { email: true }
                 }
@@ -414,6 +437,7 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
                 orgAllowAgentRouting: false,
                 orgAutoApproveInternalLowRisk: true,
                 orgAutoApproveMaxRisk: "0.20",
+                orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
                 orgPublishingRule: { destinations: ["internal_feed"] },
                 orgNotificationRule: { email: true, push: false }
               }
@@ -454,6 +478,7 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
         allowAgentRouting: false,
         autoApproveInternalLowRisk: true,
         autoApproveMaxRisk: 0.2,
+        routingRule: { contentTypeApprovers: { video: "club_admin" } },
         notificationRule: { email: true, push: false }
       })
     });
@@ -462,6 +487,9 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
     assert.equal(response.status, 200);
     assert.equal(body.organizationPolicy.defaultApproverRole, "club_admin");
     assert.equal(body.organizationPolicy.allowAgentRouting, false);
+    assert.deepEqual(body.organizationPolicy.routingRule, {
+      contentTypeApprovers: { video: "club_admin" }
+    });
 
     const upsert = calls.find(({ query }) =>
       String(query).includes("INSERT INTO organization_workflow_policies")
@@ -471,6 +499,10 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
     assert.equal(upsert.params[4], false);
     assert.equal(upsert.params[5], true);
     assert.equal(upsert.params[6], 0.2);
+    assert.equal(
+      upsert.params[7],
+      JSON.stringify({ contentTypeApprovers: { video: "club_admin" } })
+    );
   } finally {
     server.close();
     await once(server, "close");

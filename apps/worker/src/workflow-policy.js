@@ -10,6 +10,7 @@ export const defaultWorkflowPolicy = {
   allowAgentRouting: true,
   autoApproveInternalLowRisk: false,
   autoApproveMaxRisk: reviewThresholds.mediumRisk,
+  routingRule: {},
   approvalRule: {},
   publishingRule: {},
   notificationRule: {}
@@ -70,6 +71,7 @@ export async function loadEffectiveWorkflowPolicy(client, clubId) {
       op.allow_agent_routing AS "orgAllowAgentRouting",
       op.auto_approve_internal_low_risk AS "orgAutoApproveInternalLowRisk",
       op.auto_approve_max_risk AS "orgAutoApproveMaxRisk",
+      op.routing_rule AS "orgRoutingRule",
       op.approval_rule AS "orgApprovalRule",
       op.publishing_rule AS "orgPublishingRule",
       op.notification_rule AS "orgNotificationRule",
@@ -79,6 +81,7 @@ export async function loadEffectiveWorkflowPolicy(client, clubId) {
       cp.allow_agent_routing AS "clubAllowAgentRouting",
       cp.auto_approve_internal_low_risk AS "clubAutoApproveInternalLowRisk",
       cp.auto_approve_max_risk AS "clubAutoApproveMaxRisk",
+      cp.routing_rule AS "clubRoutingRule",
       cp.approval_rule AS "clubApprovalRule",
       cp.publishing_rule AS "clubPublishingRule",
       cp.notification_rule AS "clubNotificationRule"
@@ -135,6 +138,11 @@ export async function loadEffectiveWorkflowPolicy(client, clubId) {
       ),
       defaultWorkflowPolicy.autoApproveMaxRisk
     ),
+    routingRule: pickOverride(
+      parseOverrideJson(row.clubRoutingRule),
+      parseMaybeJson(row.orgRoutingRule, null),
+      defaultWorkflowPolicy.routingRule
+    ),
     approvalRule: pickOverride(
       parseOverrideJson(row.clubApprovalRule),
       parseMaybeJson(row.orgApprovalRule, null),
@@ -156,8 +164,14 @@ export async function loadEffectiveWorkflowPolicy(client, clubId) {
 export function choosePolicyApproverRole({
   visibilityTarget,
   riskScore,
+  contentType,
   policy = defaultWorkflowPolicy
 }) {
+  const contentTypeApprover = policy?.routingRule?.contentTypeApprovers?.[contentType];
+  if (typeof contentTypeApprover === "string" && contentTypeApprover.trim()) {
+    return contentTypeApprover;
+  }
+
   if (visibilityTarget === "public") {
     return policy.publicApproverRole;
   }
@@ -167,6 +181,28 @@ export function choosePolicyApproverRole({
   }
 
   return policy.defaultApproverRole;
+}
+
+export function describePolicyApproverSource({
+  visibilityTarget,
+  riskScore,
+  contentType,
+  policy = defaultWorkflowPolicy
+}) {
+  const contentTypeApprover = policy?.routingRule?.contentTypeApprovers?.[contentType];
+  if (typeof contentTypeApprover === "string" && contentTypeApprover.trim()) {
+    return "routing_rule_content_type";
+  }
+
+  if (visibilityTarget === "public") {
+    return "workflow_policy_public";
+  }
+
+  if (Number(riskScore) >= reviewThresholds.mediumRisk) {
+    return "workflow_policy_medium_risk";
+  }
+
+  return "workflow_policy_default";
 }
 
 export function shouldAutoApproveSubmission({

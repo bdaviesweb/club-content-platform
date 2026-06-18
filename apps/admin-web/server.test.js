@@ -67,6 +67,7 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
               allowAgentRouting: false,
               autoApproveInternalLowRisk: true,
               autoApproveMaxRisk: 0.15,
+              routingRule: { contentTypeApprovers: { video: "team_manager" } },
               approvalRule: { requireSecondApprovalForPublic: false },
               publishingRule: {},
               notificationRule: { push: true }
@@ -78,6 +79,9 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
               allowAgentRouting: false,
               autoApproveInternalLowRisk: true,
               autoApproveMaxRisk: 0.15,
+              routingRule: {
+                contentTypeApprovers: { video: "club_admin" }
+              },
               approvalRule: {
                 requireSecondApprovalForPublic: true,
                 secondApproverRole: "club_admin"
@@ -103,6 +107,7 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
               allowAgentRouting: true,
               autoApproveInternalLowRisk: false,
               autoApproveMaxRisk: 0.35,
+              routingRule: { contentTypeApprovers: { video: "club_admin" } },
               publishingRule: { destinations: ["internal_feed"] },
               notificationRule: { email: true }
             }
@@ -150,6 +155,8 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Metro Sports/);
     assert.match(body, /Organization directory/);
     assert.match(body, /org-admin@westside.test/);
+    assert.match(body, /Routing rule/);
+    assert.match(body, /contentTypeApprovers/);
     assert.match(body, /Approval rule/);
     assert.match(body, /requireSecondApprovalForPublic/);
     assert.match(body, /Save club policy/);
@@ -204,6 +211,7 @@ test("POST /ui/workflow-policies/clubs/:slug proxies policy updates to the API",
           actorEmail: "admin@example.test",
           defaultApproverRole: "club_admin",
           allowAgentRouting: false,
+          routingRule: { contentTypeApprovers: { video: "team_manager" } },
           approvalRule: { requireSecondApprovalForPublic: true }
         })
       }
@@ -220,6 +228,7 @@ test("POST /ui/workflow-policies/clubs/:slug proxies policy updates to the API",
           actorEmail: "admin@example.test",
           defaultApproverRole: "club_admin",
           allowAgentRouting: false,
+          routingRule: { contentTypeApprovers: { video: "team_manager" } },
           approvalRule: { requireSecondApprovalForPublic: true }
         }
       }

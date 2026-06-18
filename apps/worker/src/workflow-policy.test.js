@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   choosePublishingDestinationTypes,
+  describePolicyApproverSource,
   choosePolicyApproverRole,
   defaultWorkflowPolicy,
   loadEffectiveWorkflowPolicy,
@@ -28,6 +29,7 @@ test("loads club workflow policy overrides ahead of organization defaults", asyn
               orgAllowAgentRouting: true,
               orgAutoApproveInternalLowRisk: false,
               orgAutoApproveMaxRisk: "0.35",
+              orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
               orgApprovalRule: { requireSecondApprovalForPublic: true, secondApproverRole: "club_admin" },
               orgPublishingRule: { mode: "internal" },
               orgNotificationRule: { email: true },
@@ -37,6 +39,7 @@ test("loads club workflow policy overrides ahead of organization defaults", asyn
               clubAllowAgentRouting: false,
               clubAutoApproveInternalLowRisk: true,
               clubAutoApproveMaxRisk: "0.20",
+              clubRoutingRule: {},
               clubApprovalRule: { requireSecondApprovalForPublic: false },
               clubPublishingRule: { mode: "club-specific" },
               clubNotificationRule: null
@@ -57,6 +60,9 @@ test("loads club workflow policy overrides ahead of organization defaults", asyn
   assert.equal(policy.allowAgentRouting, false);
   assert.equal(policy.autoApproveInternalLowRisk, true);
   assert.equal(policy.autoApproveMaxRisk, 0.2);
+  assert.deepEqual(policy.routingRule, {
+    contentTypeApprovers: { video: "club_admin" }
+  });
   assert.deepEqual(policy.approvalRule, {
     requireSecondApprovalForPublic: false
   });
@@ -80,6 +86,9 @@ test("falls back to organization publish and notification rules when club overri
               orgAllowAgentRouting: true,
               orgAutoApproveInternalLowRisk: false,
               orgAutoApproveMaxRisk: "0.35",
+              orgRoutingRule: {
+                contentTypeApprovers: { video: "club_admin" }
+              },
               orgApprovalRule: {
                 requireSecondApprovalForPublic: true,
                 secondApproverRole: "club_admin"
@@ -92,6 +101,7 @@ test("falls back to organization publish and notification rules when club overri
               clubAllowAgentRouting: null,
               clubAutoApproveInternalLowRisk: null,
               clubAutoApproveMaxRisk: null,
+              clubRoutingRule: {},
               clubPublishingRule: {},
               clubNotificationRule: {}
             }
@@ -102,6 +112,9 @@ test("falls back to organization publish and notification rules when club overri
     "club-1"
   );
 
+  assert.deepEqual(policy.routingRule, {
+    contentTypeApprovers: { video: "club_admin" }
+  });
   assert.deepEqual(policy.approvalRule, {
     requireSecondApprovalForPublic: true,
     secondApproverRole: "club_admin"
@@ -139,6 +152,18 @@ test("chooses approvers from policy by visibility and risk", () => {
     choosePolicyApproverRole({
       visibilityTarget: "internal",
       riskScore: 0.1,
+      contentType: "video",
+      policy: {
+        ...policy,
+        routingRule: { contentTypeApprovers: { video: "club_admin" } }
+      }
+    }),
+    "club_admin"
+  );
+  assert.equal(
+    choosePolicyApproverRole({
+      visibilityTarget: "internal",
+      riskScore: 0.1,
       policy
     }),
     "team_manager"
@@ -158,6 +183,50 @@ test("chooses approvers from policy by visibility and risk", () => {
       policy
     }),
     "club_admin"
+  );
+});
+
+test("describes policy approver source for content type, visibility, risk, and default paths", () => {
+  const policy = {
+    ...defaultWorkflowPolicy,
+    routingRule: { contentTypeApprovers: { video: "club_admin" } }
+  };
+
+  assert.equal(
+    describePolicyApproverSource({
+      visibilityTarget: "internal",
+      riskScore: 0.1,
+      contentType: "video",
+      policy
+    }),
+    "routing_rule_content_type"
+  );
+  assert.equal(
+    describePolicyApproverSource({
+      visibilityTarget: "public",
+      riskScore: 0.1,
+      contentType: "photo",
+      policy
+    }),
+    "workflow_policy_public"
+  );
+  assert.equal(
+    describePolicyApproverSource({
+      visibilityTarget: "internal",
+      riskScore: 0.6,
+      contentType: "photo",
+      policy
+    }),
+    "workflow_policy_medium_risk"
+  );
+  assert.equal(
+    describePolicyApproverSource({
+      visibilityTarget: "internal",
+      riskScore: 0.1,
+      contentType: "photo",
+      policy
+    }),
+    "workflow_policy_default"
   );
 });
 
