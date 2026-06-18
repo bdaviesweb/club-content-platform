@@ -716,7 +716,16 @@ async function handleApprovalRequestDetail(
   sendJson(res, 200, approvalRequest);
 }
 
-async function handleApprovalAction(req, res, approvalRequestId) {
+async function handleApprovalAction(
+  req,
+  res,
+  approvalRequestId,
+  {
+    runInTransaction = withTransaction,
+    loadApprovalActor = loadAuthorizedApprovalActor,
+    deliverNotification = createAndDeliverNotification
+  } = {}
+) {
   const body = await readJson(req);
   const { action, actedByEmail, notes, reasonCode } = body;
 
@@ -731,8 +740,8 @@ async function handleApprovalAction(req, res, approvalRequestId) {
     return;
   }
 
-  const result = await withTransaction(async (client) => {
-    const authorization = await loadAuthorizedApprovalActor(
+  const result = await runInTransaction(async (client) => {
+    const authorization = await loadApprovalActor(
       client,
       approvalRequestId,
       actedByEmail
@@ -823,7 +832,7 @@ async function handleApprovalAction(req, res, approvalRequestId) {
     );
 
     if (normalizedAction !== "approve") {
-      await createAndDeliverNotification(client, {
+      await deliverNotification(client, {
         userId: approvalRequest.submitted_by_user_id,
         type:
           normalizedAction === "reject"
@@ -1195,7 +1204,13 @@ async function handleRetryWorkflowEvent(
   sendJson(res, 200, result);
 }
 
-export function createAppServer({ pool, runInTransaction } = {}) {
+export function createAppServer({
+  pool,
+  runInTransaction,
+  approvalActionRunInTransaction,
+  loadApprovalActor,
+  deliverNotification
+} = {}) {
   return http.createServer(async (req, res) => {
   try {
     const url = parseUrl(req);
@@ -1316,7 +1331,11 @@ export function createAppServer({ pool, runInTransaction } = {}) {
       req.method === "POST" &&
       /^\/approval-requests\/[^/]+\/actions$/.test(url.pathname)
     ) {
-      await handleApprovalAction(req, res, url.pathname.split("/")[2]);
+      await handleApprovalAction(req, res, url.pathname.split("/")[2], {
+        runInTransaction: approvalActionRunInTransaction || withTransaction,
+        loadApprovalActor: loadApprovalActor || loadAuthorizedApprovalActor,
+        deliverNotification: deliverNotification || createAndDeliverNotification
+      });
       return;
     }
 
@@ -1353,9 +1372,22 @@ export function createAppServer({ pool, runInTransaction } = {}) {
   });
 }
 
-export async function startAppServer({ listenPort = port, pool, runInTransaction } = {}) {
+export async function startAppServer({
+  listenPort = port,
+  pool,
+  runInTransaction,
+  approvalActionRunInTransaction,
+  loadApprovalActor,
+  deliverNotification
+} = {}) {
   await ensureSeedData();
-  const server = createAppServer({ pool, runInTransaction });
+  const server = createAppServer({
+    pool,
+    runInTransaction,
+    approvalActionRunInTransaction,
+    loadApprovalActor,
+    deliverNotification
+  });
   await new Promise((resolve) => {
     server.listen(listenPort, resolve);
   });
