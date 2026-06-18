@@ -199,6 +199,13 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Published push/);
     assert.match(body, /Save club policy/);
     assert.match(body, /Save organization policy/);
+    assert.match(body, /Club override/);
+    assert.match(body, /Organization default/);
+    assert.match(body, /Blocked: video/);
+    assert.match(body, /Video -&gt; Club Admin/);
+    assert.match(body, /Public posts need second approval by Club Admin for video/);
+    assert.match(body, /Internal -&gt; internal_feed/);
+    assert.match(body, /Channels: email inherit\/default, push enabled/);
     assert.deepEqual(calls, [
       "http://app-api:4000/app/readiness",
       "http://app-api:4000/workflow-policies/clubs/westside",

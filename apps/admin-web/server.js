@@ -2099,6 +2099,121 @@ function renderPolicyRulePreview(label, value) {
   </details>`;
 }
 
+function isNonEmptyObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length > 0;
+}
+
+function describePolicySource({ clubValue, organizationValue }) {
+  if (clubValue !== null && clubValue !== undefined) {
+    return { label: "Club override", tone: "good" };
+  }
+
+  if (organizationValue !== null && organizationValue !== undefined) {
+    if (typeof organizationValue !== "object" || Array.isArray(organizationValue) || isNonEmptyObject(organizationValue)) {
+      return { label: "Organization default", tone: "neutral" };
+    }
+  }
+
+  return { label: "Platform default", tone: "neutral" };
+}
+
+function summarizeContentTypeApprovers(rule = {}) {
+  const approvers = rule?.contentTypeApprovers;
+  if (!approvers || typeof approvers !== "object" || Array.isArray(approvers)) {
+    return "No content-type routing overrides.";
+  }
+
+  const entries = Object.entries(approvers)
+    .filter(([contentType, role]) => String(contentType || "").trim() && String(role || "").trim())
+    .map(([contentType, role]) => `${formatLabel(contentType)} -> ${formatLabel(role)}`);
+
+  return entries.length ? entries.join(", ") : "No content-type routing overrides.";
+}
+
+function summarizeAutoApprovalRule(rule = {}) {
+  const allowed = formatPolicyList(rule?.allowedContentTypes);
+  const blocked = formatPolicyList(rule?.blockedContentTypes);
+  const parts = [];
+
+  if (allowed) {
+    parts.push(`Allowed: ${allowed}`);
+  }
+  if (blocked) {
+    parts.push(`Blocked: ${blocked}`);
+  }
+
+  return parts.length ? parts.join(" | ") : "No content-type auto-approval filters.";
+}
+
+function summarizePublishingRule(rule = {}) {
+  const defaults = formatPolicyList(rule?.destinations);
+  const internal = formatPolicyList(rule?.visibilityDestinations?.internal);
+  const publicDestinations = formatPolicyList(rule?.visibilityDestinations?.public);
+  const parts = [];
+
+  if (internal) {
+    parts.push(`Internal -> ${internal}`);
+  }
+  if (publicDestinations) {
+    parts.push(`Public -> ${publicDestinations}`);
+  }
+  if (defaults) {
+    parts.push(`Fallback -> ${defaults}`);
+  }
+
+  return parts.length ? parts.join(" | ") : "Publishes to the internal feed by default.";
+}
+
+function summarizeNotificationRule(rule = {}) {
+  const email =
+    rule?.email === null || rule?.email === undefined
+      ? "inherit/default"
+      : rule.email
+        ? "enabled"
+        : "disabled";
+  const push =
+    rule?.push === null || rule?.push === undefined
+      ? "inherit/default"
+      : rule.push
+        ? "enabled"
+        : "disabled";
+  const reviewStarted = rule?.eventChannels?.submission_review_started || {};
+  const published = rule?.eventChannels?.submission_published || {};
+  const reviewParts = [];
+  const publishedParts = [];
+
+  if (reviewStarted.email !== null && reviewStarted.email !== undefined) {
+    reviewParts.push(`email ${reviewStarted.email ? "on" : "off"}`);
+  }
+  if (reviewStarted.push !== null && reviewStarted.push !== undefined) {
+    reviewParts.push(`push ${reviewStarted.push ? "on" : "off"}`);
+  }
+  if (published.email !== null && published.email !== undefined) {
+    publishedParts.push(`email ${published.email ? "on" : "off"}`);
+  }
+  if (published.push !== null && published.push !== undefined) {
+    publishedParts.push(`push ${published.push ? "on" : "off"}`);
+  }
+
+  return [
+    `Channels: email ${email}, push ${push}`,
+    reviewParts.length ? `Review started -> ${reviewParts.join(", ")}` : null,
+    publishedParts.length ? `Published -> ${publishedParts.join(", ")}` : null
+  ]
+    .filter(Boolean)
+    .join(" | ");
+}
+
+function renderEffectivePolicyExplainCard({ label, source, summary }) {
+  return `<div class="signal-card">
+    <div class="badge-row" style="margin-bottom:10px;">
+      <strong>${escapeHtml(label)}</strong>
+      ${renderStatusBadge(source.label, source.tone)}
+    </div>
+    <p class="subtle">${escapeHtml(summary)}</p>
+  </div>`;
+}
+
 function renderContentTypeRoleFields({
   baseName,
   label,
@@ -2423,10 +2538,51 @@ function renderWorkflowPolicyForm({
   </section>`;
 }
 
-function renderEffectivePolicySummary(policy) {
+function renderEffectivePolicySummary({
+  effectivePolicy: policy,
+  clubPolicy = {},
+  organizationPolicy = {}
+}) {
   if (!policy) {
     return `<div class="panel"><h2>No policy loaded</h2><p class="subtle" style="margin-top:8px;">Pick a club slug that exists in the current environment.</p></div>`;
   }
+
+  const defaultApproverSource = describePolicySource({
+    clubValue: clubPolicy?.defaultApproverRole,
+    organizationValue: organizationPolicy?.defaultApproverRole
+  });
+  const publicApproverSource = describePolicySource({
+    clubValue: clubPolicy?.publicApproverRole,
+    organizationValue: organizationPolicy?.publicApproverRole
+  });
+  const mediumRiskApproverSource = describePolicySource({
+    clubValue: clubPolicy?.mediumRiskApproverRole,
+    organizationValue: organizationPolicy?.mediumRiskApproverRole
+  });
+  const autoApproveSource = describePolicySource({
+    clubValue: clubPolicy?.autoApproveInternalLowRisk,
+    organizationValue: organizationPolicy?.autoApproveInternalLowRisk
+  });
+  const autoApprovalRuleSource = describePolicySource({
+    clubValue: clubPolicy?.autoApprovalRule,
+    organizationValue: organizationPolicy?.autoApprovalRule
+  });
+  const routingRuleSource = describePolicySource({
+    clubValue: clubPolicy?.routingRule,
+    organizationValue: organizationPolicy?.routingRule
+  });
+  const approvalRuleSource = describePolicySource({
+    clubValue: clubPolicy?.approvalRule,
+    organizationValue: organizationPolicy?.approvalRule
+  });
+  const publishingRuleSource = describePolicySource({
+    clubValue: clubPolicy?.publishingRule,
+    organizationValue: organizationPolicy?.publishingRule
+  });
+  const notificationRuleSource = describePolicySource({
+    clubValue: clubPolicy?.notificationRule,
+    organizationValue: organizationPolicy?.notificationRule
+  });
 
   return `<section class="panel">
     <div class="section-header">
@@ -2439,18 +2595,22 @@ function renderEffectivePolicySummary(policy) {
       <div class="metric-card">
         <span class="metric-label">Default approver</span>
         <strong>${escapeHtml(formatLabel(policy.defaultApproverRole))}</strong>
+        <span class="subtle">${escapeHtml(defaultApproverSource.label)}</span>
       </div>
       <div class="metric-card">
         <span class="metric-label">Public approver</span>
         <strong>${escapeHtml(formatLabel(policy.publicApproverRole))}</strong>
+        <span class="subtle">${escapeHtml(publicApproverSource.label)}</span>
       </div>
       <div class="metric-card">
         <span class="metric-label">Medium-risk approver</span>
         <strong>${escapeHtml(formatLabel(policy.mediumRiskApproverRole))}</strong>
+        <span class="subtle">${escapeHtml(mediumRiskApproverSource.label)}</span>
       </div>
       <div class="metric-card">
         <span class="metric-label">Auto-approve max risk</span>
         <strong>${escapeHtml(formatPercent(policy.autoApproveMaxRisk))}</strong>
+        <span class="subtle">${escapeHtml(autoApproveSource.label)}</span>
       </div>
     </div>
     <div class="badge-row" style="margin-top:14px;">
@@ -2458,26 +2618,33 @@ function renderEffectivePolicySummary(policy) {
       ${renderStatusBadge(policy.autoApproveInternalLowRisk ? "Low-risk internal auto-approve on" : "Low-risk internal auto-approve off", policy.autoApproveInternalLowRisk ? "good" : "neutral")}
     </div>
     <div class="signal-list" style="margin-top:16px;">
-      <div class="signal-card">
-        <strong>Auto-approval rule</strong>
-        <pre>${escapeHtml(formatPolicyJson(policy.autoApprovalRule || {}))}</pre>
-      </div>
-      <div class="signal-card">
-        <strong>Routing rule</strong>
-        <pre>${escapeHtml(formatPolicyJson(policy.routingRule || {}))}</pre>
-      </div>
-      <div class="signal-card">
-        <strong>Approval rule</strong>
-        <pre>${escapeHtml(formatPolicyJson(policy.approvalRule || {}))}</pre>
-      </div>
-      <div class="signal-card">
-        <strong>Publishing rule</strong>
-        <pre>${escapeHtml(formatPolicyJson(policy.publishingRule || {}))}</pre>
-      </div>
-      <div class="signal-card">
-        <strong>Notification rule</strong>
-        <pre>${escapeHtml(formatPolicyJson(policy.notificationRule || {}))}</pre>
-      </div>
+      ${renderEffectivePolicyExplainCard({
+        label: "Auto-approval rule",
+        source: autoApprovalRuleSource,
+        summary: summarizeAutoApprovalRule(policy.autoApprovalRule || {})
+      })}
+      ${renderEffectivePolicyExplainCard({
+        label: "Routing rule",
+        source: routingRuleSource,
+        summary: summarizeContentTypeApprovers(policy.routingRule || {})
+      })}
+      ${renderEffectivePolicyExplainCard({
+        label: "Approval chain",
+        source: approvalRuleSource,
+        summary: policy.approvalRule?.requireSecondApprovalForPublic
+          ? `Public posts need second approval by ${formatLabel(policy.approvalRule?.secondApproverRole || "club_admin")}${formatPolicyList(policy.approvalRule?.secondApprovalContentTypes) ? ` for ${formatPolicyList(policy.approvalRule.secondApprovalContentTypes)}` : ""}.`
+          : "No second public approval requirement is active."
+      })}
+      ${renderEffectivePolicyExplainCard({
+        label: "Publishing rule",
+        source: publishingRuleSource,
+        summary: summarizePublishingRule(policy.publishingRule || {})
+      })}
+      ${renderEffectivePolicyExplainCard({
+        label: "Notification rule",
+        source: notificationRuleSource,
+        summary: summarizeNotificationRule(policy.notificationRule || {})
+      })}
     </div>
   </section>`;
 }
@@ -2571,7 +2738,11 @@ async function renderWorkflowSettingsPage(clubSlug) {
       </form>
     </section>
 
-    ${renderEffectivePolicySummary(clubPolicy.effectivePolicy)}
+    ${renderEffectivePolicySummary({
+      effectivePolicy: clubPolicy.effectivePolicy,
+      clubPolicy: clubPolicy.clubPolicy,
+      organizationPolicy: organizationPolicy?.organizationPolicy
+    })}
     ${renderOrganizationDirectory(organizationDirectory)}
 
     <section class="workflow-settings-grid">
