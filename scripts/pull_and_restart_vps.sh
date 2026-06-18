@@ -61,6 +61,11 @@ until curl -fsS "${ADMIN_HEALTH_URL}"; do
   sleep "${HEALTH_POLL_SECONDS}"
 done
 
+echo
+echo "---"
+echo "Running default VPS route smoke"
+CLUB_CONTENT_SMOKE_ON_VPS=1 ./scripts/smoke_vps.sh
+
 if [ "${RUN_APPROVAL_PUBLISH_SMOKE}" = "1" ]; then
   echo
   echo "---"
