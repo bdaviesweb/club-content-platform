@@ -264,6 +264,96 @@ test("validates workflow policy patch payloads", () => {
       error: "publishingRule.destinations must contain only non-empty strings"
     }
   );
+
+  assert.deepEqual(
+    validateWorkflowPolicyPatch(
+      {
+        notificationRule: {
+          email: true,
+          push: true,
+          eventChannels: {
+            submission_review_started: {
+              email: false,
+              push: false
+            },
+            submission_published: {
+              email: true
+            }
+          }
+        }
+      },
+      { scopeType: "organization" }
+    ),
+    {
+      ok: true,
+      value: {
+        notificationRule: {
+          email: true,
+          push: true,
+          eventChannels: {
+            submission_review_started: {
+              email: false,
+              push: false
+            },
+            submission_published: {
+              email: true
+            }
+          }
+        }
+      }
+    }
+  );
+
+  assert.deepEqual(
+    validateWorkflowPolicyPatch(
+      {
+        notificationRule: {
+          eventChannels: []
+        }
+      },
+      { scopeType: "club" }
+    ),
+    {
+      ok: false,
+      error: "notificationRule.eventChannels must be an object"
+    }
+  );
+
+  assert.deepEqual(
+    validateWorkflowPolicyPatch(
+      {
+        notificationRule: {
+          eventChannels: {
+            submission_review_started: []
+          }
+        }
+      },
+      { scopeType: "club" }
+    ),
+    {
+      ok: false,
+      error: "notificationRule.eventChannels.submission_review_started must be an object"
+    }
+  );
+
+  assert.deepEqual(
+    validateWorkflowPolicyPatch(
+      {
+        notificationRule: {
+          eventChannels: {
+            submission_review_started: {
+              email: "no"
+            }
+          }
+        }
+      },
+      { scopeType: "club" }
+    ),
+    {
+      ok: false,
+      error: "notificationRule.eventChannels.submission_review_started.email must be a boolean"
+    }
+  );
 });
 
 test("updates club workflow policies with authorized actors and preserves clearable overrides", async () => {

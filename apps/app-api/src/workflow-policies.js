@@ -61,6 +61,10 @@ function normalizeSlug(value) {
   return normalized || null;
 }
 
+function isObjectRecord(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function parseMaybeJson(value, fallback = null) {
   if (value === null || value === undefined) {
     return fallback;
@@ -383,7 +387,7 @@ export function validateWorkflowPolicyPatch(input, { scopeType }) {
       continue;
     }
 
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
+    if (!isObjectRecord(value)) {
       return { ok: false, error: `${objectField} must be an object` };
     }
 
@@ -471,6 +475,48 @@ export function validateWorkflowPolicyPatch(input, { scopeType }) {
       const validation = validateDestinationList(value.destinations, objectField);
       if (!validation.ok) {
         return validation;
+      }
+    }
+
+    if (
+      objectField === "notificationRule" &&
+      Object.hasOwn(value, "eventChannels")
+    ) {
+      const eventChannels = value.eventChannels;
+
+      if (!isObjectRecord(eventChannels)) {
+        return {
+          ok: false,
+          error: "notificationRule.eventChannels must be an object"
+        };
+      }
+
+      for (const [eventType, channelRule] of Object.entries(eventChannels)) {
+        if (typeof eventType !== "string" || !eventType.trim()) {
+          return {
+            ok: false,
+            error: "notificationRule.eventChannels keys must be non-empty strings"
+          };
+        }
+
+        if (!isObjectRecord(channelRule)) {
+          return {
+            ok: false,
+            error: `notificationRule.eventChannels.${eventType} must be an object`
+          };
+        }
+
+        for (const channel of ["email", "push"]) {
+          if (
+            Object.hasOwn(channelRule, channel) &&
+            typeof channelRule[channel] !== "boolean"
+          ) {
+            return {
+              ok: false,
+              error: `notificationRule.eventChannels.${eventType}.${channel} must be a boolean`
+            };
+          }
+        }
       }
     }
 

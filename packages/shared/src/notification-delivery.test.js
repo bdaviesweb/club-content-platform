@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   createAndDeliverNotification,
   describeEmailDeliveryConfig,
+  resolveNotificationChannelPolicy,
   sendEmailViaResend
 } from "./notification-delivery.js";
 
@@ -133,5 +134,154 @@ test("creates in-app notifications while skipping email and push when policy dis
   assert.equal(
     JSON.parse(pushAudit.params[3]).delivery.reason,
     "notification_policy_push_disabled"
+  );
+});
+
+test("resolves event-specific notification channel policy without overriding global disables", () => {
+  assert.deepEqual(
+    resolveNotificationChannelPolicy({
+      notificationPolicy: {
+        email: true,
+        eventChannels: {
+          submission_review_started: {
+            email: false
+          }
+        }
+      },
+      type: "submission_review_started",
+      channel: "email"
+    }),
+    {
+      enabled: false,
+      reason: "notification_policy_email_event_disabled"
+    }
+  );
+
+  assert.deepEqual(
+    resolveNotificationChannelPolicy({
+      notificationPolicy: {
+        push: false,
+        eventChannels: {
+          submission_review_started: {
+            push: true
+          }
+        }
+      },
+      type: "submission_review_started",
+      channel: "push"
+    }),
+    {
+      enabled: false,
+      reason: "notification_policy_push_disabled"
+    }
+  );
+
+  assert.deepEqual(
+    resolveNotificationChannelPolicy({
+      notificationPolicy: {
+        push: true,
+        eventChannels: {
+          submission_published: {
+            push: true
+          }
+        }
+      },
+      type: "submission_review_started",
+      channel: "push"
+    }),
+    {
+      enabled: true,
+      reason: null
+    }
+  );
+});
+
+test("creates in-app notifications while skipping channels for an event-specific policy", async () => {
+  const calls = [];
+  const client = {
+    async query(sql, params = []) {
+      calls.push({ sql: String(sql), params });
+
+      if (String(sql).includes("INSERT INTO notifications")) {
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              id: "notification-2",
+              user_id: params[0],
+              type: params[1],
+              payload: JSON.parse(params[2]),
+              created_at: new Date().toISOString()
+            }
+          ]
+        };
+      }
+
+      if (String(sql).includes("SELECT email, full_name")) {
+        return {
+          rowCount: 1,
+          rows: [{ email: "coach@example.test", full_name: "Coach" }]
+        };
+      }
+
+      if (String(sql).includes("WITH latest_push_state")) {
+        throw new Error("push registrations should not be queried when push is event-policy-disabled");
+      }
+
+      return { rowCount: 1, rows: [] };
+    }
+  };
+
+  const result = await createAndDeliverNotification(client, {
+    userId: "user-1",
+    type: "submission_review_started",
+    payload: {
+      submissionId: "submission-2",
+      status: "needs_human_review"
+    },
+    notificationPolicy: {
+      email: true,
+      push: true,
+      eventChannels: {
+        submission_review_started: {
+          email: false,
+          push: false
+        }
+      }
+    }
+  });
+
+  assert.equal(result.notification.id, "notification-2");
+  assert.equal(result.deliveries.email.mode, "policy-disabled");
+  assert.equal(
+    result.deliveries.email.reason,
+    "notification_policy_email_event_disabled"
+  );
+  assert.equal(result.deliveries.push.mode, "policy-disabled");
+  assert.equal(
+    result.deliveries.push.reason,
+    "notification_policy_push_event_disabled"
+  );
+
+  const emailAudit = calls.find(
+    ({ sql, params }) =>
+      sql.includes("INSERT INTO audit_logs") &&
+      params[2] === "notification.email.skipped"
+  );
+  const pushAudit = calls.find(
+    ({ sql, params }) =>
+      sql.includes("INSERT INTO audit_logs") &&
+      params[2] === "notification.push.skipped"
+  );
+
+  assert.ok(emailAudit, "expected email audit log");
+  assert.ok(pushAudit, "expected push audit log");
+  assert.equal(
+    JSON.parse(emailAudit.params[3]).delivery.reason,
+    "notification_policy_email_event_disabled"
+  );
+  assert.equal(
+    JSON.parse(pushAudit.params[3]).delivery.reason,
+    "notification_policy_push_event_disabled"
   );
 });

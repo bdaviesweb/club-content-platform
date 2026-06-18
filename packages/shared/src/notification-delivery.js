@@ -216,6 +216,44 @@ export function buildNotificationEmail({
   };
 }
 
+function isObjectRecord(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+export function resolveNotificationChannelPolicy({
+  notificationPolicy = {},
+  type,
+  channel
+}) {
+  const topLevelEnabled = notificationPolicy?.[channel] !== false;
+  const eventPolicy = isObjectRecord(notificationPolicy?.eventChannels)
+    ? notificationPolicy.eventChannels[type]
+    : null;
+  const eventEnabled =
+    isObjectRecord(eventPolicy) && Object.hasOwn(eventPolicy, channel)
+      ? eventPolicy[channel] !== false
+      : true;
+
+  if (!topLevelEnabled) {
+    return {
+      enabled: false,
+      reason: `notification_policy_${channel}_disabled`
+    };
+  }
+
+  if (!eventEnabled) {
+    return {
+      enabled: false,
+      reason: `notification_policy_${channel}_event_disabled`
+    };
+  }
+
+  return {
+    enabled: true,
+    reason: null
+  };
+}
+
 export async function sendEmailViaResend({
   toEmail,
   subject,
@@ -308,9 +346,13 @@ export async function createAndDeliverNotification(client, {
     publicAppUrl: process.env.PUBLIC_APP_URL || process.env.EXPO_PUBLIC_API_BASE_URL || ""
   });
   const appName = process.env.PUBLIC_PRODUCT_NAME || "Club Content";
-  const emailChannelEnabled = notificationPolicy?.email !== false;
+  const emailChannelPolicy = resolveNotificationChannelPolicy({
+    notificationPolicy,
+    type,
+    channel: "email"
+  });
 
-  const delivery = emailChannelEnabled
+  const delivery = emailChannelPolicy.enabled
     ? await sendEmailViaResend({
         toEmail: user.email,
         subject: emailContent.subject,
@@ -323,7 +365,7 @@ export async function createAndDeliverNotification(client, {
         delivered: false,
         channel: "email",
         mode: "policy-disabled",
-        reason: "notification_policy_email_disabled"
+        reason: emailChannelPolicy.reason
       };
 
   await client.query(
@@ -360,8 +402,12 @@ export async function createAndDeliverNotification(client, {
     );
   }
 
-  const pushChannelEnabled = notificationPolicy?.push !== false;
-  const pushRegistrations = pushChannelEnabled
+  const pushChannelPolicy = resolveNotificationChannelPolicy({
+    notificationPolicy,
+    type,
+    channel: "push"
+  });
+  const pushRegistrations = pushChannelPolicy.enabled
     ? await listActivePushRegistrations(client, userId)
     : [];
   const pushContent = buildNotificationPush({
@@ -369,7 +415,7 @@ export async function createAndDeliverNotification(client, {
     payload,
     appName
   });
-  const pushDelivery = pushChannelEnabled
+  const pushDelivery = pushChannelPolicy.enabled
     ? await sendPushNotifications({
         tokens: pushRegistrations.map((registration) => registration.pushToken),
         title: pushContent.title,
@@ -389,7 +435,7 @@ export async function createAndDeliverNotification(client, {
         attemptedCount: 0,
         successCount: 0,
         failureCount: 0,
-        reason: "notification_policy_push_disabled"
+        reason: pushChannelPolicy.reason
       };
 
   await client.query(
