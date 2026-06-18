@@ -255,6 +255,159 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
   }
 });
 
+test("GET /workflow-policies/organizations/:slug returns organization policy detail", async () => {
+  const queries = [];
+  const pool = {
+    async query(query, params) {
+      queries.push({ query, params });
+      return {
+        rows: [
+          {
+            organizationId: "org-1",
+            organizationSlug: "metro",
+            organizationName: "Metro Sports",
+            orgDefaultApproverRole: "team_manager",
+            orgPublicApproverRole: "club_comms",
+            orgMediumRiskApproverRole: "club_admin",
+            orgAllowAgentRouting: true,
+            orgAutoApproveInternalLowRisk: false,
+            orgAutoApproveMaxRisk: "0.35",
+            orgPublishingRule: { destinations: ["internal_feed"] },
+            orgNotificationRule: { email: true }
+          }
+        ]
+      };
+    }
+  };
+
+  const server = createAppServer({ pool });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/workflow-policies/organizations/metro`);
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.organization.slug, "metro");
+    assert.equal(body.organizationPolicy.mediumRiskApproverRole, "club_admin");
+    assert.deepEqual(body.organizationPolicy.publishingRule, {
+      destinations: ["internal_feed"]
+    });
+    assert.match(queries[0].query, /FROM organizations o/);
+    assert.deepEqual(queries[0].params, ["metro"]);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("POST /workflow-policies/organizations/:slug updates organization policy through the workflow manager flow", async () => {
+  const calls = [];
+  const runInTransaction = async (fn) =>
+    fn({
+      async query(query, params = []) {
+        calls.push({ query, params });
+
+        if (String(query).includes("FROM organizations o")) {
+          if (!calls.some((entry) => String(entry.query).includes("INSERT INTO organization_workflow_policies"))) {
+            return {
+              rows: [
+                {
+                  organizationId: "org-1",
+                  organizationSlug: "metro",
+                  organizationName: "Metro Sports",
+                  orgDefaultApproverRole: "team_manager",
+                  orgPublicApproverRole: "club_comms",
+                  orgMediumRiskApproverRole: "club_comms",
+                  orgAllowAgentRouting: true,
+                  orgAutoApproveInternalLowRisk: false,
+                  orgAutoApproveMaxRisk: "0.35",
+                  orgPublishingRule: { destinations: ["internal_feed"] },
+                  orgNotificationRule: { email: true }
+                }
+              ]
+            };
+          }
+
+          return {
+            rows: [
+              {
+                organizationId: "org-1",
+                organizationSlug: "metro",
+                organizationName: "Metro Sports",
+                orgDefaultApproverRole: "club_admin",
+                orgPublicApproverRole: "club_comms",
+                orgMediumRiskApproverRole: "club_comms",
+                orgAllowAgentRouting: false,
+                orgAutoApproveInternalLowRisk: true,
+                orgAutoApproveMaxRisk: "0.20",
+                orgPublishingRule: { destinations: ["internal_feed"] },
+                orgNotificationRule: { email: true, push: false }
+              }
+            ]
+          };
+        }
+
+        if (String(query).includes("SELECT id, email FROM users")) {
+          return { rowCount: 1, rows: [{ id: "user-1", email: "admin@example.test" }] };
+        }
+
+        if (String(query).includes("FROM memberships m")) {
+          return { rowCount: 1, rows: [{ role: "club_admin" }] };
+        }
+
+        if (String(query).includes("INSERT INTO organization_workflow_policies")) {
+          return { rowCount: 1, rows: [] };
+        }
+
+        throw new Error(`Unexpected query: ${query}`);
+      }
+    });
+
+  const server = createAppServer({ runInTransaction });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/workflow-policies/organizations/metro`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        actorEmail: "admin@example.test",
+        defaultApproverRole: "club_admin",
+        allowAgentRouting: false,
+        autoApproveInternalLowRisk: true,
+        autoApproveMaxRisk: 0.2,
+        notificationRule: { email: true, push: false }
+      })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.organizationPolicy.defaultApproverRole, "club_admin");
+    assert.equal(body.organizationPolicy.allowAgentRouting, false);
+
+    const upsert = calls.find(({ query }) =>
+      String(query).includes("INSERT INTO organization_workflow_policies")
+    );
+    assert.ok(upsert);
+    assert.equal(upsert.params[1], "club_admin");
+    assert.equal(upsert.params[4], false);
+    assert.equal(upsert.params[5], true);
+    assert.equal(upsert.params[6], 0.2);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
 test("GET /missing returns not found", async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/missing`);

@@ -74,6 +74,32 @@ function formatPercent(value) {
   return `${Math.round(Math.max(0, Math.min(number, 1)) * 100)}%`;
 }
 
+function formatPolicyJson(value) {
+  try {
+    return JSON.stringify(value || {}, null, 2);
+  } catch {
+    return "{}";
+  }
+}
+
+function renderPolicySelectOptions(options, selectedValue, { allowEmpty = false, emptyLabel = "Inherit organization default" } = {}) {
+  const rows = [];
+
+  if (allowEmpty) {
+    rows.push(
+      `<option value="" ${selectedValue === null || selectedValue === undefined ? "selected" : ""}>${escapeHtml(emptyLabel)}</option>`
+    );
+  }
+
+  for (const option of options) {
+    rows.push(
+      `<option value="${escapeHtml(option.value)}" ${selectedValue === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>`
+    );
+  }
+
+  return rows.join("");
+}
+
 function recommendationFor(detail) {
   const score = Number(detail.risk_score || 0);
   const latestReview = detail.review_runs[0];
@@ -266,6 +292,12 @@ function layout(content, title = "Club Content Ops") {
         box-shadow: var(--shadow);
       }
       .metric { padding: 14px 16px; }
+      .metric-card {
+        padding: 14px 16px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,0.78);
+      }
       .metric-label {
         color: var(--muted);
         text-transform: uppercase;
@@ -581,6 +613,13 @@ function layout(content, title = "Club Content Ops") {
       .stage-card,
       .signal-card,
       .dock-block { padding: 14px; }
+      .section-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        margin-bottom: 14px;
+      }
       .summary-stack { display: grid; gap: 12px; padding: 14px; }
       .summary-item,
       .history-item {
@@ -710,6 +749,9 @@ function layout(content, title = "Club Content Ops") {
         line-height: 1.45;
       }
       input[type="text"],
+      input[type="email"],
+      input[type="number"],
+      select,
       textarea {
         width: 100%;
         border-radius: 16px;
@@ -717,6 +759,9 @@ function layout(content, title = "Club Content Ops") {
         background: white;
         font: inherit;
         padding: 12px 14px;
+      }
+      select {
+        appearance: none;
       }
       textarea { min-height: 112px; resize: vertical; }
       button {
@@ -862,6 +907,39 @@ function layout(content, title = "Club Content Ops") {
         color: var(--red);
       }
       .hidden { display: none; }
+      .workflow-settings-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        margin-top: 16px;
+      }
+      .workflow-policy-form {
+        display: grid;
+        gap: 14px;
+      }
+      .workflow-policy-filter {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .workflow-form-panel {
+        align-self: start;
+      }
+      .form-field {
+        display: grid;
+        gap: 8px;
+      }
+      .form-field span {
+        font-weight: 700;
+      }
+      .policy-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+      }
+      .policy-status {
+        font-weight: 700;
+      }
       .footer-panels {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -884,6 +962,9 @@ function layout(content, title = "Club Content Ops") {
           grid-template-columns: 1fr;
         }
         .decision-dock { position: static; }
+        .workflow-settings-grid {
+          grid-template-columns: 1fr;
+        }
       }
       @media (max-width: 720px) {
         main {
@@ -1987,6 +2068,340 @@ async function renderQuickReviewHome(activeId) {
   `, "Club Content Quick Review");
 }
 
+function renderPolicyField({
+  label,
+  name,
+  input,
+  helper = ""
+}) {
+  return `<label class="form-field">
+    <span>${escapeHtml(label)}</span>
+    ${input}
+    ${helper ? `<small class="subtle">${escapeHtml(helper)}</small>` : ""}
+  </label>`;
+}
+
+function renderWorkflowPolicyForm({
+  scopeType,
+  scopeSlug,
+  title,
+  subtitle,
+  policy,
+  actorEmail = "",
+  allowInheritance = false
+}) {
+  const roleOptions = [
+    { value: "team_manager", label: "Team manager" },
+    { value: "club_comms", label: "Club comms" },
+    { value: "club_admin", label: "Club admin" }
+  ];
+  const booleanOptions = allowInheritance
+    ? [
+        { value: "true", label: "Enabled" },
+        { value: "false", label: "Disabled" }
+      ]
+    : [
+        { value: "true", label: "Enabled" },
+        { value: "false", label: "Disabled" }
+      ];
+
+  const defaultApprover = policy?.defaultApproverRole ?? null;
+  const publicApprover = policy?.publicApproverRole ?? null;
+  const mediumRiskApprover = policy?.mediumRiskApproverRole ?? null;
+  const allowAgentRouting = policy?.allowAgentRouting;
+  const autoApproveInternalLowRisk = policy?.autoApproveInternalLowRisk;
+  const autoApproveMaxRisk =
+    policy?.autoApproveMaxRisk === null || policy?.autoApproveMaxRisk === undefined
+      ? ""
+      : String(policy.autoApproveMaxRisk);
+  const publishingRule = formatPolicyJson(policy?.publishingRule || {});
+  const notificationRule = formatPolicyJson(policy?.notificationRule || {});
+
+  return `<section class="panel workflow-form-panel">
+    <div class="section-header">
+      <div>
+        <div class="eyebrow">${escapeHtml(scopeType === "club" ? "Club policy" : "Organization policy")}</div>
+        <h2>${escapeHtml(title)}</h2>
+        <p class="subtle" style="margin-top:8px;">${escapeHtml(subtitle)}</p>
+      </div>
+      <span class="badge badge-neutral">${escapeHtml(scopeSlug || "n/a")}</span>
+    </div>
+    <form class="workflow-policy-form" data-scope-type="${escapeHtml(scopeType)}" data-scope-slug="${escapeHtml(scopeSlug || "")}">
+      ${renderPolicyField({
+        label: "Actor email",
+        name: "actorEmail",
+        helper: "Used for authorization and the audit trail.",
+        input: `<input name="actorEmail" type="email" value="${escapeHtml(actorEmail)}" placeholder="comms@demo-club.local" required />`
+      })}
+      ${renderPolicyField({
+        label: "Default approver",
+        name: "defaultApproverRole",
+        helper: allowInheritance ? "Leave blank to inherit the organization default." : "Used for normal internal submissions.",
+        input: `<select name="defaultApproverRole">${renderPolicySelectOptions(roleOptions, defaultApprover, {
+          allowEmpty: allowInheritance,
+          emptyLabel: "Inherit organization default"
+        })}</select>`
+      })}
+      ${renderPolicyField({
+        label: "Public post approver",
+        name: "publicApproverRole",
+        helper: allowInheritance ? "Used when a club override is needed for public visibility." : "Used when a submission targets public visibility.",
+        input: `<select name="publicApproverRole">${renderPolicySelectOptions(roleOptions, publicApprover, {
+          allowEmpty: allowInheritance,
+          emptyLabel: "Inherit organization default"
+        })}</select>`
+      })}
+      ${renderPolicyField({
+        label: "Medium-risk approver",
+        name: "mediumRiskApproverRole",
+        helper: allowInheritance ? "Used when a club-specific medium-risk reviewer is needed." : "Used once the review score crosses the medium-risk threshold.",
+        input: `<select name="mediumRiskApproverRole">${renderPolicySelectOptions(roleOptions, mediumRiskApprover, {
+          allowEmpty: allowInheritance,
+          emptyLabel: "Inherit organization default"
+        })}</select>`
+      })}
+      ${renderPolicyField({
+        label: "Agent routing",
+        name: "allowAgentRouting",
+        helper: allowInheritance ? "Choose inherit to follow the organization setting." : "Allows Hermes to override the local fallback approver role.",
+        input: `<select name="allowAgentRouting">${renderPolicySelectOptions(booleanOptions, allowAgentRouting === null || allowAgentRouting === undefined ? null : String(Boolean(allowAgentRouting)), {
+          allowEmpty: allowInheritance,
+          emptyLabel: "Inherit organization default"
+        })}</select>`
+      })}
+      ${renderPolicyField({
+        label: "Low-risk internal auto-approval",
+        name: "autoApproveInternalLowRisk",
+        helper: allowInheritance ? "Choose inherit to fall back to the organization rule." : "Allows low-risk internal posts to skip human review.",
+        input: `<select name="autoApproveInternalLowRisk">${renderPolicySelectOptions(booleanOptions, autoApproveInternalLowRisk === null || autoApproveInternalLowRisk === undefined ? null : String(Boolean(autoApproveInternalLowRisk)), {
+          allowEmpty: allowInheritance,
+          emptyLabel: "Inherit organization default"
+        })}</select>`
+      })}
+      ${renderPolicyField({
+        label: "Auto-approve max risk",
+        name: "autoApproveMaxRisk",
+        helper: allowInheritance ? "Leave blank to inherit the organization threshold." : "Set the maximum risk score allowed for auto-approval.",
+        input: `<input name="autoApproveMaxRisk" type="number" min="0" max="1" step="0.01" value="${escapeHtml(autoApproveMaxRisk)}" placeholder="${allowInheritance ? "Inherit organization threshold" : "0.35"}" />`
+      })}
+      ${renderPolicyField({
+        label: "Publishing rule JSON",
+        name: "publishingRule",
+        helper: allowInheritance ? "Use an empty object to set a club-specific rule, or clear the field to inherit." : "Stored for downstream destination and publishing logic.",
+        input: `<textarea name="publishingRule" rows="8" spellcheck="false">${escapeHtml(publishingRule)}</textarea>`
+      })}
+      ${renderPolicyField({
+        label: "Notification rule JSON",
+        name: "notificationRule",
+        helper: allowInheritance ? "Use an empty object to set a club-specific rule, or clear the field to inherit." : "Stored for downstream delivery and escalation logic.",
+        input: `<textarea name="notificationRule" rows="8" spellcheck="false">${escapeHtml(notificationRule)}</textarea>`
+      })}
+      <div class="policy-actions">
+        <button type="submit" class="button-primary">Save ${escapeHtml(scopeType)} policy</button>
+        <span class="subtle policy-status" data-policy-status>Ready</span>
+      </div>
+    </form>
+  </section>`;
+}
+
+function renderEffectivePolicySummary(policy) {
+  if (!policy) {
+    return `<div class="panel"><h2>No policy loaded</h2><p class="subtle" style="margin-top:8px;">Pick a club slug that exists in the current environment.</p></div>`;
+  }
+
+  return `<section class="panel">
+    <div class="section-header">
+      <div>
+        <div class="eyebrow">Effective policy</div>
+        <h2>What the worker will do right now</h2>
+      </div>
+    </div>
+    <div class="topline">
+      <div class="metric-card">
+        <span class="metric-label">Default approver</span>
+        <strong>${escapeHtml(formatLabel(policy.defaultApproverRole))}</strong>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Public approver</span>
+        <strong>${escapeHtml(formatLabel(policy.publicApproverRole))}</strong>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Medium-risk approver</span>
+        <strong>${escapeHtml(formatLabel(policy.mediumRiskApproverRole))}</strong>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Auto-approve max risk</span>
+        <strong>${escapeHtml(formatPercent(policy.autoApproveMaxRisk))}</strong>
+      </div>
+    </div>
+    <div class="badge-row" style="margin-top:14px;">
+      ${renderStatusBadge(policy.allowAgentRouting ? "Agent routing enabled" : "Agent routing disabled", policy.allowAgentRouting ? "good" : "neutral")}
+      ${renderStatusBadge(policy.autoApproveInternalLowRisk ? "Low-risk internal auto-approve on" : "Low-risk internal auto-approve off", policy.autoApproveInternalLowRisk ? "good" : "neutral")}
+    </div>
+    <div class="signal-list" style="margin-top:16px;">
+      <div class="signal-card">
+        <strong>Publishing rule</strong>
+        <pre>${escapeHtml(formatPolicyJson(policy.publishingRule || {}))}</pre>
+      </div>
+      <div class="signal-card">
+        <strong>Notification rule</strong>
+        <pre>${escapeHtml(formatPolicyJson(policy.notificationRule || {}))}</pre>
+      </div>
+    </div>
+  </section>`;
+}
+
+async function renderWorkflowSettingsPage(clubSlug) {
+  const readiness = await fetchJson("/app/readiness");
+  const selectedClubSlug = clubSlug || readiness?.demo?.clubSlug || "demo-soccer-club";
+  const clubPolicy = await fetchJson(`/workflow-policies/clubs/${encodeURIComponent(selectedClubSlug)}`);
+  const organizationSlug = clubPolicy.organization?.slug || null;
+  const organizationPolicy = organizationSlug
+    ? await fetchJson(`/workflow-policies/organizations/${encodeURIComponent(organizationSlug)}`)
+    : null;
+  const reviewerEmail = readiness?.demo?.reviewerEmail || "comms@demo-club.local";
+
+  return layout(`
+    <section class="hero">
+      <div>
+        <div class="eyebrow">Workflow settings</div>
+        <h1>Set routing rules by club or by organization.</h1>
+        <p class="subtle" style="margin-top:10px; max-width:780px;">This is the multi-organization control layer for review routing, auto-approval, publishing rules, and notification rules. Club settings can override organization defaults when needed.</p>
+      </div>
+      <div class="quick-actions">
+        <a class="quick-link" href="/">Open review workspace</a>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-bottom:18px;">
+      <form method="GET" action="/workflow-settings" class="workflow-policy-form workflow-policy-filter">
+        ${renderPolicyField({
+          label: "Club slug",
+          name: "clubSlug",
+          helper: "Load the policy stack for one club at a time.",
+          input: `<input name="clubSlug" value="${escapeHtml(selectedClubSlug)}" placeholder="demo-soccer-club" />`
+        })}
+        <div class="policy-actions">
+          <button type="submit" class="button-secondary">Load settings</button>
+          <span class="subtle">Organization: ${escapeHtml(clubPolicy.organization?.name || "No organization linked")}</span>
+        </div>
+      </form>
+    </section>
+
+    ${renderEffectivePolicySummary(clubPolicy.effectivePolicy)}
+
+    <section class="workflow-settings-grid">
+      ${renderWorkflowPolicyForm({
+        scopeType: "organization",
+        scopeSlug: organizationSlug,
+        title: organizationPolicy?.organization?.name || "Organization policy unavailable",
+        subtitle: organizationSlug
+          ? "These defaults apply across clubs unless a club override is set."
+          : "This club does not currently belong to an organization.",
+        policy: organizationPolicy?.organizationPolicy || {},
+        actorEmail: reviewerEmail,
+        allowInheritance: false
+      })}
+      ${renderWorkflowPolicyForm({
+        scopeType: "club",
+        scopeSlug: selectedClubSlug,
+        title: clubPolicy.club?.name || selectedClubSlug,
+        subtitle: "Use club overrides only where this club needs different behavior from the organization default.",
+        policy: clubPolicy.clubPolicy || {},
+        actorEmail: reviewerEmail,
+        allowInheritance: true
+      })}
+    </section>
+
+    <script>
+      function parseOptionalRole(value) {
+        return value ? value : null;
+      }
+
+      function parseOptionalBoolean(value) {
+        if (value === '') {
+          return null;
+        }
+        return value === 'true';
+      }
+
+      function parseOptionalJson(value, allowBlankAsNull) {
+        const trimmed = value.trim();
+        if (!trimmed) {
+          return allowBlankAsNull ? null : {};
+        }
+        return JSON.parse(trimmed);
+      }
+
+      async function submitPolicyForm(form) {
+        const scopeType = form.dataset.scopeType;
+        const scopeSlug = form.dataset.scopeSlug;
+        const status = form.querySelector('[data-policy-status]');
+        const formData = new FormData(form);
+        const allowInheritance = scopeType === 'club';
+
+        if (!scopeSlug) {
+          status.textContent = 'This scope is not available for the selected club.';
+          return;
+        }
+
+        let payload;
+        try {
+          payload = {
+            actorEmail: String(formData.get('actorEmail') || '').trim(),
+            defaultApproverRole: parseOptionalRole(String(formData.get('defaultApproverRole') || '')),
+            publicApproverRole: parseOptionalRole(String(formData.get('publicApproverRole') || '')),
+            mediumRiskApproverRole: parseOptionalRole(String(formData.get('mediumRiskApproverRole') || '')),
+            allowAgentRouting: parseOptionalBoolean(String(formData.get('allowAgentRouting') || '')),
+            autoApproveInternalLowRisk: parseOptionalBoolean(String(formData.get('autoApproveInternalLowRisk') || '')),
+            autoApproveMaxRisk: String(formData.get('autoApproveMaxRisk') || '').trim() === ''
+              ? null
+              : Number(formData.get('autoApproveMaxRisk')),
+            publishingRule: parseOptionalJson(String(formData.get('publishingRule') || ''), allowInheritance),
+            notificationRule: parseOptionalJson(String(formData.get('notificationRule') || ''), allowInheritance)
+          };
+        } catch (error) {
+          status.textContent = 'Fix the JSON before saving.';
+          return;
+        }
+
+        if (!payload.actorEmail) {
+          status.textContent = 'Actor email is required.';
+          return;
+        }
+
+        status.textContent = 'Saving...';
+        const response = await fetch('/ui/workflow-policies/' + scopeType + 's/' + encodeURIComponent(scopeSlug), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+
+        if (!response.ok) {
+          status.textContent = result.error || 'Save failed';
+          return;
+        }
+
+        status.textContent = 'Saved. Reloading effective policy...';
+        window.location.reload();
+      }
+
+      document.querySelectorAll('.workflow-policy-form[data-scope-type]').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+          event.preventDefault();
+          submitPolicyForm(form).catch((error) => {
+            const status = form.querySelector('[data-policy-status]');
+            if (status) {
+              status.textContent = error.message || 'Save failed';
+            }
+          });
+        });
+      });
+    </script>
+  `, "Club Content Workflow Settings");
+}
+
 function readJson(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -2040,6 +2455,13 @@ export function createAdminServer() {
         return;
       }
 
+      if (req.method === "GET" && url.pathname === "/workflow-settings") {
+        const html = await renderWorkflowSettingsPage(url.searchParams.get("clubSlug"));
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.end(html);
+        return;
+      }
+
       if (req.method === "POST" && /^\/ui\/actions\/[^/]+$/.test(url.pathname)) {
         const approvalRequestId = url.pathname.split("/")[3];
         const body = await readJson(req);
@@ -2065,6 +2487,22 @@ export function createAdminServer() {
         const eventId = url.pathname.split("/")[3];
         const body = await readJson(req);
         const payload = await fetchJson(`/workflow-events/${eventId}/retry`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify(payload));
+        return;
+      }
+
+      if (
+        req.method === "POST" &&
+        /^\/ui\/workflow-policies\/(clubs|organizations)\/[^/]+$/.test(url.pathname)
+      ) {
+        const [, , , resourceType, scopeSlug] = url.pathname.split("/");
+        const body = await readJson(req);
+        const payload = await fetchJson(`/workflow-policies/${resourceType}/${scopeSlug}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(body)
