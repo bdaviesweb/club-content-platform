@@ -87,6 +87,11 @@ fi
 
 echo
 echo "---"
+echo "Running publishing override smoke"
+run_checked_step "Publishing override smoke" env REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/publishing_override_smoke_vps.sh
+
+echo
+echo "---"
 echo "Running public second approval smoke"
 public_second_approval_output="$(
   env REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/public_second_approval_smoke_vps.sh
