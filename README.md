@@ -72,7 +72,9 @@ Useful scripts:
 - `./scripts/public_upload_smoke_vps.sh` - verify the public upload signing and preview path through the dev VPS ingress
 - `./scripts/hermes_smoke_vps.sh` - submit a sample post, verify AI review output, and remove the sample from the active review queue
 - `./scripts/notification_status_smoke_vps.sh` - assert the live dev notification delivery contract on the VPS
+- `./scripts/notification_smoke_vps.sh` - verify notification readback and the latest email/push audit rows for a demo inbox
 - `./scripts/notification_webhook_smoke_vps.sh` - post a sample Resend-style webhook into the dev VPS and assert it is recorded correctly
+- `npm run qa:vps` - deploy the current checkout to the dev VPS, clear stale smoke approvals, and run the weekly-loop verification chain for routes, approval/publish, and notifications
 - `./scripts/cleanup_smoke_approvals_vps.sh` - list old pending smoke approvals; use `APPLY=1` to move them out of the active queue
 - `RUN_APPROVAL_PUBLISH_SMOKE=1 ./scripts/update_vps.sh` - update the VPS and verify submit, AI review, approval, and internal publishing
 - `DETACH=1 RUN_APPROVAL_PUBLISH_SMOKE=1 ./scripts/update_vps.sh` - run a long VPS update in the background and print the log path
@@ -81,12 +83,11 @@ Recommended routine:
 
 1. make changes locally in Codex or Hermes
 2. commit and push to GitHub
-3. run `./scripts/update_vps.sh`
-4. run `./scripts/smoke_vps.sh`
-5. run `./scripts/hermes_smoke_vps.sh` after AI review changes or VPS env updates
-6. run `./scripts/notification_status_smoke_vps.sh` after notification config or delivery-status changes
-7. run `./scripts/notification_webhook_smoke_vps.sh` after webhook handling changes
-6. run `RUN_APPROVAL_PUBLISH_SMOKE=1 ./scripts/update_vps.sh` after approval, publishing, or full workflow changes
+3. run `npm run qa:vps` when you want one command to deploy the current checkout, clear stale smoke approvals, and verify the weekly content loop end to end
+4. run `./scripts/update_vps.sh` when you only want a standard VPS update without the full smoke chain
+5. run `./scripts/hermes_smoke_vps.sh` after AI review changes or VPS env updates when you want an isolated Hermes routing check
+6. run `./scripts/notification_status_smoke_vps.sh` after notification config or delivery-status changes when you want the narrow delivery contract only
+7. run `./scripts/notification_webhook_smoke_vps.sh` after webhook handling changes when you want only the webhook intake check
 
 `./scripts/update_vps.sh` now autostashes a dirty VPS checkout before it pulls, so a stray edit on the server no longer blocks the update.
 
