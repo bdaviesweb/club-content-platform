@@ -84,3 +84,44 @@ test("GET /workflow-events defaults to failed events and returns items", async (
     await once(server, "close");
   }
 });
+
+test("GET /approvals/queue returns approval queue items", async () => {
+  const rows = [
+    {
+      id: "approval-1",
+      state: "pending",
+      submission_id: "submission-1",
+      approverRole: "club_admin",
+      latest_review_summary: "Looks good"
+    }
+  ];
+  const queries = [];
+
+  const pool = {
+    async query(query) {
+      queries.push(query);
+      return { rows };
+    }
+  };
+
+  const server = createAppServer({ pool });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/approvals/queue`);
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, { items: rows });
+    assert.equal(queries.length, 1);
+    assert.match(queries[0], /FROM approval_requests ar/);
+    assert.match(queries[0], /WHERE ar\.state = 'pending'/);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});

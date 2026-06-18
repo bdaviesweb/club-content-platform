@@ -692,8 +692,8 @@ async function handleResubmitSubmission(req, res, submissionId) {
   sendJson(res, 200, { submission: result });
 }
 
-async function handleApprovalQueue(res) {
-  const items = await loadApprovalQueue({ pool: getPool() });
+async function handleApprovalQueue(res, { pool = getPool() } = {}) {
+  const items = await loadApprovalQueue({ pool });
   sendJson(res, 200, { items });
 }
 
@@ -1256,7 +1256,7 @@ export function createAppServer({ pool } = {}) {
     }
 
     if (req.method === "GET" && url.pathname === "/approvals/queue") {
-      await handleApprovalQueue(res);
+      await handleApprovalQueue(res, { pool: pool || getPool() });
       return;
     }
 
