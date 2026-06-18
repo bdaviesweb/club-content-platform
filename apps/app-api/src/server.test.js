@@ -297,3 +297,94 @@ test("POST /workflow-events/:id/retry resets the event and records the retry", a
     await once(server, "close");
   }
 });
+
+test("POST /approval-requests/:id/actions validates required fields", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/approval-requests/approval-1/actions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ notes: "missing fields" })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(body, { error: "action and actedByEmail are required" });
+  });
+});
+
+test("POST /approval-requests/:id/actions approves and enqueues the approved event", async () => {
+  const calls = [];
+  const approvalActorCalls = [];
+  const approvalActionRunInTransaction = async (fn) =>
+    fn({
+      async query(query, params) {
+        calls.push({ query, params });
+        return { rowCount: 1, rows: [] };
+      }
+    });
+
+  const loadApprovalActor = async (_client, approvalRequestId, actedByEmail) => {
+    approvalActorCalls.push({ approvalRequestId, actedByEmail });
+    return {
+      found: true,
+      authorized: true,
+      actor: { id: "user-1" },
+      approvalRequest: {
+        submission_id: "submission-1",
+        submitted_by_user_id: "submitter-1"
+      }
+    };
+  };
+
+  let notificationCalled = false;
+  const deliverNotification = async () => {
+    notificationCalled = true;
+  };
+
+  const server = createAppServer({
+    approvalActionRunInTransaction,
+    loadApprovalActor,
+    deliverNotification
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/approval-requests/approval-1/actions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "approve",
+        actedByEmail: "reviewer@example.test",
+        notes: "Looks ready"
+      })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      approvalRequestId: "approval-1",
+      submissionId: "submission-1",
+      action: "approve"
+    });
+    assert.deepEqual(approvalActorCalls, [
+      {
+        approvalRequestId: "approval-1",
+        actedByEmail: "reviewer@example.test"
+      }
+    ]);
+    assert.equal(calls.length, 5);
+    assert.match(calls[0].query, /UPDATE approval_requests/);
+    assert.match(calls[1].query, /INSERT INTO approval_actions/);
+    assert.match(calls[2].query, /UPDATE submissions/);
+    assert.match(calls[3].query, /INSERT INTO submission_events/);
+    assert.match(calls[4].query, /INSERT INTO audit_logs/);
+    assert.equal(notificationCalled, false);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
