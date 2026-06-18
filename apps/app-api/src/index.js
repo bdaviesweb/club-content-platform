@@ -1107,9 +1107,9 @@ async function handleMarkNotificationRead(req, res, notificationId) {
   sendJson(res, 200, result.rows[0]);
 }
 
-async function handleWorkflowEvents(res, searchParams) {
+async function handleWorkflowEvents(res, searchParams, { pool = getPool() } = {}) {
   const status = searchParams.get("status") || "failed";
-  const items = await loadWorkflowEvents({ pool: getPool(), status });
+  const items = await loadWorkflowEvents({ pool, status });
   sendJson(res, 200, { items });
 }
 
@@ -1186,7 +1186,7 @@ async function handleRetryWorkflowEvent(req, res, eventId) {
   sendJson(res, 200, result);
 }
 
-export function createAppServer() {
+export function createAppServer({ pool } = {}) {
   return http.createServer(async (req, res) => {
   try {
     const url = parseUrl(req);
@@ -1315,7 +1315,7 @@ export function createAppServer() {
     }
 
     if (req.method === "GET" && url.pathname === "/workflow-events") {
-      await handleWorkflowEvents(res, url.searchParams);
+      await handleWorkflowEvents(res, url.searchParams, { pool: pool || getPool() });
       return;
     }
 
@@ -1340,9 +1340,9 @@ export function createAppServer() {
   });
 }
 
-export async function startAppServer({ listenPort = port } = {}) {
+export async function startAppServer({ listenPort = port, pool } = {}) {
   await ensureSeedData();
-  const server = createAppServer();
+  const server = createAppServer({ pool });
   await new Promise((resolve) => {
     server.listen(listenPort, resolve);
   });
