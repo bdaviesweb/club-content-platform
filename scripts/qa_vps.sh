@@ -78,7 +78,18 @@ fi
 echo
 echo "---"
 echo "Running public second approval smoke"
-run_checked_step "Public second approval smoke" env REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/public_second_approval_smoke_vps.sh
+public_second_approval_output="$(
+  env REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/public_second_approval_smoke_vps.sh
+)"
+printf '%s\n' "${public_second_approval_output}"
+
+public_submission_id=""
+if public_submission_id="$(extract_output_value "submission_id" "${public_second_approval_output}")"; then
+  :
+else
+  echo "Public second approval smoke did not report submission_id."
+  exit 1
+fi
 
 echo
 echo "---"
@@ -89,7 +100,7 @@ if [[ "${RUN_NOTIFICATION_DEEP_SMOKE}" == "1" ]]; then
   echo
   echo "---"
   echo "Running notification readback smoke"
-  run_checked_step "Notification readback smoke" env REMOTE_HOST="${REMOTE_HOST}" EXPECTED_SUBMISSION_ID="${submission_id}" EXPECTED_EMAIL_REASON="notification_policy_email_disabled" EXPECTED_PUSH_REASON="notification_policy_push_disabled" ./scripts/notification_smoke_vps.sh
+  run_checked_step "Notification readback smoke" env REMOTE_HOST="${REMOTE_HOST}" EXPECTED_SUBMISSION_ID="${public_submission_id}" EXPECTED_EMAIL_REASON="notification_policy_email_disabled" EXPECTED_PUSH_REASON="notification_policy_push_disabled" ./scripts/notification_smoke_vps.sh
 fi
 
 if [[ "${RUN_NOTIFICATION_WEBHOOK_SMOKE}" == "1" ]]; then
