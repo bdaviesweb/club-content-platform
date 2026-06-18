@@ -297,7 +297,11 @@ function handlePrivacyPage(res) {
   );
 }
 
-async function handleCreateSubmission(req, res) {
+async function handleCreateSubmission(
+  req,
+  res,
+  { runInTransaction = withTransaction } = {}
+) {
   const body = await readJson(req);
   const {
     clubSlug,
@@ -316,7 +320,7 @@ async function handleCreateSubmission(req, res) {
     return;
   }
 
-  const submission = await withTransaction(async (client) => {
+  const submission = await runInTransaction(async (client) => {
     const clubResult = await client.query(
       `SELECT id FROM clubs WHERE slug = $1`,
       [clubSlug]
@@ -463,7 +467,11 @@ async function handleCreateUploadPlan(req, res) {
   sendJson(res, 200, { uploads: plans });
 }
 
-async function handleMediaPreview(res, searchParams) {
+async function handleMediaPreview(
+  res,
+  searchParams,
+  { getStoredObjectFn = getStoredObject } = {}
+) {
   const objectKey = searchParams.get("key");
 
   if (!objectKey || !objectKey.startsWith("uploads/")) {
@@ -472,7 +480,7 @@ async function handleMediaPreview(res, searchParams) {
   }
 
   try {
-    const object = await getStoredObject(objectKey);
+    const object = await getStoredObjectFn(objectKey);
     sendBinary(res, 200, object.Body, {
       "content-type": object.ContentType || "application/octet-stream",
       "cache-control": "public, max-age=300"
@@ -567,7 +575,12 @@ async function handleListSubmissions(
   sendJson(res, 200, { items: result.rows });
 }
 
-async function handleResubmitSubmission(req, res, submissionId) {
+async function handleResubmitSubmission(
+  req,
+  res,
+  submissionId,
+  { runInTransaction = withTransaction } = {}
+) {
   const body = await readJson(req);
   const submitterEmail = normalizeOptionalString(body.submitterEmail);
   const rawText = normalizeOptionalString(body.rawText);
@@ -579,7 +592,7 @@ async function handleResubmitSubmission(req, res, submissionId) {
     return;
   }
 
-  const result = await withTransaction(async (client) => {
+  const result = await runInTransaction(async (client) => {
     const submissionResult = await client.query(
       `
       SELECT s.*, u.email AS submitter_email
@@ -1272,7 +1285,10 @@ export function createAppServer({
   recordWebhookEvent,
   loadAppReadinessFn,
   loadSubmissionRecordFn,
-  enrichFeedMediaCollectionFn
+  enrichFeedMediaCollectionFn,
+  createSubmissionRunInTransaction,
+  getStoredObjectFn,
+  resubmitSubmissionRunInTransaction
 } = {}) {
   return http.createServer(async (req, res) => {
   try {
@@ -1313,7 +1329,9 @@ export function createAppServer({
     }
 
     if (req.method === "POST" && url.pathname === "/submissions") {
-      await handleCreateSubmission(req, res);
+      await handleCreateSubmission(req, res, {
+        runInTransaction: createSubmissionRunInTransaction || withTransaction
+      });
       return;
     }
 
@@ -1323,7 +1341,9 @@ export function createAppServer({
     }
 
     if (req.method === "GET" && url.pathname === "/media/preview") {
-      await handleMediaPreview(res, url.searchParams);
+      await handleMediaPreview(res, url.searchParams, {
+        getStoredObjectFn: getStoredObjectFn || getStoredObject
+      });
       return;
     }
 
@@ -1346,7 +1366,9 @@ export function createAppServer({
       req.method === "POST" &&
       /^\/submissions\/[^/]+\/resubmit$/.test(url.pathname)
     ) {
-      await handleResubmitSubmission(req, res, url.pathname.split("/")[2]);
+      await handleResubmitSubmission(req, res, url.pathname.split("/")[2], {
+        runInTransaction: resubmitSubmissionRunInTransaction || withTransaction
+      });
       return;
     }
 

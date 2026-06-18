@@ -364,6 +364,273 @@ test("GET /submissions/:id returns not found when the record is missing", async 
   }
 });
 
+test("POST /submissions validates required fields", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/submissions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ submitterEmail: "parent@example.test" })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(body, {
+      error: "clubSlug, submitterEmail, and contentType are required"
+    });
+  });
+});
+
+test("POST /submissions creates a submission and media rows", async () => {
+  const calls = [];
+  const createSubmissionRunInTransaction = async (fn) =>
+    fn({
+      async query(query, params) {
+        calls.push({ query, params });
+
+        if (query.includes("SELECT id FROM clubs")) {
+          return { rowCount: 1, rows: [{ id: "club-1" }] };
+        }
+
+        if (query.includes("SELECT id FROM users")) {
+          return { rowCount: 1, rows: [{ id: "user-1" }] };
+        }
+
+        if (query.includes("SELECT id FROM teams")) {
+          return { rowCount: 1, rows: [{ id: "team-1" }] };
+        }
+
+        if (query.includes("INSERT INTO submissions")) {
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                id: "submission-1",
+                club_id: "club-1",
+                team_id: "team-1",
+                submitted_by_user_id: "user-1",
+                content_type: "photo",
+                raw_text: "Big win",
+                visibility_target: "internal",
+                status: "received"
+              }
+            ]
+          };
+        }
+
+        if (
+          query.includes("INSERT INTO submission_media") ||
+          query.includes("INSERT INTO submission_events")
+        ) {
+          return { rowCount: 1, rows: [] };
+        }
+
+        throw new Error(`Unexpected query: ${query}`);
+      }
+    });
+
+  const server = createAppServer({ createSubmissionRunInTransaction });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/submissions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        clubSlug: "westside",
+        teamSlug: "u12-boys",
+        submitterEmail: "parent@example.test",
+        contentType: "photo",
+        rawText: "Big win",
+        media: [
+          {
+            objectKey: "uploads/photo.jpg",
+            mediaType: "image",
+            mimeType: "image/jpeg",
+            width: 1200,
+            height: 900
+          }
+        ]
+      })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.deepEqual(body, {
+      submission: {
+        id: "submission-1",
+        club_id: "club-1",
+        team_id: "team-1",
+        submitted_by_user_id: "user-1",
+        content_type: "photo",
+        raw_text: "Big win",
+        visibility_target: "internal",
+        status: "received"
+      }
+    });
+    assert.equal(calls.length, 6);
+    assert.match(calls[0].query, /SELECT id FROM clubs/);
+    assert.match(calls[1].query, /SELECT id FROM users/);
+    assert.match(calls[2].query, /SELECT id FROM teams/);
+    assert.match(calls[3].query, /INSERT INTO submissions/);
+    assert.match(calls[4].query, /INSERT INTO submission_media/);
+    assert.match(calls[5].query, /INSERT INTO submission_events/);
+    assert.deepEqual(calls[0].params, ["westside"]);
+    assert.deepEqual(calls[1].params, ["parent@example.test"]);
+    assert.deepEqual(calls[2].params, ["club-1", "u12-boys"]);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("GET /media/preview validates upload keys", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/media/preview?key=bad/path.jpg`);
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(body, { error: "A valid media key is required" });
+  });
+});
+
+test("GET /media/preview returns stored object bytes", async () => {
+  const calls = [];
+  const getStoredObjectFn = async (objectKey) => {
+    calls.push(objectKey);
+    return {
+      Body: Buffer.from("preview-bytes"),
+      ContentType: "image/jpeg"
+    };
+  };
+
+  const server = createAppServer({ getStoredObjectFn });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(
+      `${baseUrl}/media/preview?key=uploads%2Fphoto.jpg`
+    );
+    const body = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.equal(body, "preview-bytes");
+    assert.equal(response.headers.get("content-type"), "image/jpeg");
+    assert.equal(response.headers.get("cache-control"), "public, max-age=300");
+    assert.deepEqual(calls, ["uploads/photo.jpg"]);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("POST /submissions/:id/resubmit validates submitterEmail", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/submissions/submission-1/resubmit`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ rawText: "Updated caption" })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(body, { error: "submitterEmail is required" });
+  });
+});
+
+test("POST /submissions/:id/resubmit resets the submission for review", async () => {
+  const calls = [];
+  const resubmitSubmissionRunInTransaction = async (fn) =>
+    fn({
+      async query(query, params) {
+        calls.push({ query, params });
+
+        if (query.includes("FROM submissions s") && query.includes("FOR UPDATE")) {
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                id: "submission-1",
+                submitter_email: "parent@example.test",
+                status: "needs_metadata",
+                raw_text: "Old caption",
+                visibility_target: "internal"
+              }
+            ]
+          };
+        }
+
+        if (query.includes("SELECT id FROM users")) {
+          return { rowCount: 1, rows: [{ id: "user-1" }] };
+        }
+
+        if (
+          query.includes("UPDATE submissions") ||
+          query.includes("DELETE FROM submission_media") ||
+          query.includes("INSERT INTO submission_media") ||
+          query.includes("INSERT INTO submission_events") ||
+          query.includes("INSERT INTO audit_logs")
+        ) {
+          return { rowCount: 1, rows: [] };
+        }
+
+        throw new Error(`Unexpected query: ${query}`);
+      }
+    });
+
+  const server = createAppServer({ resubmitSubmissionRunInTransaction });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/submissions/submission-1/resubmit`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        submitterEmail: "parent@example.test",
+        rawText: "Updated caption",
+        visibilityTarget: "public",
+        media: [
+          {
+            objectKey: "uploads/resubmitted.jpg",
+            mediaType: "image",
+            mimeType: "image/jpeg"
+          }
+        ]
+      })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      submission: { id: "submission-1", status: "received" }
+    });
+    assert.equal(calls.length, 7);
+    assert.match(calls[0].query, /FROM submissions s/);
+    assert.match(calls[1].query, /SELECT id FROM users/);
+    assert.match(calls[2].query, /UPDATE submissions/);
+    assert.match(calls[3].query, /DELETE FROM submission_media/);
+    assert.match(calls[4].query, /INSERT INTO submission_media/);
+    assert.match(calls[5].query, /INSERT INTO submission_events/);
+    assert.match(calls[6].query, /INSERT INTO audit_logs/);
+    assert.deepEqual(calls[0].params, ["submission-1"]);
+    assert.deepEqual(calls[1].params, ["parent@example.test"]);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
 test("POST /workflow-events/:id/retry validates actorEmail", async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/workflow-events/event-1/retry`, {
