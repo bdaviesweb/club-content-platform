@@ -297,7 +297,11 @@ function handlePrivacyPage(res) {
   );
 }
 
-async function handleCreateSubmission(req, res) {
+async function handleCreateSubmission(
+  req,
+  res,
+  { runInTransaction = withTransaction } = {}
+) {
   const body = await readJson(req);
   const {
     clubSlug,
@@ -316,7 +320,7 @@ async function handleCreateSubmission(req, res) {
     return;
   }
 
-  const submission = await withTransaction(async (client) => {
+  const submission = await runInTransaction(async (client) => {
     const clubResult = await client.query(
       `SELECT id FROM clubs WHERE slug = $1`,
       [clubSlug]
@@ -425,9 +429,15 @@ async function handleCreateSubmission(req, res) {
   sendJson(res, 201, { submission });
 }
 
-async function handleAppReadiness(res) {
-  const readiness = await loadAppReadiness({
-    pool: getPool()
+async function handleAppReadiness(
+  res,
+  {
+    pool = getPool(),
+    loadAppReadinessFn = loadAppReadiness
+  } = {}
+) {
+  const readiness = await loadAppReadinessFn({
+    pool
   });
 
   sendJson(res, 200, readiness);
@@ -457,7 +467,11 @@ async function handleCreateUploadPlan(req, res) {
   sendJson(res, 200, { uploads: plans });
 }
 
-async function handleMediaPreview(res, searchParams) {
+async function handleMediaPreview(
+  res,
+  searchParams,
+  { getStoredObjectFn = getStoredObject } = {}
+) {
   const objectKey = searchParams.get("key");
 
   if (!objectKey || !objectKey.startsWith("uploads/")) {
@@ -466,7 +480,7 @@ async function handleMediaPreview(res, searchParams) {
   }
 
   try {
-    const object = await getStoredObject(objectKey);
+    const object = await getStoredObjectFn(objectKey);
     sendBinary(res, 200, object.Body, {
       "content-type": object.ContentType || "application/octet-stream",
       "cache-control": "public, max-age=300"
@@ -476,12 +490,19 @@ async function handleMediaPreview(res, searchParams) {
   }
 }
 
-async function handleGetSubmission(res, submissionId) {
-  const pool = getPool();
-  const submission = await loadSubmissionRecord({
+async function handleGetSubmission(
+  res,
+  submissionId,
+  {
+    pool = getPool(),
+    loadSubmissionRecordFn = loadSubmissionRecord,
+    enrichSubmissionMediaCollection = enrichMediaCollection
+  } = {}
+) {
+  const submission = await loadSubmissionRecordFn({
     pool,
     submissionId,
-    enrichMediaCollection
+    enrichMediaCollection: enrichSubmissionMediaCollection
   });
 
   if (!submission) {
@@ -492,7 +513,11 @@ async function handleGetSubmission(res, submissionId) {
   sendJson(res, 200, submission);
 }
 
-async function handleListSubmissions(res, query) {
+async function handleListSubmissions(
+  res,
+  query,
+  { pool = getPool() } = {}
+) {
   const submitterEmail = query.get("submitterEmail");
   const clubSlug = query.get("clubSlug");
   const teamSlug = query.get("teamSlug");
@@ -521,7 +546,7 @@ async function handleListSubmissions(res, query) {
 
   values.push(limit);
 
-  const result = await getPool().query(
+  const result = await pool.query(
     `
     SELECT
       s.id,
@@ -550,7 +575,12 @@ async function handleListSubmissions(res, query) {
   sendJson(res, 200, { items: result.rows });
 }
 
-async function handleResubmitSubmission(req, res, submissionId) {
+async function handleResubmitSubmission(
+  req,
+  res,
+  submissionId,
+  { runInTransaction = withTransaction } = {}
+) {
   const body = await readJson(req);
   const submitterEmail = normalizeOptionalString(body.submitterEmail);
   const rawText = normalizeOptionalString(body.rawText);
@@ -562,7 +592,7 @@ async function handleResubmitSubmission(req, res, submissionId) {
     return;
   }
 
-  const result = await withTransaction(async (client) => {
+  const result = await runInTransaction(async (client) => {
     const submissionResult = await client.query(
       `
       SELECT s.*, u.email AS submitter_email
@@ -869,10 +899,17 @@ async function handleApprovalAction(
   sendJson(res, 200, result);
 }
 
-async function handleInternalFeed(res, searchParams = new URLSearchParams()) {
+async function handleInternalFeed(
+  res,
+  searchParams = new URLSearchParams(),
+  {
+    pool = getPool(),
+    enrichFeedMediaCollectionFn = enrichFeedMediaCollection
+  } = {}
+) {
   const includeSmoke = searchParams.get("includeSmoke") === "1";
   const smokeFilter = buildInternalFeedSmokeFilter(includeSmoke);
-  const result = await getPool().query(
+  const result = await pool.query(
     `
     SELECT
       pp.id,
@@ -909,7 +946,7 @@ async function handleInternalFeed(res, searchParams = new URLSearchParams()) {
   );
 
   const items = await Promise.all(result.rows.map(async (item) => {
-    const media = await enrichFeedMediaCollection(item.media);
+    const media = await enrichFeedMediaCollectionFn(item.media);
 
     return {
       ...item,
@@ -926,7 +963,11 @@ async function handleInternalFeed(res, searchParams = new URLSearchParams()) {
   sendJson(res, 200, { items });
 }
 
-async function handleNotifications(res, searchParams) {
+async function handleNotifications(
+  res,
+  searchParams,
+  { pool = getPool() } = {}
+) {
   const userEmail = searchParams.get("userEmail");
   const requestedLimit = Number(searchParams.get("limit") || 10);
   const limit = Number.isFinite(requestedLimit)
@@ -938,7 +979,7 @@ async function handleNotifications(res, searchParams) {
     return;
   }
 
-  const result = await getPool().query(
+  const result = await pool.query(
     `
     SELECT
       n.id,
@@ -970,17 +1011,29 @@ async function handleNotifications(res, searchParams) {
   sendJson(res, 200, { items: result.rows });
 }
 
-async function handleRegisterPushToken(req, res) {
+async function handleRegisterPushToken(
+  req,
+  res,
+  {
+    withTransaction: transactionRunner = withTransaction,
+    defaultProvider = pushProvider,
+    registerPushTokenFn = registerPushToken
+  } = {}
+) {
   const body = await readJson(req);
-  const result = await registerPushToken({
+  const result = await registerPushTokenFn({
     body,
-    withTransaction,
-    defaultProvider: pushProvider
+    withTransaction: transactionRunner,
+    defaultProvider
   });
   sendJson(res, result.status, result.payload);
 }
 
-async function handleListPushTokens(res, searchParams) {
+async function handleListPushTokens(
+  res,
+  searchParams,
+  { pool = getPool() } = {}
+) {
   const userEmail = normalizeOptionalString(searchParams.get("userEmail"));
 
   if (!userEmail) {
@@ -988,7 +1041,7 @@ async function handleListPushTokens(res, searchParams) {
     return;
   }
 
-  const result = await getPool().query(
+  const result = await pool.query(
     `
     WITH latest_push_state AS (
       SELECT DISTINCT ON (u.id, al.metadata->'push'->>'installationId')
@@ -1040,11 +1093,14 @@ async function handleListPushTokens(res, searchParams) {
   });
 }
 
-function handleNotificationDeliveryStatus(res) {
+function handleNotificationDeliveryStatus(
+  res,
+  { buildStatus = buildNotificationDeliveryStatus } = {}
+) {
   sendJson(
     res,
     200,
-    buildNotificationDeliveryStatus({
+    buildStatus({
       resendApiKey,
       notificationFromEmail,
       supportEmail,
@@ -1058,9 +1114,17 @@ function handleNotificationDeliveryStatus(res) {
   );
 }
 
-async function handleResendWebhook(req, res) {
+async function handleResendWebhook(
+  req,
+  res,
+  {
+    parseWebhook = parseResendWebhook,
+    recordWebhookEvent = recordNotificationWebhookEvent,
+    runInTransaction = withTransaction
+  } = {}
+) {
   const rawBody = await readText(req);
-  const parsed = parseResendWebhook({
+  const parsed = parseWebhook({
     rawBody,
     resendWebhookSecret,
     headers: req.headers,
@@ -1074,8 +1138,8 @@ async function handleResendWebhook(req, res) {
     return;
   }
 
-  const result = await withTransaction((client) =>
-    recordNotificationWebhookEvent(client, {
+  const result = await runInTransaction((client) =>
+    recordWebhookEvent(client, {
       event: parsed.event,
       verified: parsed.verified
     })
@@ -1090,7 +1154,12 @@ async function handleResendWebhook(req, res) {
   });
 }
 
-async function handleMarkNotificationRead(req, res, notificationId) {
+async function handleMarkNotificationRead(
+  req,
+  res,
+  notificationId,
+  { pool = getPool() } = {}
+) {
   const body = await readJson(req);
   const userEmail = body.userEmail;
 
@@ -1099,7 +1168,7 @@ async function handleMarkNotificationRead(req, res, notificationId) {
     return;
   }
 
-  const result = await getPool().query(
+  const result = await pool.query(
     `
     UPDATE notifications n
     SET read_at = COALESCE(n.read_at, NOW())
@@ -1209,7 +1278,17 @@ export function createAppServer({
   runInTransaction,
   approvalActionRunInTransaction,
   loadApprovalActor,
-  deliverNotification
+  deliverNotification,
+  registerPushTokenFn,
+  buildNotificationDeliveryStatusFn,
+  parseWebhook,
+  recordWebhookEvent,
+  loadAppReadinessFn,
+  loadSubmissionRecordFn,
+  enrichFeedMediaCollectionFn,
+  createSubmissionRunInTransaction,
+  getStoredObjectFn,
+  resubmitSubmissionRunInTransaction
 } = {}) {
   return http.createServer(async (req, res) => {
   try {
@@ -1242,12 +1321,17 @@ export function createAppServer({
     }
 
     if (req.method === "GET" && url.pathname === "/app/readiness") {
-      await handleAppReadiness(res);
+      await handleAppReadiness(res, {
+        pool: pool || getPool(),
+        loadAppReadinessFn: loadAppReadinessFn || loadAppReadiness
+      });
       return;
     }
 
     if (req.method === "POST" && url.pathname === "/submissions") {
-      await handleCreateSubmission(req, res);
+      await handleCreateSubmission(req, res, {
+        runInTransaction: createSubmissionRunInTransaction || withTransaction
+      });
       return;
     }
 
@@ -1257,17 +1341,24 @@ export function createAppServer({
     }
 
     if (req.method === "GET" && url.pathname === "/media/preview") {
-      await handleMediaPreview(res, url.searchParams);
+      await handleMediaPreview(res, url.searchParams, {
+        getStoredObjectFn: getStoredObjectFn || getStoredObject
+      });
       return;
     }
 
     if (req.method === "GET" && url.pathname === "/submissions") {
-      await handleListSubmissions(res, url.searchParams);
+      await handleListSubmissions(res, url.searchParams, {
+        pool: pool || getPool()
+      });
       return;
     }
 
     if (req.method === "GET" && /^\/submissions\/[^/]+$/.test(url.pathname)) {
-      await handleGetSubmission(res, url.pathname.split("/")[2]);
+      await handleGetSubmission(res, url.pathname.split("/")[2], {
+        pool: pool || getPool(),
+        loadSubmissionRecordFn: loadSubmissionRecordFn || loadSubmissionRecord
+      });
       return;
     }
 
@@ -1275,7 +1366,9 @@ export function createAppServer({
       req.method === "POST" &&
       /^\/submissions\/[^/]+\/resubmit$/.test(url.pathname)
     ) {
-      await handleResubmitSubmission(req, res, url.pathname.split("/")[2]);
+      await handleResubmitSubmission(req, res, url.pathname.split("/")[2], {
+        runInTransaction: resubmitSubmissionRunInTransaction || withTransaction
+      });
       return;
     }
 
@@ -1285,27 +1378,42 @@ export function createAppServer({
     }
 
     if (req.method === "GET" && url.pathname === "/notifications") {
-      await handleNotifications(res, url.searchParams);
+      await handleNotifications(res, url.searchParams, {
+        pool: pool || getPool()
+      });
       return;
     }
 
     if (req.method === "GET" && url.pathname === "/push-tokens") {
-      await handleListPushTokens(res, url.searchParams);
+      await handleListPushTokens(res, url.searchParams, {
+        pool: pool || getPool()
+      });
       return;
     }
 
     if (req.method === "POST" && url.pathname === "/push-tokens") {
-      await handleRegisterPushToken(req, res);
+      await handleRegisterPushToken(req, res, {
+        withTransaction: runInTransaction || withTransaction,
+        defaultProvider: pushProvider,
+        registerPushTokenFn: registerPushTokenFn || registerPushToken
+      });
       return;
     }
 
     if (req.method === "GET" && url.pathname === "/notification-delivery/status") {
-      handleNotificationDeliveryStatus(res);
+      handleNotificationDeliveryStatus(res, {
+        buildStatus:
+          buildNotificationDeliveryStatusFn || buildNotificationDeliveryStatus
+      });
       return;
     }
 
     if (req.method === "POST" && url.pathname === resendWebhookEndpointPath) {
-      await handleResendWebhook(req, res);
+      await handleResendWebhook(req, res, {
+        parseWebhook: parseWebhook || parseResendWebhook,
+        recordWebhookEvent: recordWebhookEvent || recordNotificationWebhookEvent,
+        runInTransaction: runInTransaction || withTransaction
+      });
       return;
     }
 
@@ -1323,7 +1431,9 @@ export function createAppServer({
       req.method === "POST" &&
       /^\/notifications\/[^/]+\/read$/.test(url.pathname)
     ) {
-      await handleMarkNotificationRead(req, res, url.pathname.split("/")[2]);
+      await handleMarkNotificationRead(req, res, url.pathname.split("/")[2], {
+        pool: pool || getPool()
+      });
       return;
     }
 
@@ -1340,7 +1450,11 @@ export function createAppServer({
     }
 
     if (req.method === "GET" && url.pathname === "/feed/internal") {
-      await handleInternalFeed(res, url.searchParams);
+      await handleInternalFeed(res, url.searchParams, {
+        pool: pool || getPool(),
+        enrichFeedMediaCollectionFn:
+          enrichFeedMediaCollectionFn || enrichFeedMediaCollection
+      });
       return;
     }
 

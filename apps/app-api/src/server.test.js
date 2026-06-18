@@ -33,6 +33,40 @@ test("GET /health returns service status", async () => {
   });
 });
 
+test("GET /app/readiness returns the injected readiness payload", async () => {
+  const calls = [];
+  const loadAppReadinessFn = async ({ pool }) => {
+    calls.push({ pool });
+    return {
+      ready: true,
+      capabilities: { submissions: true, review: false }
+    };
+  };
+  const pool = { name: "app-readiness-pool" };
+
+  const server = createAppServer({ pool, loadAppReadinessFn });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/app/readiness`);
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      ready: true,
+      capabilities: { submissions: true, review: false }
+    });
+    assert.deepEqual(calls, [{ pool }]);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
 test("GET /missing returns not found", async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/missing`);
@@ -204,6 +238,393 @@ test("GET /approval-requests/:id returns not found when missing", async () => {
 
     assert.equal(response.status, 404);
     assert.deepEqual(body, { error: "Not found" });
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("GET /submissions validates submitterEmail", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/submissions`);
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(body, { error: "submitterEmail is required" });
+  });
+});
+
+test("GET /submissions returns filtered submission items", async () => {
+  const rows = [
+    {
+      id: "submission-1",
+      content_type: "photo",
+      raw_text: "Great save",
+      visibility_target: "internal",
+      status: "received",
+      risk_score: null,
+      created_at: "2026-06-18T12:00:00.000Z",
+      club_slug: "westside",
+      team_slug: "u12-boys",
+      media_count: 2
+    }
+  ];
+  const calls = [];
+  const pool = {
+    async query(query, params) {
+      calls.push({ query, params });
+      return { rows };
+    }
+  };
+
+  const server = createAppServer({ pool });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(
+      `${baseUrl}/submissions?submitterEmail=parent%40example.test&clubSlug=westside&teamSlug=u12-boys&limit=99`
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, { items: rows });
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].query, /FROM submissions s/);
+    assert.deepEqual(calls[0].params, [
+      "parent@example.test",
+      "westside",
+      "u12-boys",
+      25
+    ]);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("GET /submissions/:id returns the loaded submission record", async () => {
+  const calls = [];
+  const submission = {
+    id: "submission-1",
+    status: "approved_internal",
+    media: [{ id: "media-1", previewUrl: "https://example.test/media-1" }]
+  };
+  const loadSubmissionRecordFn = async (input) => {
+    calls.push(input);
+    return submission;
+  };
+  const pool = { name: "submission-pool" };
+
+  const server = createAppServer({ pool, loadSubmissionRecordFn });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/submissions/submission-1`);
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, submission);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].pool, pool);
+    assert.equal(calls[0].submissionId, "submission-1");
+    assert.equal(typeof calls[0].enrichMediaCollection, "function");
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("GET /submissions/:id returns not found when the record is missing", async () => {
+  const loadSubmissionRecordFn = async () => null;
+
+  const server = createAppServer({ loadSubmissionRecordFn });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/submissions/missing-submission`);
+    const body = await response.json();
+
+    assert.equal(response.status, 404);
+    assert.deepEqual(body, { error: "Not found" });
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("POST /submissions validates required fields", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/submissions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ submitterEmail: "parent@example.test" })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(body, {
+      error: "clubSlug, submitterEmail, and contentType are required"
+    });
+  });
+});
+
+test("POST /submissions creates a submission and media rows", async () => {
+  const calls = [];
+  const createSubmissionRunInTransaction = async (fn) =>
+    fn({
+      async query(query, params) {
+        calls.push({ query, params });
+
+        if (query.includes("SELECT id FROM clubs")) {
+          return { rowCount: 1, rows: [{ id: "club-1" }] };
+        }
+
+        if (query.includes("SELECT id FROM users")) {
+          return { rowCount: 1, rows: [{ id: "user-1" }] };
+        }
+
+        if (query.includes("SELECT id FROM teams")) {
+          return { rowCount: 1, rows: [{ id: "team-1" }] };
+        }
+
+        if (query.includes("INSERT INTO submissions")) {
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                id: "submission-1",
+                club_id: "club-1",
+                team_id: "team-1",
+                submitted_by_user_id: "user-1",
+                content_type: "photo",
+                raw_text: "Big win",
+                visibility_target: "internal",
+                status: "received"
+              }
+            ]
+          };
+        }
+
+        if (
+          query.includes("INSERT INTO submission_media") ||
+          query.includes("INSERT INTO submission_events")
+        ) {
+          return { rowCount: 1, rows: [] };
+        }
+
+        throw new Error(`Unexpected query: ${query}`);
+      }
+    });
+
+  const server = createAppServer({ createSubmissionRunInTransaction });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/submissions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        clubSlug: "westside",
+        teamSlug: "u12-boys",
+        submitterEmail: "parent@example.test",
+        contentType: "photo",
+        rawText: "Big win",
+        media: [
+          {
+            objectKey: "uploads/photo.jpg",
+            mediaType: "image",
+            mimeType: "image/jpeg",
+            width: 1200,
+            height: 900
+          }
+        ]
+      })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.deepEqual(body, {
+      submission: {
+        id: "submission-1",
+        club_id: "club-1",
+        team_id: "team-1",
+        submitted_by_user_id: "user-1",
+        content_type: "photo",
+        raw_text: "Big win",
+        visibility_target: "internal",
+        status: "received"
+      }
+    });
+    assert.equal(calls.length, 6);
+    assert.match(calls[0].query, /SELECT id FROM clubs/);
+    assert.match(calls[1].query, /SELECT id FROM users/);
+    assert.match(calls[2].query, /SELECT id FROM teams/);
+    assert.match(calls[3].query, /INSERT INTO submissions/);
+    assert.match(calls[4].query, /INSERT INTO submission_media/);
+    assert.match(calls[5].query, /INSERT INTO submission_events/);
+    assert.deepEqual(calls[0].params, ["westside"]);
+    assert.deepEqual(calls[1].params, ["parent@example.test"]);
+    assert.deepEqual(calls[2].params, ["club-1", "u12-boys"]);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("GET /media/preview validates upload keys", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/media/preview?key=bad/path.jpg`);
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(body, { error: "A valid media key is required" });
+  });
+});
+
+test("GET /media/preview returns stored object bytes", async () => {
+  const calls = [];
+  const getStoredObjectFn = async (objectKey) => {
+    calls.push(objectKey);
+    return {
+      Body: Buffer.from("preview-bytes"),
+      ContentType: "image/jpeg"
+    };
+  };
+
+  const server = createAppServer({ getStoredObjectFn });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(
+      `${baseUrl}/media/preview?key=uploads%2Fphoto.jpg`
+    );
+    const body = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.equal(body, "preview-bytes");
+    assert.equal(response.headers.get("content-type"), "image/jpeg");
+    assert.equal(response.headers.get("cache-control"), "public, max-age=300");
+    assert.deepEqual(calls, ["uploads/photo.jpg"]);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("POST /submissions/:id/resubmit validates submitterEmail", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/submissions/submission-1/resubmit`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ rawText: "Updated caption" })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(body, { error: "submitterEmail is required" });
+  });
+});
+
+test("POST /submissions/:id/resubmit resets the submission for review", async () => {
+  const calls = [];
+  const resubmitSubmissionRunInTransaction = async (fn) =>
+    fn({
+      async query(query, params) {
+        calls.push({ query, params });
+
+        if (query.includes("FROM submissions s") && query.includes("FOR UPDATE")) {
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                id: "submission-1",
+                submitter_email: "parent@example.test",
+                status: "needs_metadata",
+                raw_text: "Old caption",
+                visibility_target: "internal"
+              }
+            ]
+          };
+        }
+
+        if (query.includes("SELECT id FROM users")) {
+          return { rowCount: 1, rows: [{ id: "user-1" }] };
+        }
+
+        if (
+          query.includes("UPDATE submissions") ||
+          query.includes("DELETE FROM submission_media") ||
+          query.includes("INSERT INTO submission_media") ||
+          query.includes("INSERT INTO submission_events") ||
+          query.includes("INSERT INTO audit_logs")
+        ) {
+          return { rowCount: 1, rows: [] };
+        }
+
+        throw new Error(`Unexpected query: ${query}`);
+      }
+    });
+
+  const server = createAppServer({ resubmitSubmissionRunInTransaction });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/submissions/submission-1/resubmit`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        submitterEmail: "parent@example.test",
+        rawText: "Updated caption",
+        visibilityTarget: "public",
+        media: [
+          {
+            objectKey: "uploads/resubmitted.jpg",
+            mediaType: "image",
+            mimeType: "image/jpeg"
+          }
+        ]
+      })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      submission: { id: "submission-1", status: "received" }
+    });
+    assert.equal(calls.length, 7);
+    assert.match(calls[0].query, /FROM submissions s/);
+    assert.match(calls[1].query, /SELECT id FROM users/);
+    assert.match(calls[2].query, /UPDATE submissions/);
+    assert.match(calls[3].query, /DELETE FROM submission_media/);
+    assert.match(calls[4].query, /INSERT INTO submission_media/);
+    assert.match(calls[5].query, /INSERT INTO submission_events/);
+    assert.match(calls[6].query, /INSERT INTO audit_logs/);
+    assert.deepEqual(calls[0].params, ["submission-1"]);
+    assert.deepEqual(calls[1].params, ["parent@example.test"]);
   } finally {
     server.close();
     await once(server, "close");
@@ -383,6 +804,381 @@ test("POST /approval-requests/:id/actions approves and enqueues the approved eve
     assert.match(calls[3].query, /INSERT INTO submission_events/);
     assert.match(calls[4].query, /INSERT INTO audit_logs/);
     assert.equal(notificationCalled, false);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("GET /notifications validates userEmail", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/notifications`);
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(body, { error: "userEmail is required" });
+  });
+});
+
+test("GET /notifications returns recent notification items", async () => {
+  const rows = [
+    {
+      id: "notification-1",
+      type: "submission_review_started",
+      payload: { submissionId: "submission-1" },
+      readAt: null,
+      createdAt: "2026-06-18T12:00:00.000Z",
+      deliveryStatus: "email.delivered",
+      deliveryProviderId: "email-1",
+      deliveryUpdatedAt: "2026-06-18T12:01:00.000Z"
+    }
+  ];
+  const calls = [];
+  const pool = {
+    async query(query, params) {
+      calls.push({ query, params });
+      return { rows };
+    }
+  };
+
+  const server = createAppServer({ pool });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(
+      `${baseUrl}/notifications?userEmail=parent%40example.test&limit=50`
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, { items: rows });
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].query, /FROM notifications n/);
+    assert.deepEqual(calls[0].params, ["parent@example.test", 25]);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("POST /notifications/:id/read marks the notification as read", async () => {
+  const calls = [];
+  const pool = {
+    async query(query, params) {
+      calls.push({ query, params });
+      return {
+        rowCount: 1,
+        rows: [{ id: "notification-1", readAt: "2026-06-18T12:05:00.000Z" }]
+      };
+    }
+  };
+
+  const server = createAppServer({ pool });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/notifications/notification-1/read`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userEmail: "parent@example.test" })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      id: "notification-1",
+      readAt: "2026-06-18T12:05:00.000Z"
+    });
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].query, /UPDATE notifications n/);
+    assert.deepEqual(calls[0].params, ["notification-1", "parent@example.test"]);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("GET /push-tokens returns masked active push registrations", async () => {
+  const rows = [
+    {
+      userId: "user-1",
+      userEmail: "parent@example.test",
+      provider: "expo",
+      installationId: "installation-1",
+      pushToken: "ExponentPushToken[abcdef1234567890]",
+      platform: "ios",
+      appId: "com.hermes.clubcontent",
+      environment: "development",
+      deviceLabel: "Parent iPhone",
+      enabled: true,
+      updatedAt: "2026-06-18T12:00:00.000Z"
+    }
+  ];
+  const calls = [];
+  const pool = {
+    async query(query, params) {
+      calls.push({ query, params });
+      return { rows };
+    }
+  };
+
+  const server = createAppServer({ pool });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(
+      `${baseUrl}/push-tokens?userEmail=parent%40example.test`
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      items: [
+        {
+          ...rows[0],
+          tokenPreview: "Expone...67890]"
+        }
+      ]
+    });
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].query, /WITH latest_push_state AS/);
+    assert.deepEqual(calls[0].params, ["parent@example.test"]);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("POST /push-tokens delegates to registerPushToken with the app provider", async () => {
+  const registerCalls = [];
+  const registerPushTokenFn = async (input) => {
+    registerCalls.push(input);
+    return {
+      status: 200,
+      payload: {
+        registration: {
+          userId: "user-1",
+          provider: input.defaultProvider,
+          installationId: input.body.installationId
+        }
+      }
+    };
+  };
+
+  const server = createAppServer({ registerPushTokenFn });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/push-tokens`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        userEmail: "parent@example.test",
+        installationId: "installation-1",
+        pushToken: "ExponentPushToken[abcdef1234567890]"
+      })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      registration: {
+        userId: "user-1",
+        provider: "expo",
+        installationId: "installation-1"
+      }
+    });
+    assert.equal(registerCalls.length, 1);
+    assert.equal(registerCalls[0].body.userEmail, "parent@example.test");
+    assert.equal(registerCalls[0].defaultProvider, "expo");
+    assert.equal(typeof registerCalls[0].withTransaction, "function");
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("GET /notification-delivery/status returns the injected delivery snapshot", async () => {
+  const buildCalls = [];
+  const buildNotificationDeliveryStatusFn = (config) => {
+    buildCalls.push(config);
+    return {
+      email: { enabled: false, mode: "log-only" },
+      push: { enabled: false, mode: "disabled" }
+    };
+  };
+
+  const server = createAppServer({ buildNotificationDeliveryStatusFn });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/notification-delivery/status`);
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      email: { enabled: false, mode: "log-only" },
+      push: { enabled: false, mode: "disabled" }
+    });
+    assert.equal(buildCalls.length, 1);
+    assert.equal(buildCalls[0].resendWebhookEndpointPath, "/webhooks/resend");
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("GET /feed/internal returns filtered feed items with enriched media state", async () => {
+  const rows = [
+    {
+      id: "post-1",
+      published_at: "2026-06-18T12:30:00.000Z",
+      submission_id: "submission-1",
+      raw_text: "Goal recap",
+      caption_draft: "A strong finish",
+      content_type: "photo",
+      visibility_target: "internal",
+      risk_score: 0.1,
+      routing_decision: "auto_publish_internal",
+      destination_name: "Internal Feed",
+      media: [
+        { objectKey: "uploads/goal.jpg", mediaType: "image", mimeType: "image/jpeg" },
+        { objectKey: "uploads/clip.mov", mediaType: "video", mimeType: "video/quicktime" }
+      ]
+    }
+  ];
+  const queryCalls = [];
+  const enrichCalls = [];
+  const pool = {
+    async query(query, params) {
+      queryCalls.push({ query, params });
+      return { rows };
+    }
+  };
+  const enrichFeedMediaCollectionFn = async (media) => {
+    enrichCalls.push(media);
+    return {
+      displayableMedia: [{ objectKey: "uploads/goal.jpg", previewUrl: "https://example.test/goal.jpg" }],
+      unavailableMedia: [{ objectKey: "uploads/clip.mov", mimeType: "video/quicktime", previewUrl: null, previewUnavailableReason: "unsupported_format" }]
+    };
+  };
+
+  const server = createAppServer({ pool, enrichFeedMediaCollectionFn });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/feed/internal?includeSmoke=1`);
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      items: [
+        {
+          ...rows[0],
+          media: [{ objectKey: "uploads/goal.jpg", previewUrl: "https://example.test/goal.jpg" }],
+          unavailable_media_count: 1,
+          unavailable_media_reasons: [
+            {
+              objectKey: "uploads/clip.mov",
+              mimeType: "video/quicktime",
+              reason: "unsupported_format"
+            }
+          ]
+        }
+      ]
+    });
+    assert.equal(queryCalls.length, 1);
+    assert.match(queryCalls[0].query, /FROM published_posts pp/);
+    assert.deepEqual(queryCalls[0].params, []);
+    assert.deepEqual(enrichCalls, [rows[0].media]);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("POST /webhooks/resend records verified webhook deliveries", async () => {
+  const parseCalls = [];
+  const recordCalls = [];
+  const parseWebhook = ({ rawBody, headers }) => {
+    parseCalls.push({ rawBody, headers });
+    return {
+      ok: true,
+      verified: true,
+      event: { type: "email.delivered", data: { email_id: "email-1" } }
+    };
+  };
+  const runInTransaction = async (fn) => fn({ name: "client" });
+  const recordWebhookEvent = async (client, payload) => {
+    recordCalls.push({ client, payload });
+    return {
+      verified: payload.verified,
+      webhookType: payload.event.type,
+      matchedNotificationId: "notification-1",
+      emailId: payload.event.data.email_id
+    };
+  };
+
+  const server = createAppServer({
+    parseWebhook,
+    recordWebhookEvent,
+    runInTransaction
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/webhooks/resend`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "svix-id": "msg_123"
+      },
+      body: JSON.stringify({ type: "email.delivered" })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      received: true,
+      verified: true,
+      webhookType: "email.delivered",
+      matchedNotificationId: "notification-1",
+      emailId: "email-1"
+    });
+    assert.equal(parseCalls.length, 1);
+    assert.match(parseCalls[0].rawBody, /email\.delivered/);
+    assert.equal(parseCalls[0].headers["svix-id"], "msg_123");
+    assert.equal(recordCalls.length, 1);
+    assert.equal(recordCalls[0].client.name, "client");
+    assert.equal(recordCalls[0].payload.verified, true);
   } finally {
     server.close();
     await once(server, "close");
