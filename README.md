@@ -101,10 +101,15 @@ to clear old smoke approvals before the public mobile smoke starts.
 ## API Endpoints
 
 - `GET /health`
+- `GET /app/readiness`
+- `GET /support`
+- `GET /privacy`
 - `POST /submissions`
 - `GET /submissions?submitterEmail=...&clubSlug=...&teamSlug=...`
-- `POST /uploads/sign`
 - `GET /submissions/:id`
+- `POST /submissions/:id/resubmit`
+- `POST /uploads/sign`
+- `GET /media/preview?key=uploads/...`
 - `GET /approvals/queue`
 - `GET /approval-requests/:id`
 - `POST /approval-requests/:id/actions`
@@ -112,6 +117,7 @@ to clear old smoke approvals before the public mobile smoke starts.
 - `GET /push-tokens?userEmail=...`
 - `POST /push-tokens`
 - `GET /notification-delivery/status`
+- `POST /webhooks/resend`
 - `POST /notifications/:id/read`
 - `GET /feed/internal`
 - `GET /feed/internal?includeSmoke=1` to include smoke-generated internal posts
