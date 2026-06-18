@@ -260,7 +260,7 @@ VPS enablement steps:
 6. Create or update a Resend webhook to `https://clubcontent-api.davmn.net/webhooks/resend`.
 7. Subscribe it to the recommended email events above.
 8. Run `./scripts/notification_status_smoke_vps.sh` to confirm the live delivery status contract before deeper notification checks.
-9. Run `./scripts/notification_smoke_vps.sh`.
+9. Run `./scripts/notification_smoke_vps.sh` after a real demo submission creates at least one notification for the target inbox.
 10. Confirm `GET /notification-delivery/status` reports the expected provider, mode, enabled state, and webhook configuration for that environment.
 11. Check `GET /notifications?userEmail=<your demo inbox>` or the inbox itself to confirm the event progresses from `sent` to `delivered`.
 12. Run `./scripts/notification_webhook_smoke_vps.sh` to confirm the dev webhook endpoint accepts the sample payload and stores a `notification.email.webhook.*` audit row.
