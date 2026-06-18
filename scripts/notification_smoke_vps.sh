@@ -6,61 +6,59 @@ REMOTE_DIR="${REMOTE_DIR:-/srv/repos/projects/club-content-platform}"
 SUBMITTER_EMAIL="${SUBMITTER_EMAIL:-coach@demo-club.local}"
 NOTIFICATION_LIMIT="${NOTIFICATION_LIMIT:-5}"
 
-ssh "${REMOTE_HOST}" /bin/bash -s -- \
-  "${REMOTE_DIR}" \
-  "${SUBMITTER_EMAIL}" \
-  "${NOTIFICATION_LIMIT}" <<'INNER'
-set -euo pipefail
+status_json="$(
+  ssh "${REMOTE_HOST}" \
+    "cd '${REMOTE_DIR}' && curl -fsS http://localhost:4000/notification-delivery/status"
+)"
+notifications_json="$(
+  ssh "${REMOTE_HOST}" \
+    "cd '${REMOTE_DIR}' && curl -fsS 'http://localhost:4000/notifications?userEmail=${SUBMITTER_EMAIL}&limit=${NOTIFICATION_LIMIT}'"
+)"
+audit_rows="$(
+  ssh "${REMOTE_HOST}" \
+    "cd '${REMOTE_DIR}' && docker compose -f docker-compose.vps.yml exec -T postgres psql -U club -d club_content -At -F '|' -c \"
+      SELECT
+        n.id,
+        n.type,
+        COALESCE(email_log.action, ''),
+        COALESCE(email_log.metadata->'delivery'->>'mode', ''),
+        COALESCE(email_log.metadata->'delivery'->>'reason', ''),
+        COALESCE(push_log.action, ''),
+        COALESCE(push_log.metadata->'delivery'->>'mode', ''),
+        COALESCE(push_log.metadata->'delivery'->>'reason', ''),
+        COALESCE(push_log.metadata->>'tokenCount', '')
+      FROM notifications n
+      JOIN users u ON u.id = n.user_id
+      LEFT JOIN LATERAL (
+        SELECT action, metadata
+        FROM audit_logs
+        WHERE entity_type = 'notification'
+          AND entity_id = n.id
+          AND action LIKE 'notification.email.%'
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) email_log ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT action, metadata
+        FROM audit_logs
+        WHERE entity_type = 'notification'
+          AND entity_id = n.id
+          AND action LIKE 'notification.push.%'
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) push_log ON TRUE
+      WHERE u.email = '${SUBMITTER_EMAIL}'
+      ORDER BY n.created_at DESC
+      LIMIT ${NOTIFICATION_LIMIT};
+    \""
+)"
 
-REMOTE_DIR="$1"
-SUBMITTER_EMAIL="$2"
-NOTIFICATION_LIMIT="$3"
-
-cd "${REMOTE_DIR}"
-
-status_json=$(curl -fsS http://localhost:4000/notification-delivery/status)
-notifications_json=$(curl -fsS "http://localhost:4000/notifications?userEmail=${SUBMITTER_EMAIL}&limit=${NOTIFICATION_LIMIT}")
-audit_rows=$(docker compose -f docker-compose.vps.yml exec -T postgres psql -U club -d club_content -At -F '|' -c "
-  SELECT
-    n.id,
-    n.type,
-    COALESCE(email_log.action, ''),
-    COALESCE(email_log.metadata->'delivery'->>'mode', ''),
-    COALESCE(email_log.metadata->'delivery'->>'reason', ''),
-    COALESCE(push_log.action, ''),
-    COALESCE(push_log.metadata->'delivery'->>'mode', ''),
-    COALESCE(push_log.metadata->'delivery'->>'reason', ''),
-    COALESCE(push_log.metadata->>'tokenCount', '')
-  FROM notifications n
-  JOIN users u ON u.id = n.user_id
-  LEFT JOIN LATERAL (
-    SELECT action, metadata
-    FROM audit_logs
-    WHERE entity_type = 'notification'
-      AND entity_id = n.id
-      AND action LIKE 'notification.email.%'
-    ORDER BY created_at DESC
-    LIMIT 1
-  ) email_log ON TRUE
-  LEFT JOIN LATERAL (
-    SELECT action, metadata
-    FROM audit_logs
-    WHERE entity_type = 'notification'
-      AND entity_id = n.id
-      AND action LIKE 'notification.push.%'
-    ORDER BY created_at DESC
-    LIMIT 1
-  ) push_log ON TRUE
-  WHERE u.email = '${SUBMITTER_EMAIL}'
-  ORDER BY n.created_at DESC
-  LIMIT ${NOTIFICATION_LIMIT};
-")
-
-STATUS_JSON="${status_json}" \
-NOTIFICATIONS_JSON="${notifications_json}" \
-AUDIT_ROWS="${audit_rows}" \
-SUBMITTER_EMAIL="${SUBMITTER_EMAIL}" \
-node <<'NODE'
+node_output="$(
+  STATUS_JSON="${status_json}" \
+  NOTIFICATIONS_JSON="${notifications_json}" \
+  AUDIT_ROWS="${audit_rows}" \
+  SUBMITTER_EMAIL="${SUBMITTER_EMAIL}" \
+  node <<'NODE'
 const assert = require("node:assert/strict");
 
 const status = JSON.parse(process.env.STATUS_JSON);
@@ -164,4 +162,11 @@ console.log(
   )
 );
 NODE
-INNER
+)"
+
+if [[ -z "${node_output//[$' \t\r\n']/}" ]]; then
+  echo "Notification smoke produced no output."
+  exit 1
+fi
+
+printf '%s\n' "${node_output}"
