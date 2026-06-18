@@ -259,24 +259,60 @@ export function shouldAutoApproveSubmission({
   return { allowed: true, reason: "policy_auto_approve_low_risk_internal" };
 }
 
+function normalizeDestinationTypes(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return [...new Set(value.map((entry) => String(entry || "").trim()).filter(Boolean))];
+}
+
+export function choosePublishingPlan({
+  submission = {},
+  policy = defaultWorkflowPolicy
+} = {}) {
+  const visibilityTarget = String(submission.visibility_target || "").trim();
+  const visibilityDestinations = policy?.publishingRule?.visibilityDestinations;
+
+  if (
+    visibilityTarget &&
+    visibilityDestinations &&
+    typeof visibilityDestinations === "object" &&
+    !Array.isArray(visibilityDestinations)
+  ) {
+    const matchedDestinations = normalizeDestinationTypes(
+      visibilityDestinations[visibilityTarget]
+    );
+
+    if (matchedDestinations.length) {
+      return {
+        destinationTypes: matchedDestinations,
+        policySource: `publishing_rule_visibility_${visibilityTarget}`
+      };
+    }
+  }
+
+  const configuredDestinations = policy?.publishingRule?.destinations;
+  const normalized = normalizeDestinationTypes(configuredDestinations);
+
+  if (normalized.length) {
+    return {
+      destinationTypes: normalized,
+      policySource: "publishing_rule_destinations"
+    };
+  }
+
+  return {
+    destinationTypes: [internalDestinationType],
+    policySource: "publishing_rule_default_internal"
+  };
+}
+
 export function choosePublishingDestinationTypes(
   policy = defaultWorkflowPolicy
 ) {
-  const configuredDestinations = policy?.publishingRule?.destinations;
-
-  if (!Array.isArray(configuredDestinations)) {
-    return [internalDestinationType];
-  }
-
-  const normalized = configuredDestinations
-    .map((value) => String(value || "").trim())
-    .filter(Boolean);
-
-  if (!normalized.length) {
-    return [internalDestinationType];
-  }
-
-  return [...new Set(normalized)];
+  const plan = choosePublishingPlan({ policy });
+  return plan.destinationTypes;
 }
 
 export function shouldRequireSecondApproval({

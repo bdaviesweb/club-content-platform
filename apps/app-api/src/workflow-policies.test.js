@@ -268,6 +268,65 @@ test("validates workflow policy patch payloads", () => {
   assert.deepEqual(
     validateWorkflowPolicyPatch(
       {
+        publishingRule: {
+          destinations: ["internal_feed"],
+          visibilityDestinations: {
+            internal: ["internal_feed"],
+            public: ["internal_feed", "booster_email"]
+          }
+        }
+      },
+      { scopeType: "organization" }
+    ),
+    {
+      ok: true,
+      value: {
+        publishingRule: {
+          destinations: ["internal_feed"],
+          visibilityDestinations: {
+            internal: ["internal_feed"],
+            public: ["internal_feed", "booster_email"]
+          }
+        }
+      }
+    }
+  );
+
+  assert.deepEqual(
+    validateWorkflowPolicyPatch(
+      {
+        publishingRule: {
+          visibilityDestinations: []
+        }
+      },
+      { scopeType: "club" }
+    ),
+    {
+      ok: false,
+      error: "publishingRule.visibilityDestinations must be an object"
+    }
+  );
+
+  assert.deepEqual(
+    validateWorkflowPolicyPatch(
+      {
+        publishingRule: {
+          visibilityDestinations: {
+            public: ["", "internal_feed"]
+          }
+        }
+      },
+      { scopeType: "club" }
+    ),
+    {
+      ok: false,
+      error: "publishingRule.visibilityDestinations.public.destinations must contain only non-empty strings"
+    }
+  );
+
+  assert.deepEqual(
+    validateWorkflowPolicyPatch(
+      {
         notificationRule: {
           email: true,
           push: true,

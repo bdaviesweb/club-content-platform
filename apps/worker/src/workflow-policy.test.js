@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  choosePublishingPlan,
   choosePublishingDestinationTypes,
   describePolicyApproverSource,
   choosePolicyApproverRole,
@@ -317,6 +318,25 @@ test("allows low-risk internal auto-approval only when policy permits it", () =>
 
 test("chooses publish destinations from policy and falls back to internal feed", () => {
   assert.deepEqual(
+    choosePublishingPlan({
+      submission: { visibility_target: "public" },
+      policy: {
+        ...defaultWorkflowPolicy,
+        publishingRule: {
+          destinations: ["internal_feed"],
+          visibilityDestinations: {
+            public: ["internal_feed", "booster_email", "internal_feed"]
+          }
+        }
+      }
+    }),
+    {
+      destinationTypes: ["internal_feed", "booster_email"],
+      policySource: "publishing_rule_visibility_public"
+    }
+  );
+
+  assert.deepEqual(
     choosePublishingDestinationTypes({
       ...defaultWorkflowPolicy,
       publishingRule: { destinations: ["internal_feed", "booster_email", "internal_feed"] }
@@ -335,6 +355,17 @@ test("chooses publish destinations from policy and falls back to internal feed",
   assert.deepEqual(choosePublishingDestinationTypes(defaultWorkflowPolicy), [
     "internal_feed"
   ]);
+
+  assert.deepEqual(
+    choosePublishingPlan({
+      submission: { visibility_target: "internal" },
+      policy: defaultWorkflowPolicy
+    }),
+    {
+      destinationTypes: ["internal_feed"],
+      policySource: "publishing_rule_default_internal"
+    }
+  );
 });
 
 test("requires second approval for public submissions when policy enables it", () => {

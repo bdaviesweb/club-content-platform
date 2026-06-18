@@ -13,7 +13,7 @@ import {
 } from "./publish-outcome.js";
 import { buildReviewArtifacts } from "./review-provider.js";
 import {
-  choosePublishingDestinationTypes,
+  choosePublishingPlan,
   describePolicyApproverSource,
   choosePolicyApproverRole,
   loadEffectiveWorkflowPolicy,
@@ -340,7 +340,11 @@ export async function processSubmissionApproved(
 
   const submission = submissionResult.rows[0];
   const workflowPolicy = await loadEffectiveWorkflowPolicy(client, submission.club_id);
-  const destinationTypes = choosePublishingDestinationTypes(workflowPolicy);
+  const publishingPlan = choosePublishingPlan({
+    submission,
+    policy: workflowPolicy
+  });
+  const destinationTypes = publishingPlan.destinationTypes;
 
   const destination = await client.query(
     `
@@ -465,19 +469,27 @@ export async function processSubmissionApproved(
     INSERT INTO submission_events (submission_id, event_name, payload)
     VALUES ($1, $2, $3::jsonb)
     `,
-      [
-        submission.id,
-        submissionEvents.published,
-        JSON.stringify(buildPublishedEventPayload({ results: publishResults }))
-      ]
-    );
+    [
+      submission.id,
+      submissionEvents.published,
+      JSON.stringify(
+        buildPublishedEventPayload({
+          results: publishResults,
+          policySource: publishingPlan.policySource
+        })
+      )
+    ]
+  );
 
   await createAndDeliverNotification(client, {
     userId: submission.submitted_by_user_id,
     type: "submission_published",
     payload: buildPublishedNotificationPayload({
       submissionId: submission.id,
-      result: { results: publishResults }
+      result: {
+        results: publishResults,
+        policySource: publishingPlan.policySource
+      }
     }),
     notificationPolicy: workflowPolicy.notificationRule || {}
   });

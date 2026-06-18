@@ -479,6 +479,39 @@ export function validateWorkflowPolicyPatch(input, { scopeType }) {
     }
 
     if (
+      objectField === "publishingRule" &&
+      Object.hasOwn(value, "visibilityDestinations")
+    ) {
+      const visibilityDestinations = value.visibilityDestinations;
+
+      if (!isObjectRecord(visibilityDestinations)) {
+        return {
+          ok: false,
+          error: "publishingRule.visibilityDestinations must be an object"
+        };
+      }
+
+      for (const [visibilityTarget, destinations] of Object.entries(
+        visibilityDestinations
+      )) {
+        if (typeof visibilityTarget !== "string" || !visibilityTarget.trim()) {
+          return {
+            ok: false,
+            error: "publishingRule.visibilityDestinations keys must be non-empty strings"
+          };
+        }
+
+        const validation = validateDestinationList(
+          destinations,
+          `publishingRule.visibilityDestinations.${visibilityTarget}`
+        );
+        if (!validation.ok) {
+          return validation;
+        }
+      }
+    }
+
+    if (
       objectField === "notificationRule" &&
       Object.hasOwn(value, "eventChannels")
     ) {

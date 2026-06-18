@@ -66,10 +66,16 @@ curl -fsS \
   -d '{"actorEmail":"'"${ORGANIZATION_ADMIN_EMAIL}"'","approvalRule":{"requireSecondApprovalForPublic":true,"secondApproverRole":"club_admin","secondApprovalContentTypes":["video"]}}' \
   "http://localhost:4000/workflow-policies/organizations/${ORGANIZATION_SLUG}" >/dev/null
 
-echo "Clearing club approval override so the organization rule is authoritative..."
+echo "Applying organization visibility publish rule for public content..."
 curl -fsS \
   -H "content-type: application/json" \
-  -d '{"actorEmail":"'"${CLUB_ADMIN_EMAIL}"'","approvalRule":null}' \
+  -d '{"actorEmail":"'"${ORGANIZATION_ADMIN_EMAIL}"'","publishingRule":{"visibilityDestinations":{"internal":["internal_feed"],"public":["internal_feed"]}}}' \
+  "http://localhost:4000/workflow-policies/organizations/${ORGANIZATION_SLUG}" >/dev/null
+
+echo "Clearing club approval and publishing overrides so the organization rules are authoritative..."
+curl -fsS \
+  -H "content-type: application/json" \
+  -d '{"actorEmail":"'"${CLUB_ADMIN_EMAIL}"'","approvalRule":null,"publishingRule":null}' \
   "http://localhost:4000/workflow-policies/clubs/${CLUB_SLUG}" >/dev/null
 
 echo "Creating public second-approval smoke submission: ${SMOKE_MARKER}"
@@ -226,7 +232,7 @@ while (( SECONDS < deadline )); do
       SELECT event_name, COALESCE(payload::text, '{}')
       FROM submission_events
       WHERE submission_id = '${submission_id}'
-        AND event_name IN ('submission.approval.requested', 'submission.approved')
+        AND event_name IN ('submission.approval.requested', 'submission.approved', 'submission.published')
       ORDER BY created_at ASC;
     ")"
     EVENT_PAYLOADS="${event_payloads}" node <<'NODE'
@@ -250,6 +256,9 @@ const finalApproved = rows.find(
     row.eventName === "submission.approved" &&
     row.payload.stage === "secondary"
 );
+const published = rows.find(
+  (row) => row.eventName === "submission.published"
+);
 
 assert.ok(secondaryRequested, "Missing secondary approval requested event");
 assert.equal(
@@ -258,6 +267,12 @@ assert.equal(
   "Secondary approval event missing previousApprovalRequestId"
 );
 assert.ok(finalApproved, "Missing final secondary approval event");
+assert.ok(published, "Missing published event");
+assert.equal(
+  published.payload.policySource,
+  "publishing_rule_visibility_public",
+  "Published event policy source mismatch"
+);
 NODE
 
     echo "Public second approval smoke passed."
@@ -268,6 +283,7 @@ NODE
     echo "primary_state=${primary_state}"
     echo "secondary_state=${secondary_state}"
     echo "external_post_id=${external_post_id}"
+    echo "published_event_policy_source=publishing_rule_visibility_public"
     exit 0
   fi
 

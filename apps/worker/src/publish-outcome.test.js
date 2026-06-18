@@ -31,6 +31,7 @@ test("builds a stable publish failure event payload", () => {
 test("builds published event payloads from publish results", () => {
   assert.deepEqual(
     buildPublishedEventPayload({
+      policySource: "publishing_rule_visibility_public",
       results: [
         {
           destinationType: "internal_feed",
@@ -43,6 +44,7 @@ test("builds published event payloads from publish results", () => {
       ]
     }),
     {
+      policySource: "publishing_rule_visibility_public",
       destinationType: "internal_feed",
       destinationName: "Internal Club Feed",
       destinationCount: 2,
@@ -65,6 +67,7 @@ test("builds published notification payloads from publish results", () => {
     buildPublishedNotificationPayload({
       submissionId: "submission-1",
       result: {
+        policySource: "publishing_rule_visibility_public",
         results: [
           {
             destinationType: "internal_feed",
@@ -80,6 +83,7 @@ test("builds published notification payloads from publish results", () => {
     {
       submissionId: "submission-1",
       status: "published",
+      policySource: "publishing_rule_visibility_public",
       destinationType: "internal_feed",
       destinationName: "Internal Club Feed",
       destinationCount: 2,

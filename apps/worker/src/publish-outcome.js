@@ -14,6 +14,7 @@ export function buildPublishedEventPayload(result = {}) {
   const primary = results?.[0] || result;
 
   return {
+    policySource: result.policySource || null,
     destinationType: primary.destinationType || null,
     destinationName: primary.destinationName || null,
     destinationCount: results?.length || 1,
@@ -38,6 +39,7 @@ export function buildPublishedNotificationPayload({ submissionId, result = {} })
   return {
     submissionId,
     status: "published",
+    policySource: result.policySource || null,
     destinationType: primary.destinationType || null,
     destinationName: primary.destinationName || null,
     destinationCount: results?.length || 1,

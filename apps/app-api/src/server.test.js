@@ -197,7 +197,12 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
                 orgAutoApproveMaxRisk: "0.35",
                 orgAutoApprovalRule: { allowedContentTypes: ["photo"] },
                 orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
-                orgPublishingRule: { destinations: ["internal_feed"] },
+                orgPublishingRule: {
+                  visibilityDestinations: {
+                    internal: ["internal_feed"],
+                    public: ["internal_feed"]
+                  }
+                },
                 orgNotificationRule: { email: true },
                 clubDefaultApproverRole: "club_admin",
                 clubPublicApproverRole: null,
@@ -264,7 +269,10 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
       contentTypeApprovers: { video: "team_manager" }
     });
     assert.deepEqual(body.effectivePolicy.publishingRule, {
-      destinations: ["internal_feed"]
+      visibilityDestinations: {
+        internal: ["internal_feed"],
+        public: ["internal_feed"]
+      }
     });
 
     const upsert = calls.find(({ query }) =>
@@ -462,7 +470,12 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
                 orgAutoApproveMaxRisk: "0.20",
                 orgAutoApprovalRule: { allowedContentTypes: ["photo"] },
                 orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
-                orgPublishingRule: { destinations: ["internal_feed"] },
+                orgPublishingRule: {
+                  visibilityDestinations: {
+                    internal: ["internal_feed"],
+                    public: ["internal_feed"]
+                  }
+                },
                 orgNotificationRule: { email: true, push: false }
               }
             ]
@@ -504,6 +517,12 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
         autoApproveMaxRisk: 0.2,
         autoApprovalRule: { allowedContentTypes: ["photo"] },
         routingRule: { contentTypeApprovers: { video: "club_admin" } },
+        publishingRule: {
+          visibilityDestinations: {
+            internal: ["internal_feed"],
+            public: ["internal_feed"]
+          }
+        },
         notificationRule: { email: true, push: false }
       })
     });
@@ -517,6 +536,12 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
     });
     assert.deepEqual(body.organizationPolicy.routingRule, {
       contentTypeApprovers: { video: "club_admin" }
+    });
+    assert.deepEqual(body.organizationPolicy.publishingRule, {
+      visibilityDestinations: {
+        internal: ["internal_feed"],
+        public: ["internal_feed"]
+      }
     });
 
     const upsert = calls.find(({ query }) =>
@@ -534,6 +559,15 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
     assert.equal(
       upsert.params[8],
       JSON.stringify({ contentTypeApprovers: { video: "club_admin" } })
+    );
+    assert.equal(
+      upsert.params[10],
+      JSON.stringify({
+        visibilityDestinations: {
+          internal: ["internal_feed"],
+          public: ["internal_feed"]
+        }
+      })
     );
   } finally {
     server.close();

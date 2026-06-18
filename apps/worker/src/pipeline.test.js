@@ -788,6 +788,7 @@ test("publishes approved submissions through the destination adapter", async () 
     queries.some(
       ({ sql, params }) =>
         sql.includes("INSERT INTO submission_events") &&
+        JSON.parse(params[2]).policySource === "publishing_rule_destinations" &&
         JSON.parse(params[2]).destinationName === "Internal Club Feed" &&
         JSON.parse(params[2]).destinationCount === 1
     )
@@ -796,6 +797,7 @@ test("publishes approved submissions through the destination adapter", async () 
     {
       submissionId: "submission-1",
       status: "published",
+      policySource: "publishing_rule_destinations",
       destinationType: "internal_feed",
       destinationName: "Internal Club Feed",
       destinationCount: 1,
@@ -937,6 +939,7 @@ test("publishes approved submissions to every destination configured by the work
 
       const payload = JSON.parse(params[2]);
       return (
+        payload.policySource === "publishing_rule_destinations" &&
         payload.destinationCount === 2 &&
         Array.isArray(payload.destinations) &&
         payload.destinations[1]?.destinationType === "booster_email"
@@ -947,6 +950,7 @@ test("publishes approved submissions to every destination configured by the work
     {
       submissionId: "submission-2",
       status: "published",
+      policySource: "publishing_rule_destinations",
       destinationType: "internal_feed",
       destinationName: "Internal Club Feed",
       destinationCount: 2,
@@ -958,6 +962,144 @@ test("publishes approved submissions to every destination configured by the work
         {
           destinationType: "booster_email",
           destinationName: "Booster Email"
+        }
+      ]
+    }
+  ]);
+});
+
+test("publishes approved submissions using visibility-specific destinations when configured", async () => {
+  const queries = [];
+  const notifications = [];
+  const submission = {
+    id: "submission-visibility-1",
+    club_id: "club-3",
+    submitted_by_user_id: "user-3",
+    visibility_target: "public"
+  };
+  const destination = {
+    id: "destination-1",
+    destination_type: "internal_feed",
+    name: "Internal Club Feed",
+    config: { mode: "internal" }
+  };
+  const workflowPolicyRow = {
+    clubId: "club-3",
+    organizationId: "org-3",
+    orgDefaultApproverRole: "team_manager",
+    orgPublicApproverRole: "club_comms",
+    orgMediumRiskApproverRole: "club_comms",
+    orgAllowAgentRouting: true,
+    orgAutoApproveInternalLowRisk: false,
+    orgAutoApproveMaxRisk: "0.35",
+    orgPublishingRule: {
+      destinations: ["booster_email"],
+      visibilityDestinations: {
+        public: ["internal_feed"]
+      }
+    },
+    orgNotificationRule: {},
+    clubDefaultApproverRole: null,
+    clubPublicApproverRole: null,
+    clubMediumRiskApproverRole: null,
+    clubAllowAgentRouting: null,
+    clubAutoApproveInternalLowRisk: null,
+    clubAutoApproveMaxRisk: null,
+    clubPublishingRule: null,
+    clubNotificationRule: null
+  };
+  const publishCalls = [];
+
+  const client = {
+    async query(sql, params = []) {
+      queries.push({ sql, params });
+
+      if (sql.includes("FROM submissions s")) {
+        return { rowCount: 1, rows: [submission] };
+      }
+
+      if (sql.includes("LEFT JOIN organization_workflow_policies")) {
+        return { rowCount: 1, rows: [workflowPolicyRow] };
+      }
+
+      if (sql.includes("FROM publishing_destinations")) {
+        return { rowCount: 1, rows: [destination] };
+      }
+
+      if (sql.includes("INSERT INTO notifications")) {
+        notifications.push(JSON.parse(params[2]));
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              id: "notification-visibility-1",
+              user_id: params[0],
+              type: params[1],
+              payload: JSON.parse(params[2]),
+              created_at: new Date().toISOString()
+            }
+          ]
+        };
+      }
+
+      if (sql.includes("FROM users")) {
+        return {
+          rowCount: 1,
+          rows: [{ email: "submitter@example.test", full_name: "Submitter" }]
+        };
+      }
+
+      if (sql.includes("WITH latest_push_state")) {
+        return { rowCount: 0, rows: [] };
+      }
+
+      return { rowCount: 1, rows: [] };
+    }
+  };
+
+  await processSubmissionApproved(
+    client,
+    { submission_id: submission.id },
+    {
+      async publishImpl(payload) {
+        publishCalls.push(payload);
+        return {
+          destinationType: payload.destination.destination_type,
+          destinationName: payload.destination.name,
+          externalPostId: `${payload.destination.destination_type}:${submission.id}`,
+          externalReference: `${payload.destination.destination_type}:${submission.id}`,
+          resultSummary: `Published to ${payload.destination.name}`
+        };
+      }
+    }
+  );
+
+  assert.deepEqual(
+    publishCalls.map((entry) => entry.destination.destination_type),
+    ["internal_feed"]
+  );
+  assert.ok(
+    queries.some(({ sql, params }) => {
+      if (!sql.includes("INSERT INTO submission_events")) {
+        return false;
+      }
+
+      const payload = JSON.parse(params[2]);
+      return payload.policySource === "publishing_rule_visibility_public";
+    })
+  );
+  assert.deepEqual(notifications, [
+    {
+      submissionId: "submission-visibility-1",
+      status: "published",
+      policySource: "publishing_rule_visibility_public",
+      destinationType: "internal_feed",
+      destinationName: "Internal Club Feed",
+      destinationCount: 1,
+      destinations: [
+        {
+          destinationType: "internal_feed",
+          destinationName: "Internal Club Feed"
         }
       ]
     }
