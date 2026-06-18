@@ -388,3 +388,305 @@ test("POST /approval-requests/:id/actions approves and enqueues the approved eve
     await once(server, "close");
   }
 });
+
+test("GET /notifications validates userEmail", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/notifications`);
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(body, { error: "userEmail is required" });
+  });
+});
+
+test("GET /notifications returns recent notification items", async () => {
+  const rows = [
+    {
+      id: "notification-1",
+      type: "submission_review_started",
+      payload: { submissionId: "submission-1" },
+      readAt: null,
+      createdAt: "2026-06-18T12:00:00.000Z",
+      deliveryStatus: "email.delivered",
+      deliveryProviderId: "email-1",
+      deliveryUpdatedAt: "2026-06-18T12:01:00.000Z"
+    }
+  ];
+  const calls = [];
+  const pool = {
+    async query(query, params) {
+      calls.push({ query, params });
+      return { rows };
+    }
+  };
+
+  const server = createAppServer({ pool });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(
+      `${baseUrl}/notifications?userEmail=parent%40example.test&limit=50`
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, { items: rows });
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].query, /FROM notifications n/);
+    assert.deepEqual(calls[0].params, ["parent@example.test", 25]);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("POST /notifications/:id/read marks the notification as read", async () => {
+  const calls = [];
+  const pool = {
+    async query(query, params) {
+      calls.push({ query, params });
+      return {
+        rowCount: 1,
+        rows: [{ id: "notification-1", readAt: "2026-06-18T12:05:00.000Z" }]
+      };
+    }
+  };
+
+  const server = createAppServer({ pool });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/notifications/notification-1/read`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userEmail: "parent@example.test" })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      id: "notification-1",
+      readAt: "2026-06-18T12:05:00.000Z"
+    });
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].query, /UPDATE notifications n/);
+    assert.deepEqual(calls[0].params, ["notification-1", "parent@example.test"]);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("GET /push-tokens returns masked active push registrations", async () => {
+  const rows = [
+    {
+      userId: "user-1",
+      userEmail: "parent@example.test",
+      provider: "expo",
+      installationId: "installation-1",
+      pushToken: "ExponentPushToken[abcdef1234567890]",
+      platform: "ios",
+      appId: "com.hermes.clubcontent",
+      environment: "development",
+      deviceLabel: "Parent iPhone",
+      enabled: true,
+      updatedAt: "2026-06-18T12:00:00.000Z"
+    }
+  ];
+  const calls = [];
+  const pool = {
+    async query(query, params) {
+      calls.push({ query, params });
+      return { rows };
+    }
+  };
+
+  const server = createAppServer({ pool });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(
+      `${baseUrl}/push-tokens?userEmail=parent%40example.test`
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      items: [
+        {
+          ...rows[0],
+          tokenPreview: "Expone...67890]"
+        }
+      ]
+    });
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].query, /WITH latest_push_state AS/);
+    assert.deepEqual(calls[0].params, ["parent@example.test"]);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("POST /push-tokens delegates to registerPushToken with the app provider", async () => {
+  const registerCalls = [];
+  const registerPushTokenFn = async (input) => {
+    registerCalls.push(input);
+    return {
+      status: 200,
+      payload: {
+        registration: {
+          userId: "user-1",
+          provider: input.defaultProvider,
+          installationId: input.body.installationId
+        }
+      }
+    };
+  };
+
+  const server = createAppServer({ registerPushTokenFn });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/push-tokens`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        userEmail: "parent@example.test",
+        installationId: "installation-1",
+        pushToken: "ExponentPushToken[abcdef1234567890]"
+      })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      registration: {
+        userId: "user-1",
+        provider: "expo",
+        installationId: "installation-1"
+      }
+    });
+    assert.equal(registerCalls.length, 1);
+    assert.equal(registerCalls[0].body.userEmail, "parent@example.test");
+    assert.equal(registerCalls[0].defaultProvider, "expo");
+    assert.equal(typeof registerCalls[0].withTransaction, "function");
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("GET /notification-delivery/status returns the injected delivery snapshot", async () => {
+  const buildCalls = [];
+  const buildNotificationDeliveryStatusFn = (config) => {
+    buildCalls.push(config);
+    return {
+      email: { enabled: false, mode: "log-only" },
+      push: { enabled: false, mode: "disabled" }
+    };
+  };
+
+  const server = createAppServer({ buildNotificationDeliveryStatusFn });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/notification-delivery/status`);
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      email: { enabled: false, mode: "log-only" },
+      push: { enabled: false, mode: "disabled" }
+    });
+    assert.equal(buildCalls.length, 1);
+    assert.equal(buildCalls[0].resendWebhookEndpointPath, "/webhooks/resend");
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("POST /webhooks/resend records verified webhook deliveries", async () => {
+  const parseCalls = [];
+  const recordCalls = [];
+  const parseWebhook = ({ rawBody, headers }) => {
+    parseCalls.push({ rawBody, headers });
+    return {
+      ok: true,
+      verified: true,
+      event: { type: "email.delivered", data: { email_id: "email-1" } }
+    };
+  };
+  const runInTransaction = async (fn) => fn({ name: "client" });
+  const recordWebhookEvent = async (client, payload) => {
+    recordCalls.push({ client, payload });
+    return {
+      verified: payload.verified,
+      webhookType: payload.event.type,
+      matchedNotificationId: "notification-1",
+      emailId: payload.event.data.email_id
+    };
+  };
+
+  const server = createAppServer({
+    parseWebhook,
+    recordWebhookEvent,
+    runInTransaction
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/webhooks/resend`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "svix-id": "msg_123"
+      },
+      body: JSON.stringify({ type: "email.delivered" })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      received: true,
+      verified: true,
+      webhookType: "email.delivered",
+      matchedNotificationId: "notification-1",
+      emailId: "email-1"
+    });
+    assert.equal(parseCalls.length, 1);
+    assert.match(parseCalls[0].rawBody, /email\.delivered/);
+    assert.equal(parseCalls[0].headers["svix-id"], "msg_123");
+    assert.equal(recordCalls.length, 1);
+    assert.equal(recordCalls[0].client.name, "client");
+    assert.equal(recordCalls[0].payload.verified, true);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});

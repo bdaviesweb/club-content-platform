@@ -926,7 +926,11 @@ async function handleInternalFeed(res, searchParams = new URLSearchParams()) {
   sendJson(res, 200, { items });
 }
 
-async function handleNotifications(res, searchParams) {
+async function handleNotifications(
+  res,
+  searchParams,
+  { pool = getPool() } = {}
+) {
   const userEmail = searchParams.get("userEmail");
   const requestedLimit = Number(searchParams.get("limit") || 10);
   const limit = Number.isFinite(requestedLimit)
@@ -938,7 +942,7 @@ async function handleNotifications(res, searchParams) {
     return;
   }
 
-  const result = await getPool().query(
+  const result = await pool.query(
     `
     SELECT
       n.id,
@@ -970,17 +974,29 @@ async function handleNotifications(res, searchParams) {
   sendJson(res, 200, { items: result.rows });
 }
 
-async function handleRegisterPushToken(req, res) {
+async function handleRegisterPushToken(
+  req,
+  res,
+  {
+    withTransaction: transactionRunner = withTransaction,
+    defaultProvider = pushProvider,
+    registerPushTokenFn = registerPushToken
+  } = {}
+) {
   const body = await readJson(req);
-  const result = await registerPushToken({
+  const result = await registerPushTokenFn({
     body,
-    withTransaction,
-    defaultProvider: pushProvider
+    withTransaction: transactionRunner,
+    defaultProvider
   });
   sendJson(res, result.status, result.payload);
 }
 
-async function handleListPushTokens(res, searchParams) {
+async function handleListPushTokens(
+  res,
+  searchParams,
+  { pool = getPool() } = {}
+) {
   const userEmail = normalizeOptionalString(searchParams.get("userEmail"));
 
   if (!userEmail) {
@@ -988,7 +1004,7 @@ async function handleListPushTokens(res, searchParams) {
     return;
   }
 
-  const result = await getPool().query(
+  const result = await pool.query(
     `
     WITH latest_push_state AS (
       SELECT DISTINCT ON (u.id, al.metadata->'push'->>'installationId')
@@ -1040,11 +1056,14 @@ async function handleListPushTokens(res, searchParams) {
   });
 }
 
-function handleNotificationDeliveryStatus(res) {
+function handleNotificationDeliveryStatus(
+  res,
+  { buildStatus = buildNotificationDeliveryStatus } = {}
+) {
   sendJson(
     res,
     200,
-    buildNotificationDeliveryStatus({
+    buildStatus({
       resendApiKey,
       notificationFromEmail,
       supportEmail,
@@ -1058,9 +1077,17 @@ function handleNotificationDeliveryStatus(res) {
   );
 }
 
-async function handleResendWebhook(req, res) {
+async function handleResendWebhook(
+  req,
+  res,
+  {
+    parseWebhook = parseResendWebhook,
+    recordWebhookEvent = recordNotificationWebhookEvent,
+    runInTransaction = withTransaction
+  } = {}
+) {
   const rawBody = await readText(req);
-  const parsed = parseResendWebhook({
+  const parsed = parseWebhook({
     rawBody,
     resendWebhookSecret,
     headers: req.headers,
@@ -1074,8 +1101,8 @@ async function handleResendWebhook(req, res) {
     return;
   }
 
-  const result = await withTransaction((client) =>
-    recordNotificationWebhookEvent(client, {
+  const result = await runInTransaction((client) =>
+    recordWebhookEvent(client, {
       event: parsed.event,
       verified: parsed.verified
     })
@@ -1090,7 +1117,12 @@ async function handleResendWebhook(req, res) {
   });
 }
 
-async function handleMarkNotificationRead(req, res, notificationId) {
+async function handleMarkNotificationRead(
+  req,
+  res,
+  notificationId,
+  { pool = getPool() } = {}
+) {
   const body = await readJson(req);
   const userEmail = body.userEmail;
 
@@ -1099,7 +1131,7 @@ async function handleMarkNotificationRead(req, res, notificationId) {
     return;
   }
 
-  const result = await getPool().query(
+  const result = await pool.query(
     `
     UPDATE notifications n
     SET read_at = COALESCE(n.read_at, NOW())
@@ -1209,7 +1241,11 @@ export function createAppServer({
   runInTransaction,
   approvalActionRunInTransaction,
   loadApprovalActor,
-  deliverNotification
+  deliverNotification,
+  registerPushTokenFn,
+  buildNotificationDeliveryStatusFn,
+  parseWebhook,
+  recordWebhookEvent
 } = {}) {
   return http.createServer(async (req, res) => {
   try {
@@ -1285,27 +1321,42 @@ export function createAppServer({
     }
 
     if (req.method === "GET" && url.pathname === "/notifications") {
-      await handleNotifications(res, url.searchParams);
+      await handleNotifications(res, url.searchParams, {
+        pool: pool || getPool()
+      });
       return;
     }
 
     if (req.method === "GET" && url.pathname === "/push-tokens") {
-      await handleListPushTokens(res, url.searchParams);
+      await handleListPushTokens(res, url.searchParams, {
+        pool: pool || getPool()
+      });
       return;
     }
 
     if (req.method === "POST" && url.pathname === "/push-tokens") {
-      await handleRegisterPushToken(req, res);
+      await handleRegisterPushToken(req, res, {
+        withTransaction: runInTransaction || withTransaction,
+        defaultProvider: pushProvider,
+        registerPushTokenFn: registerPushTokenFn || registerPushToken
+      });
       return;
     }
 
     if (req.method === "GET" && url.pathname === "/notification-delivery/status") {
-      handleNotificationDeliveryStatus(res);
+      handleNotificationDeliveryStatus(res, {
+        buildStatus:
+          buildNotificationDeliveryStatusFn || buildNotificationDeliveryStatus
+      });
       return;
     }
 
     if (req.method === "POST" && url.pathname === resendWebhookEndpointPath) {
-      await handleResendWebhook(req, res);
+      await handleResendWebhook(req, res, {
+        parseWebhook: parseWebhook || parseResendWebhook,
+        recordWebhookEvent: recordWebhookEvent || recordNotificationWebhookEvent,
+        runInTransaction: runInTransaction || withTransaction
+      });
       return;
     }
 
@@ -1323,7 +1374,9 @@ export function createAppServer({
       req.method === "POST" &&
       /^\/notifications\/[^/]+\/read$/.test(url.pathname)
     ) {
-      await handleMarkNotificationRead(req, res, url.pathname.split("/")[2]);
+      await handleMarkNotificationRead(req, res, url.pathname.split("/")[2], {
+        pool: pool || getPool()
+      });
       return;
     }
 
