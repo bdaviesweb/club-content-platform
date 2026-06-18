@@ -4,10 +4,13 @@ set -euo pipefail
 REMOTE_HOST="${REMOTE_HOST:-hermes-dev}"
 REMOTE_DIR="${REMOTE_DIR:-/srv/repos/projects/club-content-platform}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.vps.yml}"
+ORGANIZATION_SLUG="${ORGANIZATION_SLUG:-demo-sports-org}"
 CLUB_SLUG="${CLUB_SLUG:-demo-soccer-club}"
 TEAM_SLUG="${TEAM_SLUG:-u14-girls}"
 SUBMITTER_EMAIL="${SUBMITTER_EMAIL:-coach@demo-club.local}"
-REVIEWER_EMAIL="${REVIEWER_EMAIL:-comms@demo-club.local}"
+ORGANIZATION_ADMIN_EMAIL="${ORGANIZATION_ADMIN_EMAIL:-org-admin@demo-club.local}"
+CLUB_ADMIN_EMAIL="${CLUB_ADMIN_EMAIL:-comms@demo-club.local}"
+TEAM_MANAGER_EMAIL="${TEAM_MANAGER_EMAIL:-coach@demo-club.local}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-180}"
 POLL_SECONDS="${POLL_SECONDS:-3}"
 SMOKE_MARKER="${SMOKE_MARKER:-routing-rule-smoke-$(date -u +%Y%m%dT%H%M%SZ)-${RANDOM}}"
@@ -22,13 +25,16 @@ if [[ "${CLUB_CONTENT_SMOKE_ON_VPS:-0}" != "1" ]]; then
   if [[ "${current_dir}" != "${REMOTE_DIR}" || ! -f "${COMPOSE_FILE}" ]]; then
     remote_dir_quoted="$(shell_quote "${REMOTE_DIR}")"
     remote_command=$(
-      printf "cd %s && CLUB_CONTENT_SMOKE_ON_VPS=1 COMPOSE_FILE=%s CLUB_SLUG=%s TEAM_SLUG=%s SUBMITTER_EMAIL=%s REVIEWER_EMAIL=%s TIMEOUT_SECONDS=%s POLL_SECONDS=%s SMOKE_MARKER=%s bash -s" \
+      printf "cd %s && CLUB_CONTENT_SMOKE_ON_VPS=1 COMPOSE_FILE=%s ORGANIZATION_SLUG=%s CLUB_SLUG=%s TEAM_SLUG=%s SUBMITTER_EMAIL=%s ORGANIZATION_ADMIN_EMAIL=%s CLUB_ADMIN_EMAIL=%s TEAM_MANAGER_EMAIL=%s TIMEOUT_SECONDS=%s POLL_SECONDS=%s SMOKE_MARKER=%s bash -s" \
         "${remote_dir_quoted}" \
         "$(shell_quote "${COMPOSE_FILE}")" \
+        "$(shell_quote "${ORGANIZATION_SLUG}")" \
         "$(shell_quote "${CLUB_SLUG}")" \
         "$(shell_quote "${TEAM_SLUG}")" \
         "$(shell_quote "${SUBMITTER_EMAIL}")" \
-        "$(shell_quote "${REVIEWER_EMAIL}")" \
+        "$(shell_quote "${ORGANIZATION_ADMIN_EMAIL}")" \
+        "$(shell_quote "${CLUB_ADMIN_EMAIL}")" \
+        "$(shell_quote "${TEAM_MANAGER_EMAIL}")" \
         "$(shell_quote "${TIMEOUT_SECONDS}")" \
         "$(shell_quote "${POLL_SECONDS}")" \
         "$(shell_quote "${SMOKE_MARKER}")"
@@ -51,6 +57,41 @@ query_one() {
 echo "Checking API health..."
 curl -fsS http://localhost:4000/health
 echo
+
+echo "Applying organization routing rule for video -> club admin..."
+curl -fsS \
+  -H "content-type: application/json" \
+  -d '{"actorEmail":"'"${ORGANIZATION_ADMIN_EMAIL}"'","routingRule":{"contentTypeApprovers":{"video":"club_admin"}}}' \
+  "http://localhost:4000/workflow-policies/organizations/${ORGANIZATION_SLUG}" >/dev/null
+
+echo "Applying club routing override for video -> team manager..."
+curl -fsS \
+  -H "content-type: application/json" \
+  -d '{"actorEmail":"'"${CLUB_ADMIN_EMAIL}"'","routingRule":{"contentTypeApprovers":{"video":"team_manager"}}}' \
+  "http://localhost:4000/workflow-policies/clubs/${CLUB_SLUG}" >/dev/null
+
+policy_json="$(curl -fsS "http://localhost:4000/workflow-policies/clubs/${CLUB_SLUG}")"
+POLICY_JSON="${policy_json}" node <<'NODE'
+const assert = require("node:assert/strict");
+
+const policy = JSON.parse(process.env.POLICY_JSON);
+
+assert.equal(
+  policy.organizationPolicy?.routingRule?.contentTypeApprovers?.video,
+  "club_admin",
+  "Organization routing rule should target club_admin"
+);
+assert.equal(
+  policy.clubPolicy?.routingRule?.contentTypeApprovers?.video,
+  "team_manager",
+  "Club routing override should target team_manager"
+);
+assert.equal(
+  policy.effectivePolicy?.routingRule?.contentTypeApprovers?.video,
+  "team_manager",
+  "Effective routing rule should prefer the club override"
+);
+NODE
 
 echo "Creating routing rule smoke submission: ${SMOKE_MARKER}"
 curl -fsS \
@@ -94,7 +135,7 @@ while (( SECONDS < deadline )); do
       exit 1
     fi
 
-    if [[ -n "${approval_request_id}" && "${approver_role}" == "club_admin" && "${routing_approver_role}" == "club_admin" && "${policy_source}" == "routing_rule_content_type" ]]; then
+    if [[ -n "${approval_request_id}" && "${approver_role}" == "team_manager" && "${routing_approver_role}" == "team_manager" && "${policy_source}" == "routing_rule_content_type" ]]; then
       echo "Routing rule smoke passed."
       echo "submission_id=${submission_id}"
       echo "approval_request_id=${approval_request_id}"
@@ -103,10 +144,13 @@ while (( SECONDS < deadline )); do
       echo "routing_approver_role=${routing_approver_role}"
       echo "policy_source=${policy_source}"
       echo "routing_source=${routing_source}"
+      echo "organization_video_role=club_admin"
+      echo "club_video_role=team_manager"
+      echo "effective_video_role=team_manager"
 
       curl -fsS \
         -H "content-type: application/json" \
-        -d '{"action":"request_changes","actedByEmail":"'"${REVIEWER_EMAIL}"'","notes":"Routing rule smoke cleanup."}' \
+        -d '{"action":"request_changes","actedByEmail":"'"${TEAM_MANAGER_EMAIL}"'","notes":"Routing rule smoke cleanup."}' \
         "http://localhost:4000/approval-requests/${approval_request_id}/actions" >/dev/null
       echo "cleanup_action=request_changes"
       exit 0
