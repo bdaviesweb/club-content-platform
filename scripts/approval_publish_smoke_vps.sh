@@ -64,6 +64,12 @@ echo "Checking API health..."
 curl -fsS http://localhost:4000/health
 echo
 
+echo "Applying club override for manual review smoke..."
+curl -fsS \
+  -H "content-type: application/json" \
+  -d '{"actorEmail":"'"${REVIEWER_EMAIL}"'","autoApproveInternalLowRisk":false,"autoApproveMaxRisk":0.35,"autoApprovalRule":{}}' \
+  "http://localhost:4000/workflow-policies/clubs/${CLUB_SLUG}" >/dev/null
+
 initial_queue_rows="$(query_one "
   SELECT
     COALESCE(ar.id::text, ''),

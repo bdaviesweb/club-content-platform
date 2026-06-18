@@ -29,6 +29,7 @@ test("loads club workflow policy overrides ahead of organization defaults", asyn
               orgAllowAgentRouting: true,
               orgAutoApproveInternalLowRisk: false,
               orgAutoApproveMaxRisk: "0.35",
+              orgAutoApprovalRule: { allowedContentTypes: ["photo"] },
               orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
               orgApprovalRule: { requireSecondApprovalForPublic: true, secondApproverRole: "club_admin" },
               orgPublishingRule: { mode: "internal" },
@@ -39,6 +40,7 @@ test("loads club workflow policy overrides ahead of organization defaults", asyn
               clubAllowAgentRouting: false,
               clubAutoApproveInternalLowRisk: true,
               clubAutoApproveMaxRisk: "0.20",
+              clubAutoApprovalRule: {},
               clubRoutingRule: {},
               clubApprovalRule: { requireSecondApprovalForPublic: false },
               clubPublishingRule: { mode: "club-specific" },
@@ -60,6 +62,9 @@ test("loads club workflow policy overrides ahead of organization defaults", asyn
   assert.equal(policy.allowAgentRouting, false);
   assert.equal(policy.autoApproveInternalLowRisk, true);
   assert.equal(policy.autoApproveMaxRisk, 0.2);
+  assert.deepEqual(policy.autoApprovalRule, {
+    allowedContentTypes: ["photo"]
+  });
   assert.deepEqual(policy.routingRule, {
     contentTypeApprovers: { video: "club_admin" }
   });
@@ -86,6 +91,7 @@ test("falls back to organization publish and notification rules when club overri
               orgAllowAgentRouting: true,
               orgAutoApproveInternalLowRisk: false,
               orgAutoApproveMaxRisk: "0.35",
+              orgAutoApprovalRule: { allowedContentTypes: ["photo"] },
               orgRoutingRule: {
                 contentTypeApprovers: { video: "club_admin" }
               },
@@ -101,6 +107,7 @@ test("falls back to organization publish and notification rules when club overri
               clubAllowAgentRouting: null,
               clubAutoApproveInternalLowRisk: null,
               clubAutoApproveMaxRisk: null,
+              clubAutoApprovalRule: {},
               clubRoutingRule: {},
               clubPublishingRule: {},
               clubNotificationRule: {}
@@ -112,6 +119,9 @@ test("falls back to organization publish and notification rules when club overri
     "club-1"
   );
 
+  assert.deepEqual(policy.autoApprovalRule, {
+    allowedContentTypes: ["photo"]
+  });
   assert.deepEqual(policy.routingRule, {
     contentTypeApprovers: { video: "club_admin" }
   });
@@ -243,16 +253,19 @@ test("allows low-risk internal auto-approval only when policy permits it", () =>
 
   assert.deepEqual(
     shouldAutoApproveSubmission({
-      submission: { visibility_target: "internal" },
+      submission: { visibility_target: "internal", content_type: "photo" },
       reviewArtifacts: { riskScore: 0.15, moderation: { flagged: false } },
-      policy: enabledPolicy
+      policy: {
+        ...enabledPolicy,
+        autoApprovalRule: { allowedContentTypes: ["photo"] }
+      }
     }),
     { allowed: true, reason: "policy_auto_approve_low_risk_internal" }
   );
 
   assert.deepEqual(
     shouldAutoApproveSubmission({
-      submission: { visibility_target: "public" },
+      submission: { visibility_target: "public", content_type: "photo" },
       reviewArtifacts: { riskScore: 0.15, moderation: { flagged: false } },
       policy: enabledPolicy
     }),
@@ -261,7 +274,7 @@ test("allows low-risk internal auto-approval only when policy permits it", () =>
 
   assert.deepEqual(
     shouldAutoApproveSubmission({
-      submission: { visibility_target: "internal" },
+      submission: { visibility_target: "internal", content_type: "photo" },
       reviewArtifacts: { riskScore: 0.25, moderation: { flagged: false } },
       policy: enabledPolicy
     }),
@@ -270,11 +283,35 @@ test("allows low-risk internal auto-approval only when policy permits it", () =>
 
   assert.deepEqual(
     shouldAutoApproveSubmission({
-      submission: { visibility_target: "internal" },
+      submission: { visibility_target: "internal", content_type: "photo" },
       reviewArtifacts: { riskScore: 0.15, moderation: { flagged: false } },
       policy: disabledPolicy
     }),
     { allowed: false, reason: "policy_disabled" }
+  );
+
+  assert.deepEqual(
+    shouldAutoApproveSubmission({
+      submission: { visibility_target: "internal", content_type: "video" },
+      reviewArtifacts: { riskScore: 0.15, moderation: { flagged: false } },
+      policy: {
+        ...enabledPolicy,
+        autoApprovalRule: { allowedContentTypes: ["photo"] }
+      }
+    }),
+    { allowed: false, reason: "content_type_not_auto_approvable" }
+  );
+
+  assert.deepEqual(
+    shouldAutoApproveSubmission({
+      submission: { visibility_target: "internal", content_type: "photo" },
+      reviewArtifacts: { riskScore: 0.15, moderation: { flagged: false } },
+      policy: {
+        ...enabledPolicy,
+        autoApprovalRule: { blockedContentTypes: ["photo"] }
+      }
+    }),
+    { allowed: false, reason: "content_type_blocked" }
   );
 });
 

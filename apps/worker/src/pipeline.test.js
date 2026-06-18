@@ -589,6 +589,7 @@ test("auto-approves low-risk internal submissions when club policy allows it", a
               orgAllowAgentRouting: true,
               orgAutoApproveInternalLowRisk: false,
               orgAutoApproveMaxRisk: "0.35",
+              orgAutoApprovalRule: {},
               orgPublishingRule: {},
               orgNotificationRule: {},
               clubDefaultApproverRole: "team_manager",
@@ -597,6 +598,7 @@ test("auto-approves low-risk internal submissions when club policy allows it", a
               clubAllowAgentRouting: false,
               clubAutoApproveInternalLowRisk: true,
               clubAutoApproveMaxRisk: "0.20",
+              clubAutoApprovalRule: { allowedContentTypes: ["photo"] },
               clubPublishingRule: {},
               clubNotificationRule: {}
             }

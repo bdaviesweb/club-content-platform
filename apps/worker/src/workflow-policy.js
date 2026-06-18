@@ -10,6 +10,7 @@ export const defaultWorkflowPolicy = {
   allowAgentRouting: true,
   autoApproveInternalLowRisk: false,
   autoApproveMaxRisk: reviewThresholds.mediumRisk,
+  autoApprovalRule: {},
   routingRule: {},
   approvalRule: {},
   publishingRule: {},
@@ -71,6 +72,7 @@ export async function loadEffectiveWorkflowPolicy(client, clubId) {
       op.allow_agent_routing AS "orgAllowAgentRouting",
       op.auto_approve_internal_low_risk AS "orgAutoApproveInternalLowRisk",
       op.auto_approve_max_risk AS "orgAutoApproveMaxRisk",
+      op.auto_approval_rule AS "orgAutoApprovalRule",
       op.routing_rule AS "orgRoutingRule",
       op.approval_rule AS "orgApprovalRule",
       op.publishing_rule AS "orgPublishingRule",
@@ -81,6 +83,7 @@ export async function loadEffectiveWorkflowPolicy(client, clubId) {
       cp.allow_agent_routing AS "clubAllowAgentRouting",
       cp.auto_approve_internal_low_risk AS "clubAutoApproveInternalLowRisk",
       cp.auto_approve_max_risk AS "clubAutoApproveMaxRisk",
+      cp.auto_approval_rule AS "clubAutoApprovalRule",
       cp.routing_rule AS "clubRoutingRule",
       cp.approval_rule AS "clubApprovalRule",
       cp.publishing_rule AS "clubPublishingRule",
@@ -137,6 +140,11 @@ export async function loadEffectiveWorkflowPolicy(client, clubId) {
         defaultWorkflowPolicy.autoApproveMaxRisk
       ),
       defaultWorkflowPolicy.autoApproveMaxRisk
+    ),
+    autoApprovalRule: pickOverride(
+      parseOverrideJson(row.clubAutoApprovalRule),
+      parseMaybeJson(row.orgAutoApprovalRule, null),
+      defaultWorkflowPolicy.autoApprovalRule
     ),
     routingRule: pickOverride(
       parseOverrideJson(row.clubRoutingRule),
@@ -224,6 +232,28 @@ export function shouldAutoApproveSubmission({
 
   if (reviewArtifacts.moderation?.flagged) {
     return { allowed: false, reason: "moderation_flagged" };
+  }
+
+  const contentType = String(submission.content_type || "").trim();
+  const blockedContentTypes = Array.isArray(policy?.autoApprovalRule?.blockedContentTypes)
+    ? policy.autoApprovalRule.blockedContentTypes
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    : [];
+  if (contentType && blockedContentTypes.includes(contentType)) {
+    return { allowed: false, reason: "content_type_blocked" };
+  }
+
+  const allowedContentTypes = Array.isArray(policy?.autoApprovalRule?.allowedContentTypes)
+    ? policy.autoApprovalRule.allowedContentTypes
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    : [];
+  if (
+    allowedContentTypes.length &&
+    (!contentType || !allowedContentTypes.includes(contentType))
+  ) {
+    return { allowed: false, reason: "content_type_not_auto_approvable" };
   }
 
   return { allowed: true, reason: "policy_auto_approve_low_risk_internal" };

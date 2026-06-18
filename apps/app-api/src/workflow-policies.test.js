@@ -29,6 +29,7 @@ test("loads club workflow policies with organization fallback detail", async () 
               orgAllowAgentRouting: true,
               orgAutoApproveInternalLowRisk: false,
               orgAutoApproveMaxRisk: "0.35",
+              orgAutoApprovalRule: { allowedContentTypes: ["photo"] },
               orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
               orgApprovalRule: {
                 requireSecondApprovalForPublic: true,
@@ -42,6 +43,7 @@ test("loads club workflow policies with organization fallback detail", async () 
               clubAllowAgentRouting: false,
               clubAutoApproveInternalLowRisk: true,
               clubAutoApproveMaxRisk: "0.20",
+              clubAutoApprovalRule: {},
               clubRoutingRule: {},
               clubApprovalRule: {},
               clubPublishingRule: {},
@@ -57,6 +59,10 @@ test("loads club workflow policies with organization fallback detail", async () 
   assert.equal(result.found, true);
   assert.equal(result.organization.slug, "metro");
   assert.equal(result.club.slug, "westside");
+  assert.deepEqual(result.clubPolicy.autoApprovalRule, null);
+  assert.deepEqual(result.effectivePolicy.autoApprovalRule, {
+    allowedContentTypes: ["photo"]
+  });
   assert.deepEqual(result.clubPolicy.routingRule, null);
   assert.deepEqual(result.effectivePolicy.routingRule, {
     contentTypeApprovers: { video: "club_admin" }
@@ -78,7 +84,8 @@ test("validates workflow policy patch payloads", () => {
       {
         defaultApproverRole: "club_admin",
         autoApproveInternalLowRisk: true,
-        autoApproveMaxRisk: 0.2
+        autoApproveMaxRisk: 0.2,
+        autoApprovalRule: { allowedContentTypes: ["photo"] }
       },
       { scopeType: "club" }
     ),
@@ -87,7 +94,8 @@ test("validates workflow policy patch payloads", () => {
       value: {
         defaultApproverRole: "club_admin",
         autoApproveInternalLowRisk: true,
-        autoApproveMaxRisk: 0.2
+        autoApproveMaxRisk: 0.2,
+        autoApprovalRule: { allowedContentTypes: ["photo"] }
       }
     }
   );
@@ -100,6 +108,38 @@ test("validates workflow policy patch payloads", () => {
     {
       ok: false,
       error: "allowAgentRouting cannot be null for organization policies"
+    }
+  );
+
+  assert.deepEqual(
+    validateWorkflowPolicyPatch(
+      {
+        autoApprovalRule: {
+          allowedContentTypes: ["photo"],
+          blockedContentTypes: ["video"]
+        }
+      },
+      { scopeType: "organization" }
+    ),
+    {
+      ok: true,
+      value: {
+        autoApprovalRule: {
+          allowedContentTypes: ["photo"],
+          blockedContentTypes: ["video"]
+        }
+      }
+    }
+  );
+
+  assert.deepEqual(
+    validateWorkflowPolicyPatch(
+      { autoApprovalRule: { allowedContentTypes: ["photo", ""] } },
+      { scopeType: "club" }
+    ),
+    {
+      ok: false,
+      error: "autoApprovalRule.allowedContentTypes must contain only non-empty strings"
     }
   );
 
@@ -213,6 +253,7 @@ test("updates club workflow policies with authorized actors and preserves cleara
                 orgAllowAgentRouting: true,
                 orgAutoApproveInternalLowRisk: false,
                 orgAutoApproveMaxRisk: "0.35",
+                orgAutoApprovalRule: { allowedContentTypes: ["photo"] },
                 orgRoutingRule: {
                   contentTypeApprovers: { video: "club_admin" }
                 },
@@ -228,6 +269,7 @@ test("updates club workflow policies with authorized actors and preserves cleara
                 clubAllowAgentRouting: null,
                 clubAutoApproveInternalLowRisk: null,
                 clubAutoApproveMaxRisk: null,
+                clubAutoApprovalRule: {},
                 clubRoutingRule: {},
                 clubApprovalRule: {},
                 clubPublishingRule: {},
@@ -252,6 +294,7 @@ test("updates club workflow policies with authorized actors and preserves cleara
               orgAllowAgentRouting: true,
               orgAutoApproveInternalLowRisk: false,
               orgAutoApproveMaxRisk: "0.35",
+              orgAutoApprovalRule: { allowedContentTypes: ["photo"] },
               orgRoutingRule: {
                 contentTypeApprovers: { video: "club_admin" }
               },
@@ -267,6 +310,7 @@ test("updates club workflow policies with authorized actors and preserves cleara
               clubAllowAgentRouting: false,
               clubAutoApproveInternalLowRisk: true,
               clubAutoApproveMaxRisk: "0.15",
+              clubAutoApprovalRule: { blockedContentTypes: ["video"] },
               clubRoutingRule: { contentTypeApprovers: { video: "team_manager" } },
               clubApprovalRule: { requireSecondApprovalForPublic: false },
               clubPublishingRule: {},
@@ -301,6 +345,7 @@ test("updates club workflow policies with authorized actors and preserves cleara
       allowAgentRouting: false,
       autoApproveInternalLowRisk: true,
       autoApproveMaxRisk: 0.15,
+      autoApprovalRule: { blockedContentTypes: ["video"] },
       routingRule: { contentTypeApprovers: { video: "team_manager" } },
       approvalRule: { requireSecondApprovalForPublic: false },
       notificationRule: { push: true }
@@ -313,6 +358,9 @@ test("updates club workflow policies with authorized actors and preserves cleara
 
   assert.equal(result.found, true);
   assert.equal(result.clubPolicy.defaultApproverRole, "club_admin");
+  assert.deepEqual(result.effectivePolicy.autoApprovalRule, {
+    blockedContentTypes: ["video"]
+  });
   assert.deepEqual(result.effectivePolicy.publishingRule, {
     destinations: ["internal_feed"]
   });
@@ -329,13 +377,17 @@ test("updates club workflow policies with authorized actors and preserves cleara
   assert.equal(upsert.params[6], 0.15);
   assert.equal(
     upsert.params[7],
-    JSON.stringify({ contentTypeApprovers: { video: "team_manager" } })
+    JSON.stringify({ blockedContentTypes: ["video"] })
   );
   assert.equal(
     upsert.params[8],
+    JSON.stringify({ contentTypeApprovers: { video: "team_manager" } })
+  );
+  assert.equal(
+    upsert.params[9],
     JSON.stringify({ requireSecondApprovalForPublic: false })
   );
-  assert.equal(upsert.params[9], JSON.stringify({}));
+  assert.equal(upsert.params[10], JSON.stringify({}));
 });
 
 test("loads organization directory with clubs and organization admins", async () => {

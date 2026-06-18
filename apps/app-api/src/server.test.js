@@ -87,6 +87,7 @@ test("GET /workflow-policies/clubs/:slug returns club and organization policy de
             orgAllowAgentRouting: true,
             orgAutoApproveInternalLowRisk: false,
             orgAutoApproveMaxRisk: "0.35",
+            orgAutoApprovalRule: { allowedContentTypes: ["photo"] },
             orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
             orgPublishingRule: { mode: "org" },
             orgNotificationRule: { email: true },
@@ -96,6 +97,7 @@ test("GET /workflow-policies/clubs/:slug returns club and organization policy de
             clubAllowAgentRouting: false,
             clubAutoApproveInternalLowRisk: true,
             clubAutoApproveMaxRisk: "0.20",
+            clubAutoApprovalRule: {},
             clubRoutingRule: {},
             clubPublishingRule: {},
             clubNotificationRule: { push: true }
@@ -119,6 +121,9 @@ test("GET /workflow-policies/clubs/:slug returns club and organization policy de
     assert.equal(response.status, 200);
     assert.equal(body.club.slug, "westside");
     assert.equal(body.organization.slug, "metro");
+    assert.deepEqual(body.effectivePolicy.autoApprovalRule, {
+      allowedContentTypes: ["photo"]
+    });
     assert.deepEqual(body.effectivePolicy.routingRule, {
       contentTypeApprovers: { video: "club_admin" }
     });
@@ -156,6 +161,7 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
                   orgAllowAgentRouting: true,
                   orgAutoApproveInternalLowRisk: false,
                   orgAutoApproveMaxRisk: "0.35",
+                  orgAutoApprovalRule: { allowedContentTypes: ["photo"] },
                   orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
                   orgPublishingRule: { destinations: ["internal_feed"] },
                   orgNotificationRule: { email: true },
@@ -165,6 +171,7 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
                   clubAllowAgentRouting: null,
                   clubAutoApproveInternalLowRisk: null,
                   clubAutoApproveMaxRisk: null,
+                  clubAutoApprovalRule: {},
                   clubRoutingRule: {},
                   clubPublishingRule: {},
                   clubNotificationRule: {}
@@ -188,6 +195,7 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
                 orgAllowAgentRouting: true,
                 orgAutoApproveInternalLowRisk: false,
                 orgAutoApproveMaxRisk: "0.35",
+                orgAutoApprovalRule: { allowedContentTypes: ["photo"] },
                 orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
                 orgPublishingRule: { destinations: ["internal_feed"] },
                 orgNotificationRule: { email: true },
@@ -197,6 +205,7 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
                 clubAllowAgentRouting: false,
                 clubAutoApproveInternalLowRisk: true,
                 clubAutoApproveMaxRisk: "0.15",
+                clubAutoApprovalRule: { blockedContentTypes: ["video"] },
                 clubRoutingRule: { contentTypeApprovers: { video: "team_manager" } },
                 clubPublishingRule: {},
                 clubNotificationRule: { push: true }
@@ -238,6 +247,7 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
         allowAgentRouting: false,
         autoApproveInternalLowRisk: true,
         autoApproveMaxRisk: 0.15,
+        autoApprovalRule: { blockedContentTypes: ["video"] },
         routingRule: { contentTypeApprovers: { video: "team_manager" } },
         notificationRule: { push: true }
       })
@@ -247,6 +257,9 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
     assert.equal(response.status, 200);
     assert.equal(body.clubPolicy.defaultApproverRole, "club_admin");
     assert.equal(body.effectivePolicy.allowAgentRouting, false);
+    assert.deepEqual(body.effectivePolicy.autoApprovalRule, {
+      blockedContentTypes: ["video"]
+    });
     assert.deepEqual(body.clubPolicy.routingRule, {
       contentTypeApprovers: { video: "team_manager" }
     });
@@ -264,6 +277,10 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
     assert.equal(upsert.params[6], 0.15);
     assert.equal(
       upsert.params[7],
+      JSON.stringify({ blockedContentTypes: ["video"] })
+    );
+    assert.equal(
+      upsert.params[8],
       JSON.stringify({ contentTypeApprovers: { video: "team_manager" } })
     );
   } finally {
@@ -289,6 +306,7 @@ test("GET /workflow-policies/organizations/:slug returns organization policy det
             orgAllowAgentRouting: true,
             orgAutoApproveInternalLowRisk: false,
             orgAutoApproveMaxRisk: "0.35",
+            orgAutoApprovalRule: { allowedContentTypes: ["photo"] },
             orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
             orgPublishingRule: { destinations: ["internal_feed"] },
             orgNotificationRule: { email: true }
@@ -312,6 +330,9 @@ test("GET /workflow-policies/organizations/:slug returns organization policy det
     assert.equal(response.status, 200);
     assert.equal(body.organization.slug, "metro");
     assert.equal(body.organizationPolicy.mediumRiskApproverRole, "club_admin");
+    assert.deepEqual(body.organizationPolicy.autoApprovalRule, {
+      allowedContentTypes: ["photo"]
+    });
     assert.deepEqual(body.organizationPolicy.routingRule, {
       contentTypeApprovers: { video: "club_admin" }
     });
@@ -345,6 +366,7 @@ test("GET /organizations/:slug returns organization directory detail", async () 
               orgAllowAgentRouting: true,
               orgAutoApproveInternalLowRisk: false,
               orgAutoApproveMaxRisk: "0.35",
+              orgAutoApprovalRule: {},
               orgRoutingRule: {},
               orgPublishingRule: {},
               orgNotificationRule: {}
@@ -417,6 +439,7 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
                   orgAllowAgentRouting: true,
                   orgAutoApproveInternalLowRisk: false,
                   orgAutoApproveMaxRisk: "0.35",
+                  orgAutoApprovalRule: {},
                   orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
                   orgPublishingRule: { destinations: ["internal_feed"] },
                   orgNotificationRule: { email: true }
@@ -437,6 +460,7 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
                 orgAllowAgentRouting: false,
                 orgAutoApproveInternalLowRisk: true,
                 orgAutoApproveMaxRisk: "0.20",
+                orgAutoApprovalRule: { allowedContentTypes: ["photo"] },
                 orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
                 orgPublishingRule: { destinations: ["internal_feed"] },
                 orgNotificationRule: { email: true, push: false }
@@ -478,6 +502,7 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
         allowAgentRouting: false,
         autoApproveInternalLowRisk: true,
         autoApproveMaxRisk: 0.2,
+        autoApprovalRule: { allowedContentTypes: ["photo"] },
         routingRule: { contentTypeApprovers: { video: "club_admin" } },
         notificationRule: { email: true, push: false }
       })
@@ -487,6 +512,9 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
     assert.equal(response.status, 200);
     assert.equal(body.organizationPolicy.defaultApproverRole, "club_admin");
     assert.equal(body.organizationPolicy.allowAgentRouting, false);
+    assert.deepEqual(body.organizationPolicy.autoApprovalRule, {
+      allowedContentTypes: ["photo"]
+    });
     assert.deepEqual(body.organizationPolicy.routingRule, {
       contentTypeApprovers: { video: "club_admin" }
     });
@@ -501,6 +529,10 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
     assert.equal(upsert.params[6], 0.2);
     assert.equal(
       upsert.params[7],
+      JSON.stringify({ allowedContentTypes: ["photo"] })
+    );
+    assert.equal(
+      upsert.params[8],
       JSON.stringify({ contentTypeApprovers: { video: "club_admin" } })
     );
   } finally {
