@@ -13,6 +13,7 @@ import {
 } from "./publish-outcome.js";
 import { buildReviewArtifacts } from "./review-provider.js";
 import {
+  choosePublishingDestinationTypes,
   choosePolicyApproverRole,
   loadEffectiveWorkflowPolicy,
   shouldAutoApproveSubmission
@@ -324,103 +325,117 @@ export async function processSubmissionApproved(
   }
 
   const submission = submissionResult.rows[0];
+  const workflowPolicy = await loadEffectiveWorkflowPolicy(client, submission.club_id);
+  const destinationTypes = choosePublishingDestinationTypes(workflowPolicy);
 
   const destination = await client.query(
     `
     SELECT id, destination_type, name, config
     FROM publishing_destinations
-    WHERE club_id = $1 AND destination_type = $2 AND is_active = TRUE
-    ORDER BY created_at ASC
-    LIMIT 1
+    WHERE club_id = $1
+      AND destination_type = ANY($2::text[])
+      AND is_active = TRUE
+    ORDER BY array_position($2::text[], destination_type), created_at ASC
     `,
-    [submission.club_id, internalDestinationType]
+    [submission.club_id, destinationTypes]
   );
 
   if (!destination.rowCount) {
-    throw new Error("Internal publishing destination not configured");
+    throw new Error(
+      `Publishing destinations not configured for policy: ${destinationTypes.join(", ")}`
+    );
   }
 
-  const publishDestination = destination.rows[0];
-  let publishResult;
-  try {
-    publishResult = await publishImpl({
-      submission,
-      destination: publishDestination
-    });
-  } catch (error) {
-    const resultSummary = buildPublishFailureSummary(error);
+  const publishDestinations = destination.rows;
+  const publishResults = [];
+
+  for (const publishDestination of publishDestinations) {
+    let publishResult;
+
+    try {
+      publishResult = await publishImpl({
+        submission,
+        destination: publishDestination
+      });
+    } catch (error) {
+      const resultSummary = buildPublishFailureSummary(error);
+      await client.query(
+        `
+        INSERT INTO publishing_jobs (
+          submission_id,
+          destination_id,
+          state,
+          attempt_count,
+          result_summary
+        )
+        VALUES ($1, $2, 'failed', 1, $3)
+        `,
+        [submission.id, publishDestination.id, resultSummary]
+      );
+
+      await client.query(
+        `
+        UPDATE submissions
+        SET status = 'publish_failed', updated_at = NOW()
+        WHERE id = $1
+        `,
+        [submission.id]
+      );
+
+      await client.query(
+        `
+        INSERT INTO submission_events (submission_id, event_name, payload)
+        VALUES ($1, $2, $3::jsonb)
+        `,
+        [
+          submission.id,
+          submissionEvents.publishFailed,
+          JSON.stringify({
+            destinationType: publishDestination.destination_type,
+            destinationName: publishDestination.name,
+            attemptedDestinationCount: publishDestinations.length,
+            publishedDestinationCount: publishResults.length,
+            ...buildPublishFailureEventPayload(error)
+          })
+        ]
+      );
+
+      return;
+    }
+
+    publishResults.push(publishResult);
+
     await client.query(
       `
       INSERT INTO publishing_jobs (
         submission_id,
         destination_id,
         state,
-        attempt_count,
-        result_summary
+        result_summary,
+        external_reference
       )
-      VALUES ($1, $2, 'failed', 1, $3)
-      `,
-      [submission.id, publishDestination.id, resultSummary]
-    );
-
-    await client.query(
-      `
-      UPDATE submissions
-      SET status = 'publish_failed', updated_at = NOW()
-      WHERE id = $1
-      `,
-      [submission.id]
-    );
-
-    await client.query(
-      `
-      INSERT INTO submission_events (submission_id, event_name, payload)
-      VALUES ($1, $2, $3::jsonb)
+      VALUES ($1, $2, 'succeeded', $3, $4)
       `,
       [
         submission.id,
-        submissionEvents.publishFailed,
-        JSON.stringify({
-          destinationType: publishDestination.destination_type,
-          destinationName: publishDestination.name,
-          ...buildPublishFailureEventPayload(error)
-        })
+        publishDestination.id,
+        publishResult.resultSummary,
+        publishResult.externalReference
       ]
     );
 
-    return;
+    await client.query(
+      `
+      INSERT INTO published_posts (
+        submission_id,
+        destination_id,
+        external_post_id
+      )
+      VALUES ($1, $2, $3)
+      `,
+      [submission.id, publishDestination.id, publishResult.externalPostId]
+    );
   }
-
-  await client.query(
-    `
-    INSERT INTO publishing_jobs (
-      submission_id,
-      destination_id,
-      state,
-      result_summary,
-      external_reference
-    )
-    VALUES ($1, $2, 'succeeded', $3, $4)
-    `,
-    [
-      submission.id,
-      publishDestination.id,
-      publishResult.resultSummary,
-      publishResult.externalReference
-    ]
-  );
-
-  await client.query(
-    `
-    INSERT INTO published_posts (
-      submission_id,
-      destination_id,
-      external_post_id
-    )
-    VALUES ($1, $2, $3)
-    `,
-    [submission.id, publishDestination.id, publishResult.externalPostId]
-  );
 
   await client.query(
     `
@@ -436,19 +451,19 @@ export async function processSubmissionApproved(
     INSERT INTO submission_events (submission_id, event_name, payload)
     VALUES ($1, $2, $3::jsonb)
     `,
-    [
-      submission.id,
-      submissionEvents.published,
-      JSON.stringify(buildPublishedEventPayload(publishResult))
-    ]
-  );
+      [
+        submission.id,
+        submissionEvents.published,
+        JSON.stringify(buildPublishedEventPayload({ results: publishResults }))
+      ]
+    );
 
   await createAndDeliverNotification(client, {
     userId: submission.submitted_by_user_id,
     type: "submission_published",
     payload: buildPublishedNotificationPayload({
       submissionId: submission.id,
-      result: publishResult
+      result: { results: publishResults }
     })
   });
 }

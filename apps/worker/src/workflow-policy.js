@@ -1,4 +1,7 @@
-import { reviewThresholds } from "../../../packages/shared/src/index.js";
+import {
+  internalDestinationType,
+  reviewThresholds
+} from "../../../packages/shared/src/index.js";
 
 export const defaultWorkflowPolicy = {
   defaultApproverRole: "team_manager",
@@ -180,4 +183,24 @@ export function shouldAutoApproveSubmission({
   }
 
   return { allowed: true, reason: "policy_auto_approve_low_risk_internal" };
+}
+
+export function choosePublishingDestinationTypes(
+  policy = defaultWorkflowPolicy
+) {
+  const configuredDestinations = policy?.publishingRule?.destinations;
+
+  if (!Array.isArray(configuredDestinations)) {
+    return [internalDestinationType];
+  }
+
+  const normalized = configuredDestinations
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  if (!normalized.length) {
+    return [internalDestinationType];
+  }
+
+  return [...new Set(normalized)];
 }

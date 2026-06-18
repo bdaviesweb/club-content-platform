@@ -13,6 +13,26 @@ const reviewerWorkflowRoles = ["team_manager", "club_admin", "club_comms"];
 const clubPolicyManagerRoles = ["club_admin", "club_comms"];
 const organizationPolicyManagerRoles = ["organization_admin", "organization_ops"];
 
+function validateDestinationList(value, fieldName) {
+  if (!Array.isArray(value)) {
+    return {
+      ok: false,
+      error: `${fieldName}.destinations must be an array of destination type strings`
+    };
+  }
+
+  for (const entry of value) {
+    if (typeof entry !== "string" || !entry.trim()) {
+      return {
+        ok: false,
+        error: `${fieldName}.destinations must contain only non-empty strings`
+      };
+    }
+  }
+
+  return { ok: true };
+}
+
 function normalizeSlug(value) {
   const normalized = String(value || "").trim();
   return normalized || null;
@@ -309,6 +329,16 @@ export function validateWorkflowPolicyPatch(input, { scopeType }) {
 
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       return { ok: false, error: `${objectField} must be an object` };
+    }
+
+    if (
+      objectField === "publishingRule" &&
+      Object.hasOwn(value, "destinations")
+    ) {
+      const validation = validateDestinationList(value.destinations, objectField);
+      if (!validation.ok) {
+        return validation;
+      }
     }
 
     patch[objectField] = value;

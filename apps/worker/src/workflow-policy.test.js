@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  choosePublishingDestinationTypes,
   choosePolicyApproverRole,
   defaultWorkflowPolicy,
   loadEffectiveWorkflowPolicy,
@@ -192,4 +193,26 @@ test("allows low-risk internal auto-approval only when policy permits it", () =>
     }),
     { allowed: false, reason: "policy_disabled" }
   );
+});
+
+test("chooses publish destinations from policy and falls back to internal feed", () => {
+  assert.deepEqual(
+    choosePublishingDestinationTypes({
+      ...defaultWorkflowPolicy,
+      publishingRule: { destinations: ["internal_feed", "booster_email", "internal_feed"] }
+    }),
+    ["internal_feed", "booster_email"]
+  );
+
+  assert.deepEqual(
+    choosePublishingDestinationTypes({
+      ...defaultWorkflowPolicy,
+      publishingRule: { destinations: [] }
+    }),
+    ["internal_feed"]
+  );
+
+  assert.deepEqual(choosePublishingDestinationTypes(defaultWorkflowPolicy), [
+    "internal_feed"
+  ]);
 });

@@ -424,12 +424,36 @@ test("publishes approved submissions through the destination adapter", async () 
     name: "Internal Club Feed",
     config: { mode: "internal" }
   };
+  const workflowPolicyRow = {
+    clubId: "club-1",
+    organizationId: "org-1",
+    orgDefaultApproverRole: "team_manager",
+    orgPublicApproverRole: "club_comms",
+    orgMediumRiskApproverRole: "club_comms",
+    orgAllowAgentRouting: true,
+    orgAutoApproveInternalLowRisk: false,
+    orgAutoApproveMaxRisk: "0.35",
+    orgPublishingRule: { destinations: ["internal_feed"] },
+    orgNotificationRule: {},
+    clubDefaultApproverRole: null,
+    clubPublicApproverRole: null,
+    clubMediumRiskApproverRole: null,
+    clubAllowAgentRouting: null,
+    clubAutoApproveInternalLowRisk: null,
+    clubAutoApproveMaxRisk: null,
+    clubPublishingRule: null,
+    clubNotificationRule: null
+  };
   const client = {
     async query(sql, params = []) {
       queries.push({ sql, params });
 
       if (sql.includes("FROM submissions s")) {
         return { rowCount: 1, rows: [submission] };
+      }
+
+      if (sql.includes("LEFT JOIN organization_workflow_policies")) {
+        return { rowCount: 1, rows: [workflowPolicyRow] };
       }
 
       if (sql.includes("FROM publishing_destinations")) {
@@ -505,7 +529,8 @@ test("publishes approved submissions through the destination adapter", async () 
     queries.some(
       ({ sql, params }) =>
         sql.includes("INSERT INTO submission_events") &&
-        JSON.parse(params[2]).destinationName === "Internal Club Feed"
+        JSON.parse(params[2]).destinationName === "Internal Club Feed" &&
+        JSON.parse(params[2]).destinationCount === 1
     )
   );
   assert.deepEqual(notifications, [
@@ -513,7 +538,169 @@ test("publishes approved submissions through the destination adapter", async () 
       submissionId: "submission-1",
       status: "published",
       destinationType: "internal_feed",
-      destinationName: "Internal Club Feed"
+      destinationName: "Internal Club Feed",
+      destinationCount: 1,
+      destinations: [
+        {
+          destinationType: "internal_feed",
+          destinationName: "Internal Club Feed"
+        }
+      ]
+    }
+  ]);
+});
+
+test("publishes approved submissions to every destination configured by the workflow policy", async () => {
+  const queries = [];
+  const notifications = [];
+  const submission = {
+    id: "submission-2",
+    club_id: "club-2",
+    submitted_by_user_id: "user-2"
+  };
+  const destinations = [
+    {
+      id: "destination-1",
+      destination_type: "internal_feed",
+      name: "Internal Club Feed",
+      config: { mode: "internal" }
+    },
+    {
+      id: "destination-2",
+      destination_type: "booster_email",
+      name: "Booster Email",
+      config: { mode: "email" }
+    }
+  ];
+  const workflowPolicyRow = {
+    clubId: "club-2",
+    organizationId: "org-2",
+    orgDefaultApproverRole: "team_manager",
+    orgPublicApproverRole: "club_comms",
+    orgMediumRiskApproverRole: "club_comms",
+    orgAllowAgentRouting: true,
+    orgAutoApproveInternalLowRisk: false,
+    orgAutoApproveMaxRisk: "0.35",
+    orgPublishingRule: { destinations: ["internal_feed", "booster_email"] },
+    orgNotificationRule: {},
+    clubDefaultApproverRole: null,
+    clubPublicApproverRole: null,
+    clubMediumRiskApproverRole: null,
+    clubAllowAgentRouting: null,
+    clubAutoApproveInternalLowRisk: null,
+    clubAutoApproveMaxRisk: null,
+    clubPublishingRule: null,
+    clubNotificationRule: null
+  };
+  const publishCalls = [];
+
+  const client = {
+    async query(sql, params = []) {
+      queries.push({ sql, params });
+
+      if (sql.includes("FROM submissions s")) {
+        return { rowCount: 1, rows: [submission] };
+      }
+
+      if (sql.includes("LEFT JOIN organization_workflow_policies")) {
+        return { rowCount: 1, rows: [workflowPolicyRow] };
+      }
+
+      if (sql.includes("FROM publishing_destinations")) {
+        return { rowCount: 2, rows: destinations };
+      }
+
+      if (sql.includes("INSERT INTO notifications")) {
+        notifications.push(JSON.parse(params[2]));
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              id: "notification-2",
+              user_id: params[0],
+              type: params[1],
+              payload: JSON.parse(params[2]),
+              created_at: new Date().toISOString()
+            }
+          ]
+        };
+      }
+
+      if (sql.includes("FROM users")) {
+        return {
+          rowCount: 1,
+          rows: [{ email: "submitter@example.test", full_name: "Submitter" }]
+        };
+      }
+
+      if (sql.includes("WITH latest_push_state")) {
+        return { rowCount: 0, rows: [] };
+      }
+
+      return { rowCount: 1, rows: [] };
+    }
+  };
+
+  await processSubmissionApproved(
+    client,
+    { submission_id: submission.id },
+    {
+      async publishImpl(payload) {
+        publishCalls.push(payload);
+        return {
+          destinationType: payload.destination.destination_type,
+          destinationName: payload.destination.name,
+          externalPostId: `${payload.destination.destination_type}:${submission.id}`,
+          externalReference: `${payload.destination.destination_type}:${submission.id}`,
+          resultSummary: `Published to ${payload.destination.name}`
+        };
+      }
+    }
+  );
+
+  assert.deepEqual(
+    publishCalls.map((entry) => entry.destination.destination_type),
+    ["internal_feed", "booster_email"]
+  );
+  assert.equal(
+    queries.filter(({ sql }) => sql.includes("INSERT INTO publishing_jobs")).length,
+    2
+  );
+  assert.equal(
+    queries.filter(({ sql }) => sql.includes("INSERT INTO published_posts")).length,
+    2
+  );
+  assert.ok(
+    queries.some(({ sql, params }) => {
+      if (!sql.includes("INSERT INTO submission_events")) {
+        return false;
+      }
+
+      const payload = JSON.parse(params[2]);
+      return (
+        payload.destinationCount === 2 &&
+        Array.isArray(payload.destinations) &&
+        payload.destinations[1]?.destinationType === "booster_email"
+      );
+    })
+  );
+  assert.deepEqual(notifications, [
+    {
+      submissionId: "submission-2",
+      status: "published",
+      destinationType: "internal_feed",
+      destinationName: "Internal Club Feed",
+      destinationCount: 2,
+      destinations: [
+        {
+          destinationType: "internal_feed",
+          destinationName: "Internal Club Feed"
+        },
+        {
+          destinationType: "booster_email",
+          destinationName: "Booster Email"
+        }
+      ]
     }
   ]);
 });
@@ -531,12 +718,36 @@ test("records publish failures when the destination adapter fails", async () => 
     name: "Internal Club Feed",
     config: { mode: "internal" }
   };
+  const workflowPolicyRow = {
+    clubId: "club-1",
+    organizationId: "org-1",
+    orgDefaultApproverRole: "team_manager",
+    orgPublicApproverRole: "club_comms",
+    orgMediumRiskApproverRole: "club_comms",
+    orgAllowAgentRouting: true,
+    orgAutoApproveInternalLowRisk: false,
+    orgAutoApproveMaxRisk: "0.35",
+    orgPublishingRule: { destinations: ["internal_feed"] },
+    orgNotificationRule: {},
+    clubDefaultApproverRole: null,
+    clubPublicApproverRole: null,
+    clubMediumRiskApproverRole: null,
+    clubAllowAgentRouting: null,
+    clubAutoApproveInternalLowRisk: null,
+    clubAutoApproveMaxRisk: null,
+    clubPublishingRule: null,
+    clubNotificationRule: null
+  };
   const client = {
     async query(sql, params = []) {
       queries.push({ sql, params });
 
       if (sql.includes("FROM submissions s")) {
         return { rowCount: 1, rows: [submission] };
+      }
+
+      if (sql.includes("LEFT JOIN organization_workflow_policies")) {
+        return { rowCount: 1, rows: [workflowPolicyRow] };
       }
 
       if (sql.includes("FROM publishing_destinations")) {
@@ -578,7 +789,8 @@ test("records publish failures when the destination adapter fails", async () => 
       ({ sql, params }) =>
         sql.includes("INSERT INTO submission_events") &&
         params[1] === "submission.publish.failed" &&
-        JSON.parse(params[2]).error === "Destination API timed out"
+        JSON.parse(params[2]).error === "Destination API timed out" &&
+        JSON.parse(params[2]).attemptedDestinationCount === 1
     )
   );
   assert.equal(

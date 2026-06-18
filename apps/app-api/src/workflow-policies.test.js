@@ -84,6 +84,30 @@ test("validates workflow policy patch payloads", () => {
       error: "allowAgentRouting cannot be null for organization policies"
     }
   );
+
+  assert.deepEqual(
+    validateWorkflowPolicyPatch(
+      { publishingRule: { destinations: ["internal_feed", "booster_email"] } },
+      { scopeType: "organization" }
+    ),
+    {
+      ok: true,
+      value: {
+        publishingRule: { destinations: ["internal_feed", "booster_email"] }
+      }
+    }
+  );
+
+  assert.deepEqual(
+    validateWorkflowPolicyPatch(
+      { publishingRule: { destinations: ["", "internal_feed"] } },
+      { scopeType: "club" }
+    ),
+    {
+      ok: false,
+      error: "publishingRule.destinations must contain only non-empty strings"
+    }
+  );
 });
 
 test("updates club workflow policies with authorized actors and preserves clearable overrides", async () => {

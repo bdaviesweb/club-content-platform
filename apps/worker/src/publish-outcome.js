@@ -10,17 +10,47 @@ export function buildPublishFailureEventPayload(error) {
 }
 
 export function buildPublishedEventPayload(result = {}) {
+  const results = Array.isArray(result.results) ? result.results : null;
+  const primary = results?.[0] || result;
+
   return {
-    destinationType: result.destinationType || null,
-    destinationName: result.destinationName || null
+    destinationType: primary.destinationType || null,
+    destinationName: primary.destinationName || null,
+    destinationCount: results?.length || 1,
+    destinations: results
+      ? results.map((entry) => ({
+          destinationType: entry.destinationType || null,
+          destinationName: entry.destinationName || null
+        }))
+      : [
+          {
+            destinationType: primary.destinationType || null,
+            destinationName: primary.destinationName || null
+          }
+        ]
   };
 }
 
 export function buildPublishedNotificationPayload({ submissionId, result = {} }) {
+  const results = Array.isArray(result.results) ? result.results : null;
+  const primary = results?.[0] || result;
+
   return {
     submissionId,
     status: "published",
-    destinationType: result.destinationType || null,
-    destinationName: result.destinationName || null
+    destinationType: primary.destinationType || null,
+    destinationName: primary.destinationName || null,
+    destinationCount: results?.length || 1,
+    destinations: results
+      ? results.map((entry) => ({
+          destinationType: entry.destinationType || null,
+          destinationName: entry.destinationName || null
+        }))
+      : [
+          {
+            destinationType: primary.destinationType || null,
+            destinationName: primary.destinationName || null
+          }
+        ]
   };
 }
