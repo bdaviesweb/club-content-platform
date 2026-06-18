@@ -697,9 +697,13 @@ async function handleApprovalQueue(res, { pool = getPool() } = {}) {
   sendJson(res, 200, { items });
 }
 
-async function handleApprovalRequestDetail(res, approvalRequestId) {
+async function handleApprovalRequestDetail(
+  res,
+  approvalRequestId,
+  { pool = getPool() } = {}
+) {
   const approvalRequest = await loadApprovalRequestDetail({
-    pool: getPool(),
+    pool,
     approvalRequestId,
     enrichMediaCollection
   });
@@ -1289,7 +1293,9 @@ export function createAppServer({ pool } = {}) {
       req.method === "GET" &&
       /^\/approval-requests\/[^/]+$/.test(url.pathname)
     ) {
-      await handleApprovalRequestDetail(res, url.pathname.split("/")[2]);
+      await handleApprovalRequestDetail(res, url.pathname.split("/")[2], {
+        pool: pool || getPool()
+      });
       return;
     }
 

@@ -125,3 +125,87 @@ test("GET /approvals/queue returns approval queue items", async () => {
     await once(server, "close");
   }
 });
+
+test("GET /approval-requests/:id returns approval request detail", async () => {
+  const previousPublicAppUrl = process.env.PUBLIC_APP_URL;
+  process.env.PUBLIC_APP_URL = "https://clubcontent-api.example.test";
+
+  const rows = [
+    {
+      id: "approval-1",
+      state: "pending",
+      media: [{ id: "media-1", objectKey: "uploads/approval.jpg" }]
+    }
+  ];
+  const queries = [];
+
+  const pool = {
+    async query(query) {
+      queries.push(query);
+      return { rowCount: 1, rows };
+    }
+  };
+
+  const server = createAppServer({ pool });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/approval-requests/approval-1`);
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      id: "approval-1",
+      state: "pending",
+      media: [
+        {
+          id: "media-1",
+          objectKey: "uploads/approval.jpg",
+          previewUrl:
+            "https://clubcontent-api.example.test/media/preview?key=uploads%2Fapproval.jpg"
+        }
+      ]
+    });
+    assert.equal(queries.length, 1);
+    assert.match(queries[0], /FROM approval_requests ar/);
+    assert.match(queries[0], /WHERE ar\.id = \$1/);
+  } finally {
+    server.close();
+    await once(server, "close");
+    if (previousPublicAppUrl === undefined) {
+      delete process.env.PUBLIC_APP_URL;
+    } else {
+      process.env.PUBLIC_APP_URL = previousPublicAppUrl;
+    }
+  }
+});
+
+test("GET /approval-requests/:id returns not found when missing", async () => {
+  const pool = {
+    async query() {
+      return { rowCount: 0, rows: [] };
+    }
+  };
+
+  const server = createAppServer({ pool });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/approval-requests/missing-approval`);
+    const body = await response.json();
+
+    assert.equal(response.status, 404);
+    assert.deepEqual(body, { error: "Not found" });
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
