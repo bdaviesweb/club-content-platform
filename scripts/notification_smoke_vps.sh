@@ -5,6 +5,7 @@ REMOTE_HOST="${REMOTE_HOST:-hermes-dev}"
 REMOTE_DIR="${REMOTE_DIR:-/srv/repos/projects/club-content-platform}"
 SUBMITTER_EMAIL="${SUBMITTER_EMAIL:-coach@demo-club.local}"
 NOTIFICATION_LIMIT="${NOTIFICATION_LIMIT:-5}"
+EXPECTED_SUBMISSION_ID="${EXPECTED_SUBMISSION_ID:-}"
 
 status_json="$(
   ssh "${REMOTE_HOST}" \
@@ -58,6 +59,7 @@ node_output="$(
   NOTIFICATIONS_JSON="${notifications_json}" \
   AUDIT_ROWS="${audit_rows}" \
   SUBMITTER_EMAIL="${SUBMITTER_EMAIL}" \
+  EXPECTED_SUBMISSION_ID="${EXPECTED_SUBMISSION_ID}" \
   node <<'NODE'
 const assert = require("node:assert/strict");
 
@@ -65,6 +67,7 @@ const status = JSON.parse(process.env.STATUS_JSON);
 const notifications = JSON.parse(process.env.NOTIFICATIONS_JSON);
 const rawAuditRows = process.env.AUDIT_ROWS || "";
 const submitterEmail = process.env.SUBMITTER_EMAIL;
+const expectedSubmissionId = process.env.EXPECTED_SUBMISSION_ID || "";
 
 assert.ok(status.email, "notification delivery status must include email state");
 assert.ok(status.push, "notification delivery status must include push state");
@@ -142,6 +145,30 @@ assert.ok(
   "push token count should be numeric when present"
 );
 
+let expectedSubmissionNotifications = null;
+if (expectedSubmissionId) {
+  expectedSubmissionNotifications = notifications.items.filter(
+    (item) => item?.payload?.submissionId === expectedSubmissionId
+  );
+
+  assert.ok(
+    expectedSubmissionNotifications.length > 0,
+    `expected at least one notification for submission ${expectedSubmissionId}`
+  );
+
+  const expectedTypes = new Set(
+    expectedSubmissionNotifications.map((item) => item.type)
+  );
+  assert.ok(
+    expectedTypes.has("submission_review_started"),
+    `expected a submission_review_started notification for submission ${expectedSubmissionId}`
+  );
+  assert.ok(
+    expectedTypes.has("submission_published"),
+    `expected a submission_published notification for submission ${expectedSubmissionId}`
+  );
+}
+
 console.log("Notification smoke passed.");
 console.log(
   JSON.stringify(
@@ -151,11 +178,18 @@ console.log(
       latestNotification: {
         id: firstNotification.id,
         type: firstNotification.type,
+        submissionId: firstNotification.payload?.submissionId || null,
         deliveryStatus: firstNotification.deliveryStatus || null,
         deliveryProviderId: firstNotification.deliveryProviderId || null,
         deliveryUpdatedAt: firstNotification.deliveryUpdatedAt || null
       },
-      latestAudit
+      latestAudit,
+      expectedSubmission: expectedSubmissionId
+        ? {
+            submissionId: expectedSubmissionId,
+            notificationTypes: expectedSubmissionNotifications.map((item) => item.type)
+          }
+        : null
     },
     null,
     2

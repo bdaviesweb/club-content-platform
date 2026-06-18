@@ -26,6 +26,24 @@ run_checked_step() {
   printf '%s\n' "${output}"
 }
 
+extract_output_value() {
+  local key="$1"
+  local output="$2"
+
+  printf '%s\n' "${output}" | node -e '
+const fs = require("node:fs");
+const key = process.argv[1];
+const lines = fs.readFileSync(0, "utf8").split(/\r?\n/);
+for (const line of lines) {
+  if (line.startsWith(key + "=")) {
+    process.stdout.write(line.slice(key.length + 1));
+    process.exit(0);
+  }
+}
+process.exit(1);
+' "${key}"
+}
+
 echo "Deploying current checkout to ${REMOTE_HOST}:${REMOTE_DIR}"
 REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/deploy_vps.sh
 
@@ -44,7 +62,18 @@ REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/smoke_vps.sh
 echo
 echo "---"
 echo "Running approval publish smoke"
-REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/approval_publish_smoke_vps.sh
+approval_publish_output="$(
+  REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/approval_publish_smoke_vps.sh
+)"
+printf '%s\n' "${approval_publish_output}"
+
+submission_id=""
+if submission_id="$(extract_output_value "submission_id" "${approval_publish_output}")"; then
+  :
+else
+  echo "Approval publish smoke did not report submission_id."
+  exit 1
+fi
 
 echo
 echo "---"
@@ -55,7 +84,7 @@ if [[ "${RUN_NOTIFICATION_DEEP_SMOKE}" == "1" ]]; then
   echo
   echo "---"
   echo "Running notification readback smoke"
-  run_checked_step "Notification readback smoke" env REMOTE_HOST="${REMOTE_HOST}" ./scripts/notification_smoke_vps.sh
+  run_checked_step "Notification readback smoke" env REMOTE_HOST="${REMOTE_HOST}" EXPECTED_SUBMISSION_ID="${submission_id}" ./scripts/notification_smoke_vps.sh
 fi
 
 if [[ "${RUN_NOTIFICATION_WEBHOOK_SMOKE}" == "1" ]]; then
