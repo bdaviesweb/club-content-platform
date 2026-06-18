@@ -36,6 +36,11 @@ import { recordNotificationWebhookEvent } from "./notification-webhook.js";
 import { parseResendWebhook } from "./notification-webhook-verification.js";
 import { loadSubmissionRecord } from "./submission-record.js";
 import { loadWorkflowEvents } from "./workflow-events.js";
+import {
+  loadWorkflowPolicyScope,
+  updateWorkflowPolicyScope,
+  validateWorkflowPolicyPatch
+} from "./workflow-policies.js";
 
 const port = Number(process.env.API_PORT || 4000);
 const publicAppName = process.env.PUBLIC_PRODUCT_NAME || "Club Content";
@@ -441,6 +446,66 @@ async function handleAppReadiness(
   });
 
   sendJson(res, 200, readiness);
+}
+
+async function handleGetWorkflowPolicy(
+  res,
+  scopeType,
+  scopeSlug,
+  { pool = getPool() } = {}
+) {
+  const policy = await loadWorkflowPolicyScope(pool, { scopeType, scopeSlug });
+
+  if (!policy.found) {
+    sendNotFound(res);
+    return;
+  }
+
+  sendJson(res, 200, policy);
+}
+
+async function handleUpdateWorkflowPolicy(
+  req,
+  res,
+  scopeType,
+  scopeSlug,
+  { runInTransaction = withTransaction } = {}
+) {
+  const body = await readJson(req);
+  const { actorEmail, ...rawPatch } = body;
+
+  if (!actorEmail) {
+    sendJson(res, 400, { error: "actorEmail is required" });
+    return;
+  }
+
+  const validation = validateWorkflowPolicyPatch(rawPatch, { scopeType });
+
+  if (!validation.ok) {
+    sendJson(res, 400, { error: validation.error });
+    return;
+  }
+
+  const result = await runInTransaction((client) =>
+    updateWorkflowPolicyScope(client, {
+      scopeType,
+      scopeSlug,
+      actorEmail,
+      patch: validation.value
+    })
+  );
+
+  if (!result.found) {
+    sendNotFound(res);
+    return;
+  }
+
+  if (result.ok === false) {
+    sendJson(res, result.status || 403, { error: result.error });
+    return;
+  }
+
+  sendJson(res, 200, result);
 }
 
 async function handleCreateUploadPlan(req, res) {
@@ -1325,6 +1390,60 @@ export function createAppServer({
         pool: pool || getPool(),
         loadAppReadinessFn: loadAppReadinessFn || loadAppReadiness
       });
+      return;
+    }
+
+    if (
+      req.method === "GET" &&
+      /^\/workflow-policies\/clubs\/[^/]+$/.test(url.pathname)
+    ) {
+      await handleGetWorkflowPolicy(
+        res,
+        "club",
+        decodeURIComponent(url.pathname.split("/")[3]),
+        { pool: pool || getPool() }
+      );
+      return;
+    }
+
+    if (
+      req.method === "POST" &&
+      /^\/workflow-policies\/clubs\/[^/]+$/.test(url.pathname)
+    ) {
+      await handleUpdateWorkflowPolicy(
+        req,
+        res,
+        "club",
+        decodeURIComponent(url.pathname.split("/")[3]),
+        { runInTransaction: runInTransaction || withTransaction }
+      );
+      return;
+    }
+
+    if (
+      req.method === "GET" &&
+      /^\/workflow-policies\/organizations\/[^/]+$/.test(url.pathname)
+    ) {
+      await handleGetWorkflowPolicy(
+        res,
+        "organization",
+        decodeURIComponent(url.pathname.split("/")[3]),
+        { pool: pool || getPool() }
+      );
+      return;
+    }
+
+    if (
+      req.method === "POST" &&
+      /^\/workflow-policies\/organizations\/[^/]+$/.test(url.pathname)
+    ) {
+      await handleUpdateWorkflowPolicy(
+        req,
+        res,
+        "organization",
+        decodeURIComponent(url.pathname.split("/")[3]),
+        { runInTransaction: runInTransaction || withTransaction }
+      );
       return;
     }
 

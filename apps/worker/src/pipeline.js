@@ -12,42 +12,43 @@ import {
   buildPublishFailureSummary
 } from "./publish-outcome.js";
 import { buildReviewArtifacts } from "./review-provider.js";
+import {
+  choosePolicyApproverRole,
+  loadEffectiveWorkflowPolicy,
+  shouldAutoApproveSubmission
+} from "./workflow-policy.js";
 
 export { buildReviewArtifacts } from "./review-provider.js";
 
-export function chooseApproverRole(submission) {
-  if (
-    submission.visibility_target === "public" ||
-    Number(submission.risk_score) >= reviewThresholds.mediumRisk
-  ) {
-    return "club_comms";
-  }
-
-  return "team_manager";
-}
-
-function chooseRoutingDecision(submission, reviewArtifacts) {
-  const localApproverRole = chooseApproverRole({
-    visibility_target: submission.visibility_target,
-    risk_score: reviewArtifacts.riskScore
+function chooseRoutingDecision(submission, reviewArtifacts, policy) {
+  const policyApproverRole = choosePolicyApproverRole({
+    visibilityTarget: submission.visibility_target,
+    riskScore: reviewArtifacts.riskScore,
+    policy
   });
   const agentRouting = reviewArtifacts.structured?.review?.routing_decision;
 
-  if (reviewArtifacts.mode === "hermes" && agentRouting?.approver_role) {
+  if (
+    policy.allowAgentRouting &&
+    reviewArtifacts.mode === "hermes" &&
+    agentRouting?.approver_role
+  ) {
     return {
       approverRole: agentRouting.approver_role,
       routingSource: "hermes_agent",
       agentRationale: agentRouting.rationale || null,
-      localFallbackApproverRole: localApproverRole
+      localFallbackApproverRole: policyApproverRole,
+      policySource: "agent_override"
     };
   }
 
   return {
-    approverRole: localApproverRole,
+    approverRole: policyApproverRole,
     routingSource:
       reviewArtifacts.mode === "hermes" ? "local_rules" : reviewArtifacts.mode,
     agentRationale: null,
-    localFallbackApproverRole: null
+    localFallbackApproverRole: null,
+    policySource: "workflow_policy"
   };
 }
 
@@ -95,21 +96,32 @@ export async function processSubmissionCreated(client, eventRow) {
 
   const submission = submissionResult.rows[0];
   const reviewArtifacts = await buildReviewArtifacts(submission);
-  const routingDecision = chooseRoutingDecision(submission, reviewArtifacts);
+  const workflowPolicy = await loadEffectiveWorkflowPolicy(client, submission.club_id);
+  const routingDecision = chooseRoutingDecision(
+    submission,
+    reviewArtifacts,
+    workflowPolicy
+  );
   const approverRole = routingDecision.approverRole;
+  const autoApproval = shouldAutoApproveSubmission({
+    submission,
+    reviewArtifacts,
+    policy: workflowPolicy
+  });
 
   await client.query(
     `
     UPDATE submissions
-    SET status = 'needs_human_review',
-        risk_score = $2,
-        caption_draft = $3,
-        routing_decision = $4::jsonb,
+    SET status = $2,
+        risk_score = $3,
+        caption_draft = $4,
+        routing_decision = $5::jsonb,
         updated_at = NOW()
     WHERE id = $1
     `,
     [
       submission.id,
+      autoApproval.allowed ? "approved_internal" : "needs_human_review",
       reviewArtifacts.riskScore,
       reviewArtifacts.captionDraft,
       JSON.stringify({
@@ -117,8 +129,11 @@ export async function processSubmissionCreated(client, eventRow) {
         rationale: reviewArtifacts.summary,
         reviewMode: reviewArtifacts.mode,
         routingSource: routingDecision.routingSource,
+        policySource: routingDecision.policySource,
         agentRationale: routingDecision.agentRationale,
         localFallbackApproverRole: routingDecision.localFallbackApproverRole,
+        autoApproved: autoApproval.allowed,
+        autoApproveReason: autoApproval.allowed ? autoApproval.reason : null,
         reviewRequiredReason:
           reviewArtifacts.structured?.review?.review_required_reason || null
       })
@@ -204,6 +219,45 @@ export async function processSubmissionCreated(client, eventRow) {
       })
     ]
   );
+
+  if (autoApproval.allowed) {
+    await client.query(
+      `
+      INSERT INTO submission_events (submission_id, event_name, payload)
+      VALUES ($1, $2, $3::jsonb)
+      `,
+      [
+        submission.id,
+        submissionEvents.approved,
+        JSON.stringify({
+          submissionId: submission.id,
+          status: "approved_internal",
+          autoApproved: true,
+          autoApproveReason: autoApproval.reason,
+          policySource: routingDecision.policySource
+        })
+      ]
+    );
+
+    await client.query(
+      `
+      INSERT INTO audit_logs (entity_type, entity_id, action, metadata)
+      VALUES ('submission', $1, 'auto_approved', $2::jsonb)
+      `,
+      [
+        submission.id,
+        JSON.stringify({
+          reason: autoApproval.reason,
+          reviewMode: reviewArtifacts.mode,
+          riskScore: reviewArtifacts.riskScore,
+          policySource: routingDecision.policySource,
+          clubId: submission.club_id
+        })
+      ]
+    );
+
+    return;
+  }
 
   const approver = await findApprover(client, submission.club_id, approverRole);
 

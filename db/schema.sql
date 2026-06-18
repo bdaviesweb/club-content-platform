@@ -53,8 +53,16 @@ CREATE TYPE publishing_job_state AS ENUM (
   'cancelled'
 );
 
+CREATE TABLE organizations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE clubs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
   name TEXT NOT NULL,
   slug TEXT NOT NULL UNIQUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -181,6 +189,36 @@ CREATE TABLE publishing_destinations (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE organization_workflow_policies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL UNIQUE REFERENCES organizations(id) ON DELETE CASCADE,
+  default_approver_role membership_role,
+  public_approver_role membership_role,
+  medium_risk_approver_role membership_role,
+  allow_agent_routing BOOLEAN NOT NULL DEFAULT TRUE,
+  auto_approve_internal_low_risk BOOLEAN NOT NULL DEFAULT FALSE,
+  auto_approve_max_risk NUMERIC(5,2),
+  publishing_rule JSONB NOT NULL DEFAULT '{}'::JSONB,
+  notification_rule JSONB NOT NULL DEFAULT '{}'::JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE club_workflow_policies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  club_id UUID NOT NULL UNIQUE REFERENCES clubs(id) ON DELETE CASCADE,
+  default_approver_role membership_role,
+  public_approver_role membership_role,
+  medium_risk_approver_role membership_role,
+  allow_agent_routing BOOLEAN,
+  auto_approve_internal_low_risk BOOLEAN,
+  auto_approve_max_risk NUMERIC(5,2),
+  publishing_rule JSONB NOT NULL DEFAULT '{}'::JSONB,
+  notification_rule JSONB NOT NULL DEFAULT '{}'::JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE submission_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   submission_id UUID REFERENCES submissions(id) ON DELETE CASCADE,
@@ -253,3 +291,4 @@ CREATE INDEX idx_approval_requests_approver_state ON approval_requests(approver_
 CREATE INDEX idx_submission_events_processed_at ON submission_events(processed_at, created_at);
 CREATE INDEX idx_publishing_jobs_submission_id ON publishing_jobs(submission_id);
 CREATE INDEX idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX idx_clubs_organization_id ON clubs(organization_id);

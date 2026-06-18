@@ -189,6 +189,34 @@ test("routes approval requests with the Hermes agent decision", async () => {
         return { rowCount: 1, rows: [{ id: "review-run-1" }] };
       }
 
+      if (sql.includes("FROM clubs c")) {
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              clubId: "club-1",
+              organizationId: "org-1",
+              orgDefaultApproverRole: "team_manager",
+              orgPublicApproverRole: "club_comms",
+              orgMediumRiskApproverRole: "club_comms",
+              orgAllowAgentRouting: true,
+              orgAutoApproveInternalLowRisk: false,
+              orgAutoApproveMaxRisk: "0.35",
+              orgPublishingRule: {},
+              orgNotificationRule: {},
+              clubDefaultApproverRole: null,
+              clubPublicApproverRole: null,
+              clubMediumRiskApproverRole: null,
+              clubAllowAgentRouting: true,
+              clubAutoApproveInternalLowRisk: false,
+              clubAutoApproveMaxRisk: null,
+              clubPublishingRule: {},
+              clubNotificationRule: {}
+            }
+          ]
+        };
+      }
+
       if (sql.includes("FROM memberships")) {
         return { rowCount: 1, rows: [{ id: "approver-1" }] };
       }
@@ -227,7 +255,7 @@ test("routes approval requests with the Hermes agent decision", async () => {
     await processSubmissionCreated(client, { submission_id: submission.id });
 
     const update = queries.find(({ sql }) => sql.includes("routing_decision"));
-    const routingDecision = JSON.parse(update.params[3]);
+    const routingDecision = JSON.parse(update.params[4]);
     assert.equal(routingDecision.approverRole, "club_admin");
     assert.equal(routingDecision.reviewMode, "hermes");
     assert.equal(routingDecision.routingSource, "hermes_agent");
@@ -265,6 +293,120 @@ test("routes approval requests with the Hermes agent decision", async () => {
     }
 
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("auto-approves low-risk internal submissions when club policy allows it", async () => {
+  const originalMode = process.env.REVIEW_PROVIDER_MODE;
+  const queries = [];
+  const submission = {
+    id: "submission-2",
+    club_id: "club-1",
+    submitted_by_user_id: "submitter-2",
+    raw_text: "Great energy at practice tonight.",
+    visibility_target: "internal",
+    content_type: "photo",
+    submitter_name: "Coach"
+  };
+
+  process.env.REVIEW_PROVIDER_MODE = "disabled";
+
+  const client = {
+    async query(sql, params = []) {
+      queries.push({ sql, params });
+
+      if (sql.includes("FROM submissions s")) {
+        return { rowCount: 1, rows: [submission] };
+      }
+
+      if (sql.includes("FROM clubs c")) {
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              clubId: "club-1",
+              organizationId: "org-1",
+              orgDefaultApproverRole: "team_manager",
+              orgPublicApproverRole: "club_comms",
+              orgMediumRiskApproverRole: "club_comms",
+              orgAllowAgentRouting: true,
+              orgAutoApproveInternalLowRisk: false,
+              orgAutoApproveMaxRisk: "0.35",
+              orgPublishingRule: {},
+              orgNotificationRule: {},
+              clubDefaultApproverRole: "team_manager",
+              clubPublicApproverRole: "club_comms",
+              clubMediumRiskApproverRole: "club_comms",
+              clubAllowAgentRouting: false,
+              clubAutoApproveInternalLowRisk: true,
+              clubAutoApproveMaxRisk: "0.20",
+              clubPublishingRule: {},
+              clubNotificationRule: {}
+            }
+          ]
+        };
+      }
+
+      if (sql.includes("INSERT INTO review_runs")) {
+        return { rowCount: 1, rows: [{ id: "review-run-2" }] };
+      }
+
+      return { rowCount: 1, rows: [] };
+    }
+  };
+
+  try {
+    await processSubmissionCreated(client, { submission_id: submission.id });
+
+    const update = queries.find(({ sql }) => sql.includes("routing_decision"));
+    const routingDecision = JSON.parse(update.params[4]);
+    assert.equal(update.params[1], "approved_internal");
+    assert.equal(routingDecision.autoApproved, true);
+    assert.equal(
+      routingDecision.autoApproveReason,
+      "policy_auto_approve_low_risk_internal"
+    );
+    assert.equal(routingDecision.policySource, "workflow_policy");
+
+    assert.equal(
+      queries.some(({ sql }) => sql.includes("INSERT INTO approval_requests")),
+      false
+    );
+    assert.equal(
+      queries.some(
+        ({ sql, params }) =>
+          sql.includes("INSERT INTO submission_events") &&
+          params[1] === "submission.approval.requested"
+      ),
+      false
+    );
+    assert.ok(
+      queries.some(
+        ({ sql, params }) =>
+          sql.includes("INSERT INTO submission_events") &&
+          params[1] === "submission.approved" &&
+          JSON.parse(params[2]).autoApproved === true
+      )
+    );
+    assert.ok(
+      queries.some(
+        ({ sql, params }) =>
+          sql.includes("INSERT INTO audit_logs") &&
+          params[0] === "submission-2" &&
+          JSON.parse(params[1]).reason ===
+            "policy_auto_approve_low_risk_internal"
+      )
+    );
+    assert.equal(
+      queries.some(({ sql }) => sql.includes("INSERT INTO notifications")),
+      false
+    );
+  } finally {
+    if (originalMode === undefined) {
+      delete process.env.REVIEW_PROVIDER_MODE;
+    } else {
+      process.env.REVIEW_PROVIDER_MODE = originalMode;
+    }
   }
 });
 
