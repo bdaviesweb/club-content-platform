@@ -4559,6 +4559,27 @@ function buildClubOverrideSummary({ clubPolicy = {}, organizationPolicy = {} }) 
   };
 }
 
+function buildClubInheritanceOpportunitySummary({
+  clubPolicy = {},
+  organizationPolicy = {}
+}) {
+  const matchingExplicit = trackedPolicyAreaFields.filter(({ key }) => {
+    const clubValue = clubPolicy?.[key];
+    const orgValue = organizationPolicy?.[key];
+
+    if (clubValue === null || clubValue === undefined) {
+      return false;
+    }
+
+    return JSON.stringify(clubValue) === JSON.stringify(orgValue ?? null);
+  });
+
+  return {
+    matchingExplicit,
+    matchingExplicitCount: matchingExplicit.length
+  };
+}
+
 function listChangedPolicyAreas({ livePolicy = {}, previewPolicy = {} }) {
   return trackedPolicyAreaFields.filter(({ key }) => {
     return JSON.stringify(livePolicy?.[key] ?? null) !== JSON.stringify(previewPolicy?.[key] ?? null);
@@ -6442,8 +6463,17 @@ function renderWorkflowSaveSummary(
   </section>`;
 }
 
-function renderClubOverrideSummary({ clubPolicy = {}, organizationPolicy = {} }) {
+function renderClubOverrideSummary({
+  clubPolicy = {},
+  organizationPolicy = {},
+  selectedClubSlug = "",
+  simulationInput = null
+}) {
   const summary = buildClubOverrideSummary({ clubPolicy, organizationPolicy });
+  const inheritanceOpportunitySummary = buildClubInheritanceOpportunitySummary({
+    clubPolicy,
+    organizationPolicy
+  });
   const overrideList = summary.overridden.length
     ? summary.overridden
         .map(
@@ -6451,6 +6481,13 @@ function renderClubOverrideSummary({ clubPolicy = {}, organizationPolicy = {} })
         )
         .join("")
     : `<span class="subtle">This club is currently fully aligned to the organization default.</span>`;
+  const inheritanceOpportunityList = inheritanceOpportunitySummary.matchingExplicitCount
+    ? inheritanceOpportunitySummary.matchingExplicit
+        .map(
+          (field) => `<span class="badge badge-info">${escapeHtml(field.label)}</span>`
+        )
+        .join("")
+    : `<span class="subtle">No club-specific values currently duplicate the organization default.</span>`;
 
   return `<section class="panel">
     <div class="section-header">
@@ -6471,9 +6508,40 @@ function renderClubOverrideSummary({ clubPolicy = {}, organizationPolicy = {} })
         <strong>${escapeHtml(String(summary.inheritedCount))}</strong>
         <span class="subtle">Top-level policy areas following the organization</span>
       </div>
+      <div class="metric-card">
+        <span class="metric-label">Inheritance cleanup</span>
+        <strong>${escapeHtml(String(inheritanceOpportunitySummary.matchingExplicitCount))}</strong>
+        <span class="subtle">Explicit club values that already match the organization default</span>
+      </div>
     </div>
     <div class="badge-row" style="margin-top:14px; align-items:flex-start;">
       ${overrideList}
+    </div>
+    <div class="summary-stack" style="margin-top:16px;">
+      <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+        <strong>Inheritance cleanup opportunities</strong>
+        <p class="subtle" style="margin-top:6px;">These club-specific values are no longer changing behavior. Preview inheriting them before clearing the redundant exception.</p>
+        <div class="badge-row" style="margin-top:10px; align-items:flex-start;">
+          ${inheritanceOpportunityList}
+        </div>
+        ${
+          inheritanceOpportunitySummary.matchingExplicitCount
+            ? `<div class="badge-row" style="margin-top:10px;">
+                ${inheritanceOpportunitySummary.matchingExplicit
+                  .map(
+                    (field) => `<a class="quick-link" href="${buildWorkflowSettingsLink({
+                      clubSlug: selectedClubSlug,
+                      previewResetArea: field.key,
+                      simulationInput
+                    })}${buildPolicyAreaAnchor(field.key)}">Preview inheriting ${escapeHtml(
+                      field.label.toLowerCase()
+                    )}</a>`
+                  )
+                  .join("")}
+              </div>`
+            : ""
+        }
+      </div>
     </div>
   </section>`;
 }
@@ -7465,7 +7533,9 @@ async function renderWorkflowSettingsPage(
     })}
     ${renderClubOverrideSummary({
       clubPolicy: previewClubPolicy,
-      organizationPolicy: previewOrganizationPolicy
+      organizationPolicy: previewOrganizationPolicy,
+      selectedClubSlug,
+      simulationInput: normalizedSimulationInput
     })}
     ${renderClubDraftOverrideImpactSummary({
       previewScopeType,

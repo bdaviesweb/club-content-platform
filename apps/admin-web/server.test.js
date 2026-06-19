@@ -64,6 +64,7 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
             organization: { slug: "metro", name: "Metro Sports" },
             clubPolicy: {
               defaultApproverRole: "club_admin",
+              publicApproverRole: "club_comms",
               allowAgentRouting: false,
               autoApproveInternalLowRisk: true,
               autoApproveMaxRisk: 0.15,
@@ -301,6 +302,13 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /How much this club diverges from the organization/);
     assert.match(body, /Club overrides/);
     assert.match(body, /Inherited areas/);
+    assert.match(body, /Inheritance cleanup/);
+    assert.match(body, /Inheritance cleanup opportunities/);
+    assert.match(body, /These club-specific values are no longer changing behavior\. Preview inheriting them before clearing the redundant exception\./);
+    assert.match(body, /1<\/strong>|>1</);
+    assert.match(body, /Public approver/);
+    assert.match(body, /Preview inheriting public approver/);
+    assert.match(body, /previewResetArea=publicApproverRole/);
     assert.match(body, /Default approver/);
     assert.match(body, /Agent routing/);
     assert.match(body, /Low-risk internal auto-approval/);
