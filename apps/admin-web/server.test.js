@@ -729,8 +729,11 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /Still overriding changed areas: Public approver, Notification rule/);
     assert.match(body, /Review changed areas/);
     assert.match(body, /Review public approver exceptions/);
+    assert.match(body, /Review public approver inheriting clubs/);
     assert.match(body, /Review notification rule exceptions/);
+    assert.match(body, /Review notification rule inheriting clubs/);
     assert.match(body, /clubView=overrides/);
+    assert.match(body, /clubView=inheriting/);
     assert.match(body, /clubArea=publicApproverRole/);
     assert.match(body, /clubArea=notificationRule/);
     assert.match(body, /name="simulationContentType"[\s\S]*?<option value="photo" selected/);
@@ -739,6 +742,7 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /name="simulationModerationFlagged"[\s\S]*?<option value="true" selected/);
     assert.match(body, /name="simulationAgentSuggestedApproverRole"[\s\S]*?<option value="club_admin" selected/);
     assert.match(body, /Review public approver exceptions[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
+    assert.match(body, /Review public approver inheriting clubs[\s\S]*?clubView=inheriting[\s\S]*?clubArea=publicApproverRole[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise((resolve, reject) =>
@@ -907,6 +911,176 @@ test("GET /workflow-settings filters override clubs by policy area", async () =>
     assert.match(body, /Open Westside policy stack/);
     assert.doesNotMatch(body, /Open Northside policy stack/);
     assert.doesNotMatch(body, /Open Eastside policy stack/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await new Promise((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))
+    );
+  }
+});
+
+test("GET /workflow-settings filters inheriting clubs by policy area", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith("/app/readiness")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            demo: {
+              clubSlug: "westside",
+              reviewerEmail: "comms@westside.test"
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/clubs/westside")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            club: { slug: "westside", name: "Westside" },
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubPolicy: {
+              defaultApproverRole: "club_admin",
+              notificationRule: { push: true }
+            },
+            effectivePolicy: {
+              defaultApproverRole: "club_admin",
+              publicApproverRole: "club_comms",
+              mediumRiskApproverRole: "club_comms",
+              allowAgentRouting: true,
+              autoApproveInternalLowRisk: false,
+              autoApproveMaxRisk: 0.35,
+              autoApprovalRule: { allowedContentTypes: ["photo"] },
+              routingRule: { contentTypeApprovers: { video: "club_admin" } },
+              approvalRule: {
+                requireSecondApprovalForPublic: true,
+                secondApproverRole: "club_admin",
+                secondApprovalContentTypes: ["video"]
+              },
+              publishingRule: {
+                visibilityDestinations: {
+                  internal: ["internal_feed"],
+                  public: ["internal_feed"]
+                }
+              },
+              notificationRule: { push: true }
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/organizations/metro")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "metro", name: "Metro Sports" },
+            organizationPolicy: {
+              defaultApproverRole: "team_manager",
+              publicApproverRole: "club_comms",
+              mediumRiskApproverRole: "club_comms",
+              allowAgentRouting: true,
+              autoApproveInternalLowRisk: false,
+              autoApproveMaxRisk: 0.35,
+              autoApprovalRule: { allowedContentTypes: ["photo"] },
+              routingRule: { contentTypeApprovers: { video: "club_admin" } },
+              publishingRule: {
+                visibilityDestinations: {
+                  internal: ["internal_feed"],
+                  public: ["internal_feed"]
+                }
+              },
+              notificationRule: { email: true }
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/organizations/metro/history")) {
+      return {
+        ok: true,
+        async json() {
+          return { items: [] };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/clubs/westside/history")) {
+      return {
+        ok: true,
+        async json() {
+          return { items: [] };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/organizations/metro")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubs: [
+              {
+                slug: "westside",
+                name: "Westside",
+                overrideSummary: {
+                  overrideCount: 2,
+                  overriddenFields: ["Default approver", "Notification rule"]
+                }
+              },
+              {
+                slug: "northside",
+                name: "Northside",
+                overrideSummary: {
+                  overrideCount: 1,
+                  overriddenFields: ["Routing rule"]
+                }
+              },
+              {
+                slug: "eastside",
+                name: "Eastside",
+                overrideSummary: {
+                  overrideCount: 0,
+                  overriddenFields: []
+                }
+              }
+            ],
+            admins: []
+          };
+        }
+      };
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  };
+
+  const server = createAdminServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const address = server.address();
+    const response = await originalFetch(
+      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&clubView=inheriting&clubArea=notificationRule`
+    );
+    const body = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(body, /Policy area focus/);
+    assert.match(body, /Notification rule/);
+    assert.match(body, /Inheriting this area/);
+    assert.match(body, /Clubs inheriting Notification rule/);
+    assert.match(body, /Showing clubs still inheriting notification rule from the organization default\./);
+    assert.doesNotMatch(body, /Open Westside policy stack/);
+    assert.match(body, /Open Northside policy stack/);
+    assert.match(body, /Open Eastside policy stack/);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise((resolve, reject) =>

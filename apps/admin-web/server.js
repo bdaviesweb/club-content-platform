@@ -4621,6 +4621,12 @@ function renderWorkflowSaveSummary(
                 clubArea: area.key,
                 simulationInput
               })}">Review ${escapeHtml(area.label.toLowerCase())} exceptions</a></p>
+              <p style="margin-top:6px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
+                clubSlug: saveSummary.clubSlug || "",
+                clubView: "inheriting",
+                clubArea: area.key,
+                simulationInput
+              })}">Review ${escapeHtml(area.label.toLowerCase())} inheriting clubs</a></p>
             </div>`
           )
           .join("")}
@@ -4935,6 +4941,9 @@ function renderOrganizationDirectory(
   const areaOption = trackedPolicyAreaFields.find(({ key }) => key === clubArea) || null;
   const normalizedClubArea = areaOption?.key || "all";
   const focusedAreaLabel = areaOption?.label || "All policy areas";
+  const clubOverridesFocusedArea = (club) =>
+    Array.isArray(club.overrideSummary?.overriddenFields) &&
+    club.overrideSummary.overriddenFields.includes(focusedAreaLabel);
   const clubsWithOverrides = clubs
     .filter((club) => Number(club.overrideSummary?.overrideCount || 0) > 0)
     .filter((club) => {
@@ -4942,9 +4951,7 @@ function renderOrganizationDirectory(
         return true;
       }
 
-      return Array.isArray(club.overrideSummary?.overriddenFields)
-        ? club.overrideSummary.overriddenFields.includes(areaOption.label)
-        : false;
+      return clubOverridesFocusedArea(club);
     })
     .sort(
       (left, right) =>
@@ -4952,8 +4959,12 @@ function renderOrganizationDirectory(
           Number(left.overrideSummary?.overrideCount || 0) ||
         String(left.name || "").localeCompare(String(right.name || ""))
     );
-  const fullyInheritedClubs = clubs
-    .filter((club) => Number(club.overrideSummary?.overrideCount || 0) === 0)
+  const inheritingClubs = clubs
+    .filter((club) =>
+      normalizedClubArea === "all"
+        ? Number(club.overrideSummary?.overrideCount || 0) === 0
+        : !clubOverridesFocusedArea(club)
+    )
     .sort((left, right) =>
       String(left.name || "").localeCompare(String(right.name || ""))
     );
@@ -5010,9 +5021,19 @@ function renderOrganizationDirectory(
           <span class="subtle">Clubs still carrying custom policy</span>
         </div>
         <div class="metric-card">
-          <span class="metric-label">Fully inheriting</span>
-          <strong>${escapeHtml(String(fullyInheritedClubs.length))}</strong>
-          <span class="subtle">Clubs aligned to the organization default</span>
+          <span class="metric-label">${
+            normalizedClubView === "inheriting" && normalizedClubArea !== "all"
+              ? "Inheriting this area"
+              : "Fully inheriting"
+          }</span>
+          <strong>${escapeHtml(String(inheritingClubs.length))}</strong>
+          <span class="subtle">${
+            normalizedClubView === "inheriting" && normalizedClubArea !== "all"
+              ? escapeHtml(
+                  `Clubs still following the organization default for ${focusedAreaLabel.toLowerCase()}.`
+                )
+              : "Clubs aligned to the organization default"
+          }</span>
         </div>
         <div class="metric-card">
           <span class="metric-label">Current view</span>
@@ -5028,11 +5049,15 @@ function renderOrganizationDirectory(
         <div class="metric-card">
           <span class="metric-label">Policy area focus</span>
           <strong>${escapeHtml(
-            normalizedClubView === "inheriting" ? "Not applied" : focusedAreaLabel
+            normalizedClubArea === "all" ? "All policy areas" : focusedAreaLabel
           )}</strong>
           <span class="subtle">${
-            normalizedClubView === "inheriting"
-              ? "Area focus only applies when reviewing clubs with overrides."
+            normalizedClubView === "inheriting" && normalizedClubArea !== "all"
+              ? escapeHtml(
+                  `Showing clubs still inheriting ${focusedAreaLabel.toLowerCase()} from the organization default.`
+                )
+              : normalizedClubView === "inheriting"
+                ? "Review clubs that are still fully aligned to the organization default."
               : escapeHtml(
                   normalizedClubArea === "all"
                     ? "Review overrides across every tracked workflow area."
@@ -5141,13 +5166,29 @@ function renderOrganizationDirectory(
         ${
           normalizedClubView !== "overrides"
             ? `<div class="summary-item" style="background: rgba(255,255,255,0.68);">
-                <strong>Clubs fully inheriting organization defaults</strong>
-                <p class="subtle" style="margin-top:6px;">These clubs will follow organization-level rollout changes unless a new override is added.</p>
+                <strong>${
+                  normalizedClubArea === "all"
+                    ? "Clubs fully inheriting organization defaults"
+                    : `Clubs inheriting ${escapeHtml(focusedAreaLabel)}`
+                }</strong>
+                <p class="subtle" style="margin-top:6px;">${
+                  normalizedClubArea === "all"
+                    ? "These clubs will follow organization-level rollout changes unless a new override is added."
+                    : `These clubs still follow the organization default for ${escapeHtml(
+                        focusedAreaLabel.toLowerCase()
+                      )}, even if they override other workflow areas.`
+                }</p>
               </div>
               ${
-                fullyInheritedClubs.length
-                  ? fullyInheritedClubs.map(renderClubDirectoryItem).join("")
-                  : `<p class="subtle">Every club in this organization currently has at least one custom override.</p>`
+                inheritingClubs.length
+                  ? inheritingClubs.map(renderClubDirectoryItem).join("")
+                  : `<p class="subtle">${
+                      normalizedClubArea === "all"
+                        ? "Every club in this organization currently has at least one custom override."
+                        : `No clubs in this organization are currently inheriting ${escapeHtml(
+                            focusedAreaLabel.toLowerCase()
+                          )}.`
+                    }</p>`
               }`
             : ""
         }
