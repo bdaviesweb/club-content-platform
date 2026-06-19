@@ -1,6 +1,14 @@
 import http from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import {
+  choosePolicyApproverRole,
+  choosePublishingPlan,
+  describePolicyApproverSource,
+  shouldAutoApproveSubmission,
+  shouldRequireSecondApproval
+} from "../worker/src/workflow-policy.js";
+import { resolveNotificationChannelPolicy } from "../../packages/shared/src/notification-delivery.js";
 import { formatRoutingSourceLabel } from "./routingLabels.js";
 import { summarizeReviewHandoff } from "./reviewHandoff.js";
 
@@ -2214,6 +2222,361 @@ function renderEffectivePolicyExplainCard({ label, source, summary }) {
   </div>`;
 }
 
+function normalizeSimulationInput(input = {}) {
+  const allowedContentTypes = new Set(["photo", "video", "text", "mixed"]);
+  const allowedVisibilityTargets = new Set(["internal", "public"]);
+  const allowedRoles = new Set(["team_manager", "club_comms", "club_admin"]);
+
+  const contentType = allowedContentTypes.has(String(input.contentType || ""))
+    ? String(input.contentType)
+    : "video";
+  const visibilityTarget = allowedVisibilityTargets.has(
+    String(input.visibilityTarget || "")
+  )
+    ? String(input.visibilityTarget)
+    : "public";
+  const parsedRiskScore = Number(input.riskScore);
+  const riskScore = Number.isFinite(parsedRiskScore)
+    ? Math.max(0, Math.min(parsedRiskScore, 1))
+    : 0.42;
+  const moderationFlagged = String(input.moderationFlagged || "false") === "true";
+  const agentSuggestedApproverRole = allowedRoles.has(
+    String(input.agentSuggestedApproverRole || "")
+  )
+    ? String(input.agentSuggestedApproverRole)
+    : "";
+
+  return {
+    contentType,
+    visibilityTarget,
+    riskScore,
+    moderationFlagged,
+    agentSuggestedApproverRole
+  };
+}
+
+function simulatePolicyOutcome(policy = {}, simulationInput = {}) {
+  const simulation = normalizeSimulationInput(simulationInput);
+  const submission = {
+    content_type: simulation.contentType,
+    visibility_target: simulation.visibilityTarget
+  };
+  const reviewArtifacts = {
+    riskScore: simulation.riskScore,
+    moderation: {
+      flagged: simulation.moderationFlagged
+    },
+    mode: "hermes"
+  };
+
+  const localApproverRole = choosePolicyApproverRole({
+    visibilityTarget: simulation.visibilityTarget,
+    riskScore: simulation.riskScore,
+    contentType: simulation.contentType,
+    policy
+  });
+  const localPolicySource = describePolicyApproverSource({
+    visibilityTarget: simulation.visibilityTarget,
+    riskScore: simulation.riskScore,
+    contentType: simulation.contentType,
+    policy
+  });
+
+  const routingDecision =
+    localPolicySource !== "routing_rule_content_type" &&
+    policy.allowAgentRouting &&
+    simulation.agentSuggestedApproverRole
+      ? {
+          approverRole: simulation.agentSuggestedApproverRole,
+          routingSource: "hermes_agent",
+          policySource: "agent_override",
+          localFallbackApproverRole: localApproverRole,
+          localPolicySource
+        }
+      : {
+          approverRole: localApproverRole,
+          routingSource: "local_rules",
+          policySource: localPolicySource,
+          localFallbackApproverRole: null,
+          localPolicySource: null
+        };
+
+  const autoApproval = shouldAutoApproveSubmission({
+    submission,
+    reviewArtifacts,
+    policy
+  });
+  const secondApproval = autoApproval.allowed
+    ? { required: false, reason: "auto_approved" }
+    : shouldRequireSecondApproval({ submission, policy });
+  const publishingPlan = choosePublishingPlan({ submission, policy });
+
+  const reviewStartedNotifications = autoApproval.allowed
+    ? null
+    : {
+        email: resolveNotificationChannelPolicy({
+          notificationPolicy: policy.notificationRule || {},
+          type: "submission_review_started",
+          channel: "email"
+        }),
+        push: resolveNotificationChannelPolicy({
+          notificationPolicy: policy.notificationRule || {},
+          type: "submission_review_started",
+          channel: "push"
+        })
+      };
+  const publishedNotifications = {
+    email: resolveNotificationChannelPolicy({
+      notificationPolicy: policy.notificationRule || {},
+      type: "submission_published",
+      channel: "email"
+    }),
+    push: resolveNotificationChannelPolicy({
+      notificationPolicy: policy.notificationRule || {},
+      type: "submission_published",
+      channel: "push"
+    })
+  };
+
+  return {
+    simulation,
+    routingDecision,
+    autoApproval,
+    secondApproval,
+    publishingPlan,
+    reviewStartedNotifications,
+    publishedNotifications
+  };
+}
+
+function describeNotificationResult(result) {
+  return result?.enabled
+    ? "Enabled"
+    : `Disabled (${formatLabel(result?.reason || "policy_disabled")})`;
+}
+
+function renderPolicySimulator({ effectivePolicy, simulationInput, clubSlug }) {
+  if (!effectivePolicy) {
+    return "";
+  }
+
+  const outcome = simulatePolicyOutcome(effectivePolicy, simulationInput);
+  const {
+    simulation,
+    routingDecision,
+    autoApproval,
+    secondApproval,
+    publishingPlan,
+    reviewStartedNotifications,
+    publishedNotifications
+  } = outcome;
+  const roleOptions = [
+    { value: "team_manager", label: "Team manager" },
+    { value: "club_comms", label: "Club comms" },
+    { value: "club_admin", label: "Club admin" }
+  ];
+  const contentTypeOptions = [
+    { value: "photo", label: "Photo" },
+    { value: "video", label: "Video" },
+    { value: "text", label: "Text" },
+    { value: "mixed", label: "Mixed" }
+  ];
+  const visibilityOptions = [
+    { value: "internal", label: "Internal" },
+    { value: "public", label: "Public" }
+  ];
+  const booleanOptions = [
+    { value: "false", label: "No" },
+    { value: "true", label: "Yes" }
+  ];
+
+  const routingSummary =
+    routingDecision.routingSource === "hermes_agent"
+      ? `Hermes suggestion routes this to ${formatLabel(
+          routingDecision.approverRole
+        )}. Local fallback would have been ${formatLabel(
+          routingDecision.localFallbackApproverRole
+        )}.`
+      : `This routes to ${formatLabel(
+          routingDecision.approverRole
+        )} from ${formatLabel(routingDecision.policySource)}.`;
+  const approvalSummary = autoApproval.allowed
+    ? `This skips human review because ${formatLabel(
+        autoApproval.reason
+      )}.`
+    : secondApproval.required
+      ? `This goes through primary review and then a second public approval because ${formatLabel(
+          secondApproval.reason
+        )}.`
+      : "This goes through one human approval step before publishing.";
+  const publishSummary = `If approved, this publishes to ${publishingPlan.destinationTypes
+    .map((destination) => formatLabel(destination))
+    .join(", ")}.`;
+
+  return `<section class="panel" style="margin-top:18px;">
+    <div class="section-header">
+      <div>
+        <div class="eyebrow">Policy simulator</div>
+        <h2>Simulate a submission before it hits the queue</h2>
+        <p class="subtle" style="margin-top:8px;">Use the live effective policy for ${escapeHtml(
+          clubSlug
+        )} to preview routing, approval depth, publishing, and notification behavior.</p>
+      </div>
+    </div>
+
+    <form method="GET" action="/workflow-settings" class="workflow-policy-form">
+      <input type="hidden" name="clubSlug" value="${escapeHtml(clubSlug)}" />
+      <div class="workflow-settings-grid">
+        ${renderPolicyField({
+          label: "Content type",
+          name: "simulationContentType",
+          input: `<select name="simulationContentType">${renderPolicySelectOptions(
+            contentTypeOptions,
+            simulation.contentType
+          )}</select>`
+        })}
+        ${renderPolicyField({
+          label: "Visibility",
+          name: "simulationVisibilityTarget",
+          input: `<select name="simulationVisibilityTarget">${renderPolicySelectOptions(
+            visibilityOptions,
+            simulation.visibilityTarget
+          )}</select>`
+        })}
+        ${renderPolicyField({
+          label: "Risk score",
+          name: "simulationRiskScore",
+          helper: "Use the score range the worker actually uses, from 0.00 to 1.00.",
+          input: `<input name="simulationRiskScore" type="number" min="0" max="1" step="0.01" value="${escapeHtml(
+            String(simulation.riskScore)
+          )}" />`
+        })}
+        ${renderPolicyField({
+          label: "Moderation flagged",
+          name: "simulationModerationFlagged",
+          helper: "Flagged content can never auto-approve.",
+          input: `<select name="simulationModerationFlagged">${renderPolicySelectOptions(
+            booleanOptions,
+            String(simulation.moderationFlagged)
+          )}</select>`
+        })}
+        ${renderPolicyField({
+          label: "Hermes suggested approver",
+          name: "simulationAgentSuggestedApproverRole",
+          helper: "Optional. Only changes the route when agent routing is enabled and no content-type rule wins first.",
+          input: `<select name="simulationAgentSuggestedApproverRole">${renderPolicySelectOptions(
+            roleOptions,
+            simulation.agentSuggestedApproverRole || null,
+            {
+              allowEmpty: true,
+              emptyLabel: "No Hermes override"
+            }
+          )}</select>`
+        })}
+      </div>
+      <div class="policy-actions">
+        <button type="submit" class="button-secondary">Run simulation</button>
+        <span class="subtle">This uses the current effective policy, not draft form values.</span>
+      </div>
+    </form>
+
+    <div class="topline" style="margin-top:18px;">
+      <div class="metric-card">
+        <span class="metric-label">Expected first approver</span>
+        <strong>${escapeHtml(formatLabel(routingDecision.approverRole))}</strong>
+        <span class="subtle">${escapeHtml(formatRoutingSourceLabel(routingDecision.routingSource))}</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Review path</span>
+        <strong>${escapeHtml(
+          autoApproval.allowed
+            ? "Auto-approved"
+            : secondApproval.required
+              ? "Two approvals"
+              : "One approval"
+        )}</strong>
+        <span class="subtle">${escapeHtml(formatLabel(autoApproval.reason))}</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Publish destination</span>
+        <strong>${escapeHtml(
+          publishingPlan.destinationTypes.map((destination) => formatLabel(destination)).join(", ")
+        )}</strong>
+        <span class="subtle">${escapeHtml(formatLabel(publishingPlan.policySource))}</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Published email</span>
+        <strong>${escapeHtml(
+          publishedNotifications.email.enabled ? "On" : "Off"
+        )}</strong>
+        <span class="subtle">${escapeHtml(
+          publishedNotifications.email.reason
+            ? formatLabel(publishedNotifications.email.reason)
+            : "Allowed"
+        )}</span>
+      </div>
+    </div>
+
+    <div class="signal-list" style="margin-top:16px;">
+      <div class="signal-card">
+        <div class="badge-row" style="margin-bottom:10px;">
+          <strong>Routing outcome</strong>
+          ${renderStatusBadge(formatLabel(routingDecision.policySource), routingDecision.routingSource === "hermes_agent" ? "good" : "neutral")}
+        </div>
+        <p class="subtle">${escapeHtml(routingSummary)}</p>
+      </div>
+      <div class="signal-card">
+        <div class="badge-row" style="margin-bottom:10px;">
+          <strong>Approval path</strong>
+          ${renderStatusBadge(
+            autoApproval.allowed
+              ? "No queue stop"
+              : secondApproval.required
+                ? "Second approval required"
+                : "Primary approval only",
+            autoApproval.allowed ? "good" : "review"
+          )}
+        </div>
+        <p class="subtle">${escapeHtml(approvalSummary)}</p>
+      </div>
+      <div class="signal-card">
+        <div class="badge-row" style="margin-bottom:10px;">
+          <strong>Publishing plan</strong>
+          ${renderStatusBadge(formatLabel(publishingPlan.policySource), "neutral")}
+        </div>
+        <p class="subtle">${escapeHtml(publishSummary)}</p>
+      </div>
+      <div class="signal-card">
+        <div class="badge-row" style="margin-bottom:10px;">
+          <strong>Notifications</strong>
+          ${renderStatusBadge("Review started", reviewStartedNotifications ? "review" : "neutral")}
+          ${renderStatusBadge("Published", "good")}
+        </div>
+        <p class="subtle">
+          ${escapeHtml(
+            reviewStartedNotifications
+              ? `Review started email: ${describeNotificationResult(
+                  reviewStartedNotifications.email
+                )}. Review started push: ${describeNotificationResult(
+                  reviewStartedNotifications.push
+                )}.`
+              : "Review started notifications do not fire because this item auto-approves."
+          )}
+        </p>
+        <p class="subtle" style="margin-top:8px;">
+          ${escapeHtml(
+            `Published email: ${describeNotificationResult(
+              publishedNotifications.email
+            )}. Published push: ${describeNotificationResult(
+              publishedNotifications.push
+            )}.`
+          )}
+        </p>
+      </div>
+    </div>
+  </section>`;
+}
+
 function renderContentTypeRoleFields({
   baseName,
   label,
@@ -2698,7 +3061,7 @@ function renderOrganizationDirectory(directory) {
   </section>`;
 }
 
-async function renderWorkflowSettingsPage(clubSlug) {
+async function renderWorkflowSettingsPage(clubSlug, simulationInput = {}) {
   const readiness = await fetchJson("/app/readiness");
   const selectedClubSlug = clubSlug || readiness?.demo?.clubSlug || "demo-soccer-club";
   const clubPolicy = await fetchJson(`/workflow-policies/clubs/${encodeURIComponent(selectedClubSlug)}`);
@@ -2742,6 +3105,11 @@ async function renderWorkflowSettingsPage(clubSlug) {
       effectivePolicy: clubPolicy.effectivePolicy,
       clubPolicy: clubPolicy.clubPolicy,
       organizationPolicy: organizationPolicy?.organizationPolicy
+    })}
+    ${renderPolicySimulator({
+      effectivePolicy: clubPolicy.effectivePolicy,
+      simulationInput,
+      clubSlug: selectedClubSlug
     })}
     ${renderOrganizationDirectory(organizationDirectory)}
 
@@ -3050,7 +3418,13 @@ export function createAdminServer() {
       }
 
       if (req.method === "GET" && url.pathname === "/workflow-settings") {
-        const html = await renderWorkflowSettingsPage(url.searchParams.get("clubSlug"));
+        const html = await renderWorkflowSettingsPage(url.searchParams.get("clubSlug"), {
+          contentType: url.searchParams.get("simulationContentType"),
+          visibilityTarget: url.searchParams.get("simulationVisibilityTarget"),
+          riskScore: url.searchParams.get("simulationRiskScore"),
+          moderationFlagged: url.searchParams.get("simulationModerationFlagged"),
+          agentSuggestedApproverRole: url.searchParams.get("simulationAgentSuggestedApproverRole")
+        });
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         res.end(html);
         return;
