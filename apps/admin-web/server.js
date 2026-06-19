@@ -3977,6 +3977,7 @@ function buildWorkflowSettingsLink({
   clubArea = null,
   previewScopeType = null,
   previewDraftPolicy = null,
+  previewResetArea = null,
   simulationInput = null
 } = {}) {
   const params = new URLSearchParams();
@@ -3995,6 +3996,9 @@ function buildWorkflowSettingsLink({
   }
   if (previewDraftPolicy) {
     params.set("previewDraftPolicy", previewDraftPolicy);
+  }
+  if (previewResetArea) {
+    params.set("previewResetArea", previewResetArea);
   }
   if (simulationInput?.contentType) {
     params.set("simulationContentType", String(simulationInput.contentType));
@@ -4103,6 +4107,17 @@ function buildRemainingExceptionCleanupItems({ clubs = [], changedAreas = [] }) 
     );
 }
 
+function buildInheritedClubPolicyPreview(policy = {}, areaKey = "") {
+  if (!areaKey) {
+    return policy || {};
+  }
+
+  return {
+    ...(policy || {}),
+    [areaKey]: null
+  };
+}
+
 function renderExceptionCleanupSummary({
   title,
   subtitle,
@@ -4110,7 +4125,8 @@ function renderExceptionCleanupSummary({
   selectedClubSlug = "",
   previewScopeType = null,
   previewDraftPolicy = null,
-  simulationInput = null
+  simulationInput = null,
+  includePreviewInheritanceLinks = false
 }) {
   if (!items.length) {
     return "";
@@ -4154,6 +4170,23 @@ function renderExceptionCleanupSummary({
               )
               .join("")}
           </div>
+          ${
+            includePreviewInheritanceLinks
+              ? `<div class="badge-row" style="margin-top:10px;">
+                  ${item.remainingAreas
+                    .map(
+                      (area) => `<a class="quick-link" href="${buildWorkflowSettingsLink({
+                        clubSlug: item.club.slug || "",
+                        previewResetArea: area.key,
+                        simulationInput
+                      })}">Preview inheriting ${escapeHtml(
+                        area.label.toLowerCase()
+                      )}</a>`
+                    )
+                    .join("")}
+                </div>`
+              : ""
+          }
           <p style="margin-top:10px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
             clubSlug: item.club.slug || "",
             simulationInput,
@@ -4863,7 +4896,8 @@ function renderWorkflowSaveSummary(
         "These clubs still override one or more organization areas you just changed. Review them next if you want the saved default to propagate more consistently.",
       items: cleanupItems,
       selectedClubSlug: saveSummary.clubSlug || "",
-      simulationInput
+      simulationInput,
+      includePreviewInheritanceLinks: true
     })}
     ${changedAreaLinks}
   </section>`;
@@ -5451,7 +5485,8 @@ async function renderWorkflowSettingsPage(
   previewDraft = null,
   clubView = "all",
   clubArea = "all",
-  saveSummary = null
+  saveSummary = null,
+  previewResetArea = null
 ) {
   const readiness = await fetchJson("/app/readiness");
   const selectedClubSlug = clubSlug || readiness?.demo?.clubSlug || "demo-soccer-club";
@@ -5472,13 +5507,19 @@ async function renderWorkflowSettingsPage(
     `/workflow-policies/clubs/${encodeURIComponent(selectedClubSlug)}/history`
   );
   const reviewerEmail = readiness?.demo?.reviewerEmail || "comms@demo-club.local";
+  const validPreviewResetArea =
+    trackedPolicyAreaFields.find((area) => area.key === previewResetArea)?.key || null;
   const previewScopeType =
     previewDraft?.scopeType === "club" || previewDraft?.scopeType === "organization"
       ? previewDraft.scopeType
+      : validPreviewResetArea
+        ? "club"
       : null;
   const previewPayload =
     previewDraft?.payload && typeof previewDraft.payload === "object" && !Array.isArray(previewDraft.payload)
       ? previewDraft.payload
+      : validPreviewResetArea
+        ? buildInheritedClubPolicyPreview(clubPolicy.clubPolicy || {}, validPreviewResetArea)
       : null;
   const previewDraftPolicyParam =
     previewScopeType && previewPayload ? JSON.stringify(previewPayload) : null;
@@ -6438,7 +6479,7 @@ export function createAdminServer() {
         }, {
           scopeType: url.searchParams.get("previewScopeType"),
           payload: parsePreviewDraft(url.searchParams.get("previewDraftPolicy"))
-        }, url.searchParams.get("clubView"), url.searchParams.get("clubArea"), saveSummary);
+        }, url.searchParams.get("clubView"), url.searchParams.get("clubArea"), saveSummary, url.searchParams.get("previewResetArea"));
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         res.end(html);
         return;
