@@ -212,7 +212,15 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
                         contentTypeApprovers: { video: "team_manager" }
                       }
                     }
-                  ]
+                  ],
+                  overrideSnapshot: {
+                    liveOverrideCount: 0,
+                    previewOverrideCount: 1,
+                    changedAreas: ["Routing Rule"],
+                    addedAreas: ["Routing Rule"],
+                    removedAreas: [],
+                    retainedAreas: []
+                  }
                 }
               }
             ]
@@ -310,6 +318,14 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Preview rollback of latest club change/);
     assert.match(body, /Preview rollback of routing rule/);
     assert.match(body, /This restores the earlier club-specific value recorded before this change\./);
+    assert.match(body, /Saved override snapshot/);
+    assert.match(body, /This captures how customized this club was compared with the organization default when the save was recorded\./);
+    assert.match(body, /0 -&gt; 1 override areas|0 -> 1 override areas/);
+    assert.match(body, /This save made the club more customized than before\./);
+    assert.match(body, /Changed areas/);
+    assert.match(body, /Routing Rule/);
+    assert.match(body, /New exceptions/);
+    assert.match(body, /No existing club-specific exceptions were removed in this save\./);
     assert.match(body, /clubArea=approvalRule/);
     assert.match(body, /clubView=inheriting/);
     assert.match(body, /Open this club policy stack/);
@@ -3361,6 +3377,43 @@ test("POST /ui/workflow-policies/clubs/:slug proxies policy updates to the API",
       body: init.body ? JSON.parse(init.body) : null
     });
 
+    if (String(url).endsWith("/workflow-policies/clubs/westside") && (init.method || "GET") === "GET") {
+      return {
+        ok: true,
+        async json() {
+          return {
+            club: { slug: "westside", name: "Westside" },
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubPolicy: {}
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/organizations/metro")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "metro", name: "Metro Sports" },
+            organizationPolicy: {
+              defaultApproverRole: "team_manager",
+              publicApproverRole: "club_comms",
+              mediumRiskApproverRole: "club_comms",
+              allowAgentRouting: true,
+              autoApproveInternalLowRisk: false,
+              autoApproveMaxRisk: 0.35,
+              autoApprovalRule: {},
+              routingRule: {},
+              approvalRule: {},
+              publishingRule: {},
+              notificationRule: {}
+            }
+          };
+        }
+      };
+    }
+
     return {
       ok: true,
       async json() {
@@ -3412,6 +3465,16 @@ test("POST /ui/workflow-policies/clubs/:slug proxies policy updates to the API",
     assert.deepEqual(calls, [
       {
         url: "http://app-api:4000/workflow-policies/clubs/westside",
+        method: "GET",
+        body: null
+      },
+      {
+        url: "http://app-api:4000/workflow-policies/organizations/metro",
+        method: "GET",
+        body: null
+      },
+      {
+        url: "http://app-api:4000/workflow-policies/clubs/westside",
         method: "POST",
         body: {
           actorEmail: "admin@example.test",
@@ -3431,6 +3494,32 @@ test("POST /ui/workflow-policies/clubs/:slug proxies policy updates to the API",
               submission_review_started: {
                 email: false
               }
+            }
+          },
+          historyContext: {
+            overrideSnapshot: {
+              liveOverrideCount: 0,
+              previewOverrideCount: 7,
+              changedAreas: [
+                "Default approver",
+                "Agent routing",
+                "Auto-approval rule",
+                "Routing rule",
+                "Approval rule",
+                "Publishing rule",
+                "Notification rule"
+              ],
+              addedAreas: [
+                "Default approver",
+                "Agent routing",
+                "Auto-approval rule",
+                "Routing rule",
+                "Approval rule",
+                "Publishing rule",
+                "Notification rule"
+              ],
+              removedAreas: [],
+              retainedAreas: []
             }
           }
         }
@@ -4012,6 +4101,14 @@ test("POST /ui/workflow-policies/clubs/:slug/restore-area restores one club area
                   after: "Club Admin"
                 }
               ]
+            },
+            overrideSnapshot: {
+              liveOverrideCount: 1,
+              previewOverrideCount: 0,
+              changedAreas: ["Routing rule"],
+              addedAreas: [],
+              removedAreas: ["Routing rule"],
+              retainedAreas: []
             }
           }
         }

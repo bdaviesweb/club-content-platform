@@ -716,6 +716,43 @@ function normalizeWorkflowPolicyHistoryContext(input) {
     }
   }
 
+  const overrideSnapshot = input.overrideSnapshot;
+  if (
+    overrideSnapshot &&
+    typeof overrideSnapshot === "object" &&
+    !Array.isArray(overrideSnapshot)
+  ) {
+    const changedAreas = Array.isArray(overrideSnapshot.changedAreas)
+      ? overrideSnapshot.changedAreas.map((area) => String(area || "").trim()).filter(Boolean)
+      : [];
+    const addedAreas = Array.isArray(overrideSnapshot.addedAreas)
+      ? overrideSnapshot.addedAreas.map((area) => String(area || "").trim()).filter(Boolean)
+      : [];
+    const removedAreas = Array.isArray(overrideSnapshot.removedAreas)
+      ? overrideSnapshot.removedAreas.map((area) => String(area || "").trim()).filter(Boolean)
+      : [];
+    const retainedAreas = Array.isArray(overrideSnapshot.retainedAreas)
+      ? overrideSnapshot.retainedAreas.map((area) => String(area || "").trim()).filter(Boolean)
+      : [];
+    const liveOverrideCount = Number(overrideSnapshot.liveOverrideCount);
+    const previewOverrideCount = Number(overrideSnapshot.previewOverrideCount);
+
+    if (
+      changedAreas.length &&
+      Number.isFinite(liveOverrideCount) &&
+      Number.isFinite(previewOverrideCount)
+    ) {
+      normalized.overrideSnapshot = {
+        liveOverrideCount,
+        previewOverrideCount,
+        changedAreas,
+        addedAreas,
+        removedAreas,
+        retainedAreas
+      };
+    }
+  }
+
   return Object.keys(normalized).length ? normalized : null;
 }
 

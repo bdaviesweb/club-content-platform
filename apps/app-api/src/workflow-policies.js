@@ -1146,7 +1146,8 @@ export async function updateWorkflowPolicyScope(
           changedFields,
           changedFieldDetails,
           previousPolicy: currentClubPolicy,
-          nextPolicy
+          nextPolicy,
+          ...(historyContext && typeof historyContext === "object" ? historyContext : {})
         })
       ]
     );

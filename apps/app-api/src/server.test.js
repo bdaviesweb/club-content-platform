@@ -352,7 +352,33 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
         autoApproveMaxRisk: 0.15,
         autoApprovalRule: { blockedContentTypes: ["video"] },
         routingRule: { contentTypeApprovers: { video: "team_manager" } },
-        notificationRule: { push: true }
+        notificationRule: { push: true },
+        historyContext: {
+          overrideSnapshot: {
+            liveOverrideCount: 0,
+            previewOverrideCount: 7,
+            changedAreas: [
+              "Default Approver",
+              "Agent Routing",
+              "Low-risk Internal Auto-approval",
+              "Auto-approve Max Risk",
+              "Auto-approval Rule",
+              "Routing Rule",
+              "Notification Rule"
+            ],
+            addedAreas: [
+              "Default Approver",
+              "Agent Routing",
+              "Low-risk Internal Auto-approval",
+              "Auto-approve Max Risk",
+              "Auto-approval Rule",
+              "Routing Rule",
+              "Notification Rule"
+            ],
+            removedAreas: [],
+            retainedAreas: []
+          }
+        }
       })
     });
     const body = await response.json();
@@ -440,6 +466,30 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
         nextValue: { push: true }
       }
     ]);
+    assert.deepEqual(clubAuditMetadata.overrideSnapshot, {
+      liveOverrideCount: 0,
+      previewOverrideCount: 7,
+      changedAreas: [
+        "Default Approver",
+        "Agent Routing",
+        "Low-risk Internal Auto-approval",
+        "Auto-approve Max Risk",
+        "Auto-approval Rule",
+        "Routing Rule",
+        "Notification Rule"
+      ],
+      addedAreas: [
+        "Default Approver",
+        "Agent Routing",
+        "Low-risk Internal Auto-approval",
+        "Auto-approve Max Risk",
+        "Auto-approval Rule",
+        "Routing Rule",
+        "Notification Rule"
+      ],
+      removedAreas: [],
+      retainedAreas: []
+    });
   } finally {
     server.close();
     await once(server, "close");

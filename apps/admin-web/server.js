@@ -4250,6 +4250,12 @@ function renderPolicyHistoryCard(
                   item.metadata?.rolloutSnapshot || null
                 )
               : "";
+          const clubOverrideSnapshotCard =
+            linkVariant === "club"
+              ? renderClubHistoryOverrideSnapshotCard(
+                  item.metadata?.overrideSnapshot || null
+                )
+              : "";
           const rollbackPreviewLink =
             rollbackPreviewPolicy
               ? `<div class="badge-row" style="margin-top:10px; align-items:flex-start;">
@@ -4285,6 +4291,7 @@ function renderPolicyHistoryCard(
             ${rollbackPreviewLink}
             ${cleanupSummaryCard}
             ${organizationRolloutSnapshotCard}
+            ${clubOverrideSnapshotCard}
             ${simulationTraceCard}
             ${followUpLink}
           </div>`;
@@ -5421,6 +5428,110 @@ function buildOrganizationHistoryRolloutSnapshot({
   }
 
   return snapshot;
+}
+
+function buildClubHistoryOverrideSnapshot({
+  organizationPolicy = {},
+  liveClubPolicy = {},
+  previewClubPolicy = {}
+}) {
+  const impact = buildClubDraftOverrideImpact({
+    organizationPolicy,
+    liveClubPolicy,
+    previewClubPolicy
+  });
+  const changedAreas = listChangedPolicyAreas({
+    livePolicy: liveClubPolicy,
+    previewPolicy: previewClubPolicy
+  });
+
+  if (!changedAreas.length) {
+    return null;
+  }
+
+  return {
+    liveOverrideCount: impact.liveOverrideCount,
+    previewOverrideCount: impact.previewOverrideCount,
+    changedAreas: changedAreas.map((area) => area.label),
+    addedAreas: (impact.added || []).map((area) => area.label),
+    removedAreas: (impact.removed || []).map((area) => area.label),
+    retainedAreas: (impact.retained || []).map((area) => area.label)
+  };
+}
+
+function renderClubHistoryOverrideSnapshotCard(overrideSnapshot = null) {
+  if (!overrideSnapshot || typeof overrideSnapshot !== "object") {
+    return "";
+  }
+
+  const changedAreas = Array.isArray(overrideSnapshot.changedAreas)
+    ? overrideSnapshot.changedAreas
+    : [];
+  const addedAreas = Array.isArray(overrideSnapshot.addedAreas)
+    ? overrideSnapshot.addedAreas
+    : [];
+  const removedAreas = Array.isArray(overrideSnapshot.removedAreas)
+    ? overrideSnapshot.removedAreas
+    : [];
+  const retainedAreas = Array.isArray(overrideSnapshot.retainedAreas)
+    ? overrideSnapshot.retainedAreas
+    : [];
+
+  if (!changedAreas.length) {
+    return "";
+  }
+
+  return `<div class="summary-stack" style="margin-top:12px;">
+      <div class="summary-item">
+        <strong>Saved override snapshot</strong>
+        <p class="subtle" style="margin-top:6px;">This captures how customized this club was compared with the organization default when the save was recorded.</p>
+      </div>
+      <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+        <strong>Override burden</strong>
+        <p class="subtle" style="margin-top:6px;">${escapeHtml(
+          `${Number(overrideSnapshot.liveOverrideCount || 0)} -> ${Number(
+            overrideSnapshot.previewOverrideCount || 0
+          )} override areas`
+        )}</p>
+        <p class="subtle" style="margin-top:6px;">${escapeHtml(
+          Number(overrideSnapshot.previewOverrideCount || 0) <
+            Number(overrideSnapshot.liveOverrideCount || 0)
+            ? "This save made the club more aligned to the organization default."
+            : Number(overrideSnapshot.previewOverrideCount || 0) >
+                Number(overrideSnapshot.liveOverrideCount || 0)
+              ? "This save made the club more customized than before."
+              : "This save kept the club at the same override burden."
+        )}</p>
+      </div>
+      <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+        <strong>Changed areas</strong>
+        <p class="subtle" style="margin-top:6px;">${escapeHtml(changedAreas.join(", "))}</p>
+      </div>
+      <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+        <strong>New exceptions</strong>
+        <p class="subtle" style="margin-top:6px;">${escapeHtml(
+          addedAreas.length
+            ? addedAreas.join(", ")
+            : "No new club-specific exceptions were added in this save."
+        )}</p>
+      </div>
+      <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+        <strong>Exceptions removed</strong>
+        <p class="subtle" style="margin-top:6px;">${escapeHtml(
+          removedAreas.length
+            ? removedAreas.join(", ")
+            : "No existing club-specific exceptions were removed in this save."
+        )}</p>
+      </div>
+      <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+        <strong>Exceptions retained</strong>
+        <p class="subtle" style="margin-top:6px;">${escapeHtml(
+          retainedAreas.length
+            ? retainedAreas.join(", ")
+            : "No club-specific exceptions were carried forward in this save."
+        )}</p>
+      </div>
+    </div>`;
 }
 
 function renderOrganizationHistoryRolloutSnapshotCard(rolloutSnapshot = null) {
@@ -8075,6 +8186,50 @@ export function createAdminServer() {
                       : undefined
                 };
               })()
+            : resourceType === "clubs"
+              ? await (async () => {
+                  const clubPolicy = await fetchJson(
+                    `/workflow-policies/clubs/${encodeURIComponent(scopeSlug)}`
+                  );
+                  const organizationSlug = String(clubPolicy?.organization?.slug || "").trim();
+                  const organizationPolicy = organizationSlug
+                    ? await fetchJson(
+                        `/workflow-policies/organizations/${encodeURIComponent(organizationSlug)}`
+                      )
+                    : null;
+                  const nextClubPolicy = {
+                    ...(clubPolicy?.clubPolicy || {})
+                  };
+
+                  trackedPolicyAreaFields.forEach((area) => {
+                    if (Object.hasOwn(body, area.key)) {
+                      nextClubPolicy[area.key] = body[area.key] ?? null;
+                    }
+                  });
+
+                  const baseHistoryContext =
+                    body.historyContext &&
+                    typeof body.historyContext === "object" &&
+                    !Array.isArray(body.historyContext)
+                      ? body.historyContext
+                      : null;
+                  const overrideSnapshot = buildClubHistoryOverrideSnapshot({
+                    organizationPolicy: organizationPolicy?.organizationPolicy || {},
+                    liveClubPolicy: clubPolicy?.clubPolicy || {},
+                    previewClubPolicy: nextClubPolicy
+                  });
+
+                  return {
+                    ...body,
+                    historyContext:
+                      baseHistoryContext || overrideSnapshot
+                        ? {
+                            ...(baseHistoryContext || {}),
+                            ...(overrideSnapshot ? { overrideSnapshot } : {})
+                          }
+                        : undefined
+                  };
+                })()
             : body;
         const payload = await fetchJson(`/workflow-policies/${resourceType}/${scopeSlug}`, {
           method: "POST",
@@ -8354,6 +8509,11 @@ export function createAdminServer() {
           liveOutcome: simulatePolicyOutcome(liveEffectivePolicy, normalizedSimulationInput),
           previewOutcome: simulatePolicyOutcome(previewEffectivePolicy, normalizedSimulationInput)
         });
+        const overrideSnapshot = buildClubHistoryOverrideSnapshot({
+          organizationPolicy: organizationPolicy?.organizationPolicy || {},
+          liveClubPolicy: clubPolicy?.clubPolicy || {},
+          previewClubPolicy
+        });
 
         await fetchJson(`/workflow-policies/clubs/${encodeURIComponent(clubSlug)}`, {
           method: "POST",
@@ -8363,9 +8523,12 @@ export function createAdminServer() {
             [fieldKey]: Object.hasOwn(body, "restoreValue") ? body.restoreValue ?? null : null,
             historyContext: simulationTrace
               ? {
-                  simulationTrace
+                  simulationTrace,
+                  ...(overrideSnapshot ? { overrideSnapshot } : {})
                 }
-              : undefined
+              : overrideSnapshot
+                ? { overrideSnapshot }
+                : undefined
           })
         });
 
