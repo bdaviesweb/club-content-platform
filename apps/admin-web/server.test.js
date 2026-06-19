@@ -3252,9 +3252,17 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
     assert.match(body, /These clubs still override at least one organization area changed by this draft/);
     assert.match(body, /Still overriding changed areas:/);
     assert.match(body, /Changed area rollout summary/);
+    assert.match(body, /Rollout visibility/);
+    assert.match(body, /This directory is showing how the active organization draft will flow across clubs and where club overrides still insulate the rollout\./);
+    assert.match(body, /Rollout landing now/);
+    assert.match(body, /Still insulated by overrides/);
+    assert.match(body, /clubs inheriting/);
+    assert.match(body, /clubs insulated|club insulated/);
     assert.match(body, /Westside/);
     assert.match(body, /impacted area/);
     assert.match(body, /Inherited from this org draft:/);
+    assert.match(body, /Rollout posture/);
+    assert.match(body, /This club will inherit the current organization draft in: Public approver, Notification rule\./);
     assert.match(body, /Review public approver rollout/);
     assert.match(body, /Review notification rule rollout/);
     assert.match(body, /clubView=overrides/);

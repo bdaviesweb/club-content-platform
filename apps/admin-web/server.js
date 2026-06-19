@@ -6647,7 +6647,8 @@ function renderOrganizationDirectory(
   selectedClubSlug = "",
   simulationInput = null,
   previewScopeType = null,
-  previewDraftPolicy = null
+  previewDraftPolicy = null,
+  rolloutPreview = null
 ) {
   if (!directory) {
     return "";
@@ -6689,6 +6690,20 @@ function renderOrganizationDirectory(
     );
   const areaSummary = buildOrganizationOverrideAreaSummary(clubsWithOverrides);
   const governanceSummary = buildOrganizationGovernanceSummary(clubs);
+  const changedRolloutAreas = Array.isArray(rolloutPreview?.changedAreas)
+    ? rolloutPreview.changedAreas
+    : [];
+  const rolloutClubMap = new Map(
+    Array.isArray(rolloutPreview?.clubImpacts)
+      ? rolloutPreview.clubImpacts.map((club) => [club.slug, club])
+      : []
+  );
+  const rolloutLandingClubs = Array.isArray(rolloutPreview?.affectedClubs)
+    ? rolloutPreview.affectedClubs
+    : [];
+  const rolloutInsulatedClubs = Array.isArray(rolloutPreview?.insulatedClubs)
+    ? rolloutPreview.insulatedClubs
+    : [];
 
   function buildDirectoryLinkParams(nextClubArea, nextClubView = "overrides") {
     return buildWorkflowSettingsLink({
@@ -6702,6 +6717,75 @@ function renderOrganizationDirectory(
   }
 
   function renderClubDirectoryItem(club) {
+    const rolloutClub = rolloutClubMap.get(club.slug);
+    const rolloutChangedAreaCount = rolloutClub?.impactedAreas?.length || 0;
+    const rolloutInsulatedAreaCount = rolloutClub?.insulatedAreas?.length || 0;
+    const rolloutStatus =
+      rolloutClub && changedRolloutAreas.length
+        ? `<div class="summary-item" style="background: rgba(255,255,255,0.68); margin-top:10px;">
+            <div class="badge-row" style="justify-content:space-between; margin-bottom:6px;">
+              <strong>Rollout posture</strong>
+              ${
+                rolloutChangedAreaCount
+                  ? renderStatusBadge(
+                      `Inherits ${rolloutChangedAreaCount} changed area${
+                        rolloutChangedAreaCount === 1 ? "" : "s"
+                      }`,
+                      "good"
+                    )
+                  : renderStatusBadge(
+                      `Insulated across ${rolloutInsulatedAreaCount} changed area${
+                        rolloutInsulatedAreaCount === 1 ? "" : "s"
+                      }`,
+                      "info"
+                    )
+              }
+            </div>
+            <p class="subtle" style="margin-top:6px;">${escapeHtml(
+              rolloutChangedAreaCount
+                ? `This club will inherit the current organization draft in: ${rolloutClub.impactedAreas
+                    .map((area) => area.label)
+                    .join(", ")}.`
+                : `This club is still shielding the current organization draft with overrides in: ${rolloutClub.insulatedAreas
+                    .map((area) => area.label)
+                    .join(", ")}.`
+            )}</p>
+            ${
+              rolloutChangedAreaCount
+                ? `<div class="badge-row" style="margin-top:10px;">
+                    ${rolloutClub.impactedAreas
+                      .map(
+                        (area) => `<a class="quick-link" href="${buildWorkflowSettingsLink({
+                          clubSlug: selectedClubSlug,
+                          clubView: "overrides",
+                          clubArea: area.key,
+                          previewScopeType: "organization",
+                          previewDraftPolicy,
+                          simulationInput
+                        })}">Review ${escapeHtml(area.label.toLowerCase())} rollout</a>`
+                      )
+                      .join("")}
+                  </div>`
+                : rolloutInsulatedAreaCount
+                  ? `<div class="badge-row" style="margin-top:10px;">
+                      ${rolloutClub.insulatedAreas
+                        .map(
+                          (area) => `<a class="quick-link" href="${buildWorkflowSettingsLink({
+                            clubSlug: selectedClubSlug,
+                            clubView: "overrides",
+                            clubArea: area.key,
+                            previewScopeType: "organization",
+                            previewDraftPolicy,
+                            simulationInput
+                          })}">Review ${escapeHtml(area.label.toLowerCase())} shielding override</a>`
+                        )
+                        .join("")}
+                    </div>`
+                  : ""
+            }
+          </div>`
+        : "";
+
     return `<div class="summary-item">
       <strong>${escapeHtml(club.name)}</strong>
       <p class="subtle">${escapeHtml(club.slug)}</p>
@@ -6728,11 +6812,69 @@ function renderOrganizationDirectory(
         previewScopeType,
         previewDraftPolicy
       })}">Open ${escapeHtml(club.name)} policy stack</a></p>
+      ${rolloutStatus}
     </div>`;
   }
 
   const clubList = clubs.length
     ? `
+      ${
+        changedRolloutAreas.length
+          ? `<div class="summary-item" style="background: rgba(255,255,255,0.68); margin-bottom:12px;">
+              <strong>Rollout visibility</strong>
+              <p class="subtle" style="margin-top:6px;">This directory is showing how the active organization draft will flow across clubs and where club overrides still insulate the rollout.</p>
+              <div class="badge-row" style="margin-top:10px; align-items:flex-start;">
+                ${changedRolloutAreas
+                  .map(
+                    (area) => `<span class="badge badge-info">${escapeHtml(area.label)}</span>`
+                  )
+                  .join("")}
+                <span class="badge badge-good">${escapeHtml(
+                  `${rolloutLandingClubs.length} clubs inheriting`
+                )}</span>
+                <span class="badge badge-neutral">${escapeHtml(
+                  `${rolloutInsulatedClubs.length} clubs insulated`
+                )}</span>
+              </div>
+              <div class="summary-stack" style="margin-top:12px;">
+                <div class="summary-item">
+                  <strong>Rollout landing now</strong>
+                  <p class="subtle" style="margin-top:6px;">${
+                    rolloutLandingClubs.length
+                      ? escapeHtml(
+                          rolloutLandingClubs
+                            .map(
+                              (club) =>
+                                `${club.name} (${club.impactedAreas
+                                  .map((area) => area.label)
+                                  .join(", ")})`
+                            )
+                            .join("; ")
+                        )
+                      : "No clubs are inheriting the changed organization areas right now."
+                  }</p>
+                </div>
+                <div class="summary-item">
+                  <strong>Still insulated by overrides</strong>
+                  <p class="subtle" style="margin-top:6px;">${
+                    rolloutInsulatedClubs.length
+                      ? escapeHtml(
+                          rolloutInsulatedClubs
+                            .map(
+                              (club) =>
+                                `${club.name} (${club.insulatedAreas
+                                  .map((area) => area.label)
+                                  .join(", ")})`
+                            )
+                            .join("; ")
+                        )
+                      : "No clubs are still insulating the changed organization areas."
+                  }</p>
+                </div>
+              </div>
+            </div>`
+          : ""
+      }
       <div class="topline" style="margin-bottom:14px;">
         <div class="metric-card">
           <span class="metric-label">Clubs with overrides</span>
@@ -7255,7 +7397,10 @@ async function renderWorkflowSettingsPage(
       selectedClubSlug,
       normalizedSimulationInput,
       previewScopeType,
-      previewDraftPolicyParam
+      previewDraftPolicyParam,
+      previewScopeType === "organization"
+        ? organizationDraftImpact
+        : null
     )}
     
 
