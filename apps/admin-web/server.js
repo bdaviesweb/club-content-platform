@@ -4104,8 +4104,22 @@ function renderPolicyHistoryCard(
           const changeDetailRows = changedFieldDetails.length
             ? `<div class="summary-stack" style="margin-top:12px;">
                 ${changedFieldDetails
-                  .map(
-                    (detail) => `<div class="summary-item">
+                  .map((detail) => {
+                    const detailRollbackPreviewPolicy =
+                      linkVariant === "organization" && index === 0
+                        ? buildPolicyPreviewFromHistoryDetails(
+                            currentPolicy ||
+                              (item.metadata?.nextPolicy &&
+                              typeof item.metadata.nextPolicy === "object" &&
+                              !Array.isArray(item.metadata.nextPolicy)
+                                ? item.metadata.nextPolicy
+                                : {}),
+                            [detail],
+                            "previousValue"
+                          )
+                        : null;
+
+                    return `<div class="summary-item">
                       <strong>${escapeHtml(formatPolicyFieldLabel(detail.field))}</strong>
                       <p class="subtle" style="margin-top:6px;">Before: ${escapeHtml(
                         summarizePolicyHistoryValue(detail.previousValue)
@@ -4113,8 +4127,20 @@ function renderPolicyHistoryCard(
                       <p class="subtle" style="margin-top:6px;">After: ${escapeHtml(
                         summarizePolicyHistoryValue(detail.nextValue)
                       )}</p>
-                    </div>`
-                  )
+                      ${
+                        detailRollbackPreviewPolicy
+                          ? `<p style="margin-top:8px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
+                              clubSlug,
+                              previewScopeType: "organization",
+                              previewDraftPolicy: JSON.stringify(detailRollbackPreviewPolicy),
+                              simulationInput
+                            })}">Preview rollback of ${escapeHtml(
+                              formatPolicyFieldLabel(detail.field).toLowerCase()
+                            )}</a></p>`
+                          : ""
+                      }
+                    </div>`;
+                  })
                   .join("")}
               </div>`
             : "";
