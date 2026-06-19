@@ -220,6 +220,15 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Westside/);
     assert.match(body, /Metro Sports/);
     assert.match(body, /Recent workflow policy changes/);
+    assert.match(body, /Club override summary/);
+    assert.match(body, /How much this club diverges from the organization/);
+    assert.match(body, /Club overrides/);
+    assert.match(body, /Inherited areas/);
+    assert.match(body, /Default approver/);
+    assert.match(body, /Agent routing/);
+    assert.match(body, /Low-risk internal auto-approval/);
+    assert.match(body, /Auto-approve max risk/);
+    assert.match(body, /Notification rule/);
     assert.match(body, /Organization changes/);
     assert.match(body, /Club changes/);
     assert.match(body, /Changed: Approval Rule, Notification Rule/);

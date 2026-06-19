@@ -3358,6 +3358,75 @@ function renderPolicyHistorySection({ organizationHistory, clubHistory }) {
   </section>`;
 }
 
+function buildClubOverrideSummary({ clubPolicy = {}, organizationPolicy = {} }) {
+  const trackedFields = [
+    { key: "defaultApproverRole", label: "Default approver" },
+    { key: "publicApproverRole", label: "Public approver" },
+    { key: "mediumRiskApproverRole", label: "Medium-risk approver" },
+    { key: "allowAgentRouting", label: "Agent routing" },
+    { key: "autoApproveInternalLowRisk", label: "Low-risk internal auto-approval" },
+    { key: "autoApproveMaxRisk", label: "Auto-approve max risk" },
+    { key: "autoApprovalRule", label: "Auto-approval rule" },
+    { key: "routingRule", label: "Routing rule" },
+    { key: "approvalRule", label: "Approval rule" },
+    { key: "publishingRule", label: "Publishing rule" },
+    { key: "notificationRule", label: "Notification rule" }
+  ];
+
+  const overridden = trackedFields.filter(({ key }) => {
+    const clubValue = clubPolicy?.[key];
+    const orgValue = organizationPolicy?.[key];
+
+    if (clubValue === null || clubValue === undefined) {
+      return false;
+    }
+
+    return JSON.stringify(clubValue) !== JSON.stringify(orgValue ?? null);
+  });
+
+  return {
+    total: trackedFields.length,
+    overridden,
+    inheritedCount: trackedFields.length - overridden.length
+  };
+}
+
+function renderClubOverrideSummary({ clubPolicy = {}, organizationPolicy = {} }) {
+  const summary = buildClubOverrideSummary({ clubPolicy, organizationPolicy });
+  const overrideList = summary.overridden.length
+    ? summary.overridden
+        .map(
+          (field) => `<span class="badge badge-good">${escapeHtml(field.label)}</span>`
+        )
+        .join("")
+    : `<span class="subtle">This club is currently fully aligned to the organization default.</span>`;
+
+  return `<section class="panel">
+    <div class="section-header">
+      <div>
+        <div class="eyebrow">Club override summary</div>
+        <h2>How much this club diverges from the organization</h2>
+        <p class="subtle" style="margin-top:8px;">Use this as a quick rollout check before keeping or removing club-specific policy.</p>
+      </div>
+    </div>
+    <div class="topline">
+      <div class="metric-card">
+        <span class="metric-label">Club overrides</span>
+        <strong>${escapeHtml(String(summary.overridden.length))}</strong>
+        <span class="subtle">Top-level policy areas customized here</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Inherited areas</span>
+        <strong>${escapeHtml(String(summary.inheritedCount))}</strong>
+        <span class="subtle">Top-level policy areas following the organization</span>
+      </div>
+    </div>
+    <div class="badge-row" style="margin-top:14px; align-items:flex-start;">
+      ${overrideList}
+    </div>
+  </section>`;
+}
+
 function renderOrganizationDirectory(directory) {
   if (!directory) {
     return "";
@@ -3515,6 +3584,10 @@ async function renderWorkflowSettingsPage(
     ${renderPolicyHistorySection({
       organizationHistory,
       clubHistory
+    })}
+    ${renderClubOverrideSummary({
+      clubPolicy: previewClubPolicy,
+      organizationPolicy: previewOrganizationPolicy
     })}
     ${renderOrganizationDirectory(organizationDirectory)}
 
