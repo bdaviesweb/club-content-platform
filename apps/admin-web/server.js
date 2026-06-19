@@ -4737,6 +4737,10 @@ function renderClubDraftOverrideImpactSummary({
     liveClubPolicy,
     previewClubPolicy
   });
+  const changedAreas = listChangedPolicyAreas({
+    livePolicy: liveClubPolicy,
+    previewPolicy: previewClubPolicy
+  });
   const sections = [
     {
       title: "New club exceptions",
@@ -4794,6 +4798,23 @@ function renderClubDraftOverrideImpactSummary({
       </div>
     </div>
     <div class="summary-stack" style="margin-top:16px;">
+      <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+        <strong>Changed policy areas</strong>
+        <div class="badge-row" style="margin-top:10px; align-items:flex-start;">
+          ${
+            changedAreas.length
+              ? changedAreas
+                  .map(
+                    (area) => `<span class="badge badge-info">${escapeHtml(
+                      area.label
+                    )}</span>`
+                  )
+                  .join("")
+              : `<span class="subtle">No changed club policy areas are in this draft.</span>`
+          }
+        </div>
+        <p class="subtle" style="margin-top:8px;">This shows what changes in the club layer even when the draft still aligns to the organization default afterward.</p>
+      </div>
       ${sections
         .map(
           (section) => `<div class="summary-item" style="background: rgba(255,255,255,0.68);">
