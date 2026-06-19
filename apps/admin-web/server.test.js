@@ -916,7 +916,22 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
             organization: { slug: "metro", name: "Metro Sports" },
             clubPolicy: {
               publicApproverRole: "club_admin",
-              notificationRule: { email: false }
+              notificationRule: { email: false, push: true }
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/clubs/northside")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            club: { slug: "northside", name: "Northside" },
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubPolicy: {
+              notificationRule: { email: true, push: false }
             }
           };
         }
@@ -931,7 +946,7 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
             organization: { slug: "metro", name: "Metro Sports" },
             organizationPolicy: {
               defaultApproverRole: "team_manager",
-              publicApproverRole: "club_comms",
+              publicApproverRole: "club_admin",
               mediumRiskApproverRole: "club_comms",
               allowAgentRouting: true,
               autoApproveInternalLowRisk: false,
@@ -949,7 +964,7 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
                   public: ["internal_feed"]
                 }
               },
-              notificationRule: { email: true }
+              notificationRule: { email: false, push: true }
             }
           };
         }
@@ -1044,6 +1059,14 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
                   overrideCount: 2,
                   overriddenFields: ["Public approver", "Notification rule"]
                 }
+              },
+              {
+                slug: "northside",
+                name: "Northside",
+                overrideSummary: {
+                  overrideCount: 1,
+                  overriddenFields: ["Notification rule"]
+                }
               }
             ],
             admins: []
@@ -1128,17 +1151,21 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /7 -&gt; 5 override areas[\s\S]*?Open Westside policy stack/);
     assert.match(body, /Clubs that got more complex/);
     assert.match(body, /No clubs gained override burden from this save\./);
+    assert.match(body, /Saved inheritance cleanup opportunities/);
+    assert.match(body, /These clubs still carry explicit values in the changed organization areas even though those values now match the saved default\./);
+    assert.match(body, /Matching saved defaults: Public approver, Notification rule/);
+    assert.match(body, /clubSlug=eastside[\s\S]*?previewResetArea=publicApproverRole[\s\S]*?Preview inheriting public approver/);
     assert.match(body, /Remaining exception cleanup/);
     assert.match(body, /These clubs still override one or more organization areas you just changed/);
     assert.match(body, /Bulk cleanup by area/);
     assert.match(body, /Apply org notification rule to selected clubs/);
-    assert.match(body, /Eastside/);
-    assert.match(body, /Still overriding changed areas: Public approver, Notification rule/);
+    assert.match(body, /Northside/);
+    assert.match(body, /Still overriding changed areas: Notification rule/);
     assert.match(body, /Preview inheriting public approver/);
     assert.match(body, /Preview inheriting notification rule/);
     assert.match(body, /previewResetArea=notificationRule/);
     assert.match(body, /#policy-area-notificationRule/);
-    assert.match(body, /clubSlug=eastside[\s\S]*?previewResetArea=notificationRule[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin[\s\S]*?Preview inheriting notification rule/);
+    assert.match(body, /clubSlug=northside[\s\S]*?previewResetArea=notificationRule[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin[\s\S]*?Preview inheriting notification rule/);
     assert.match(body, /Review changed areas/);
     assert.match(body, /Review public approver exceptions/);
     assert.match(body, /Review public approver inheriting clubs/);
@@ -1165,7 +1192,7 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /Now following the saved default/);
     assert.match(body, /Inherited areas: Public approver, Notification rule/);
     assert.match(body, /Still blocking the rollout with overrides/);
-    assert.match(body, /Still insulated in: Public approver, Notification rule/);
+    assert.match(body, /Still insulated in: Notification rule/);
     assert.match(body, /Latest recorded field changes/);
     assert.match(body, /These before-and-after values come from the latest recorded organization policy update\./);
     assert.match(body, /Simulated workflow trace for this save/);
@@ -1190,9 +1217,11 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /This captures the saved simulator consequence recorded with this organization policy update\./);
     assert.match(body, /Current rollout state by changed area/);
     assert.match(body, /Use this live view to confirm which clubs are now inheriting each saved organization area and which clubs are still insulating themselves with overrides\./);
-    assert.match(body, /1 inheriting \/ 1 insulated/);
-    assert.match(body, /Currently inheriting: Westside/);
-    assert.match(body, /Still insulated by overrides: Eastside/);
+    assert.match(body, /3 inheriting \/ 0 insulated/);
+    assert.match(body, /1 inheriting \/ 2 insulated/);
+    assert.match(body, /Currently inheriting: Westside, Eastside, Northside/);
+    assert.match(body, /Currently inheriting: Eastside/);
+    assert.match(body, /Still insulated by overrides: Westside, Northside/);
     assert.match(body, /clubSlug=westside[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin[\s\S]*?Open Westside policy stack/);
   } finally {
     globalThis.fetch = originalFetch;

@@ -4806,6 +4806,36 @@ function buildRemainingExceptionCleanupItems({
     );
 }
 
+function buildOrganizationInheritanceCleanupItems({
+  clubs = [],
+  changedAreas = [],
+  clubPolicyMap = null,
+  organizationPolicy = {}
+}) {
+  const changedAreaKeys = new Set(changedAreas.map((area) => area.key));
+
+  return clubs
+    .map((club) => {
+      const matchingAreas = buildClubInheritanceOpportunitySummary({
+        clubPolicy: clubPolicyMap?.[club.slug]?.clubPolicy || {},
+        organizationPolicy
+      }).matchingExplicit.filter((area) => changedAreaKeys.has(area.key));
+
+      return {
+        club,
+        matchingAreas
+      };
+    })
+    .filter((item) => item.matchingAreas.length > 0)
+    .sort(
+      (left, right) =>
+        right.matchingAreas.length - left.matchingAreas.length ||
+        Number(right.club.overrideSummary?.overrideCount || 0) -
+          Number(left.club.overrideSummary?.overrideCount || 0) ||
+        String(left.club.name || "").localeCompare(String(right.club.name || ""))
+    );
+}
+
 function buildOrganizationDirectoryPreview({
   organizationDirectory,
   organizationPolicy = {},
@@ -5937,7 +5967,8 @@ function renderWorkflowSaveSummary(
     organizationHistory = null,
     clubHistory = null,
     currentOrganizationPolicy = null,
-    currentClubPolicy = null
+    currentClubPolicy = null,
+    currentOrganizationClubPolicyMap = null
   } = {}
 ) {
   if (!saveSummary) {
@@ -6244,9 +6275,25 @@ function renderWorkflowSaveSummary(
   const changedAreas = (saveSummary.changedAreaKeys || [])
     .map((key) => trackedPolicyAreaFields.find((area) => area.key === key) || null)
     .filter(Boolean);
+  const currentOrganizationDirectory =
+    organizationDirectory && currentOrganizationClubPolicyMap
+      ? buildOrganizationDirectoryPreview({
+          organizationDirectory,
+          organizationPolicy: currentOrganizationPolicy || {},
+          clubPolicyMap: currentOrganizationClubPolicyMap
+        })
+      : organizationDirectory;
   const cleanupItems = buildRemainingExceptionCleanupItems({
-    clubs: organizationDirectory?.clubs || [],
-    changedAreas
+    clubs: currentOrganizationDirectory?.clubs || [],
+    changedAreas,
+    clubPolicyMap: currentOrganizationClubPolicyMap,
+    organizationPolicy: currentOrganizationPolicy || {}
+  });
+  const inheritanceCleanupItems = buildOrganizationInheritanceCleanupItems({
+    clubs: currentOrganizationDirectory?.clubs || [],
+    changedAreas,
+    clubPolicyMap: currentOrganizationClubPolicyMap,
+    organizationPolicy: currentOrganizationPolicy || {}
   });
   const changedAreaLinks = changedAreas.length
     ? `<div class="summary-stack" style="margin-top:16px;">
@@ -6288,7 +6335,7 @@ function renderWorkflowSaveSummary(
   );
   const simulationTrace = saveSummary.simulationTrace || null;
   const rolloutSnapshot = buildLiveOrganizationRolloutSnapshot({
-    organizationDirectory,
+    organizationDirectory: currentOrganizationDirectory,
     changedAreas
   });
   const rolloutSnapshotCard =
@@ -6477,9 +6524,64 @@ function renderWorkflowSaveSummary(
           </div>`
         : ""
     }
+    ${
+      inheritanceCleanupItems.length
+        ? `<div class="summary-stack" style="margin-top:16px;">
+            <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+              <strong>Saved inheritance cleanup opportunities</strong>
+              <p class="subtle" style="margin-top:6px;">These clubs still carry explicit values in the changed organization areas even though those values now match the saved default. Preview inheriting them before removing the redundant exception.</p>
+            </div>
+            ${inheritanceCleanupItems
+              .map(
+                (item) => `<div class="summary-item" style="background: rgba(255,255,255,0.68);">
+                  <div class="badge-row" style="justify-content:space-between; margin-bottom:6px;">
+                    <strong>${escapeHtml(item.club.name)}</strong>
+                    ${renderStatusBadge(
+                      `${item.matchingAreas.length} redundant area${
+                        item.matchingAreas.length === 1 ? "" : "s"
+                      }`,
+                      "info"
+                    )}
+                  </div>
+                  <p class="subtle">${escapeHtml(item.club.slug || "")}</p>
+                  <p style="margin-top:6px;">${escapeHtml(
+                    `Matching saved defaults: ${item.matchingAreas
+                      .map((area) => area.label)
+                      .join(", ")}`
+                  )}</p>
+                  <div class="badge-row" style="margin-top:10px; align-items:flex-start;">
+                    ${item.matchingAreas
+                      .map(
+                        (area) => `<span class="badge badge-info">${escapeHtml(area.label)}</span>`
+                      )
+                      .join("")}
+                  </div>
+                  <div class="badge-row" style="margin-top:10px;">
+                    ${item.matchingAreas
+                      .map(
+                        (area) => `<a class="quick-link" href="${buildWorkflowSettingsLink({
+                          clubSlug: item.club.slug || "",
+                          previewResetArea: area.key,
+                          simulationInput
+                        })}${buildPolicyAreaAnchor(area.key)}">Preview inheriting ${escapeHtml(
+                          area.label.toLowerCase()
+                        )}</a>`
+                      )
+                      .join("")}
+                  </div>
+                  <p style="margin-top:10px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
+                    clubSlug: item.club.slug || "",
+                    simulationInput
+                  })}">Open ${escapeHtml(item.club.name)} policy stack</a></p>
+                </div>`
+              )
+              .join("")}
+          </div>`
+        : ""
+    }
     ${rolloutSnapshotCard}
     ${renderCurrentOrganizationRolloutState({
-      organizationDirectory,
+      organizationDirectory: currentOrganizationDirectory,
       changedAreas,
       selectedClubSlug: saveSummary.clubSlug || "",
       simulationInput,
@@ -6494,7 +6596,7 @@ function renderWorkflowSaveSummary(
         "These clubs still override one or more organization areas you just changed. Review them next if you want the saved default to propagate more consistently.",
       items: cleanupItems,
       selectedClubSlug: saveSummary.clubSlug || "",
-      organizationSlug: organizationDirectory?.organization?.slug || "",
+      organizationSlug: currentOrganizationDirectory?.organization?.slug || "",
       simulationInput,
       includePreviewInheritanceLinks: true,
       includeBulkCleanupControls: true
@@ -7476,7 +7578,8 @@ async function renderWorkflowSettingsPage(
         organizationHistory,
         clubHistory,
         currentOrganizationPolicy: organizationPolicy?.organizationPolicy || null,
-        currentClubPolicy: clubPolicy.clubPolicy || null
+        currentClubPolicy: clubPolicy.clubPolicy || null,
+        currentOrganizationClubPolicyMap: organizationClubPolicyMap
       }
     )}
 
