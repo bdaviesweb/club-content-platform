@@ -4120,6 +4120,16 @@ function renderPolicyHistoryCard(
                             "previousValue"
                           )
                         : null;
+                    const restoreReturnsToInheritedDefault =
+                      linkVariant === "club" &&
+                      (!Object.hasOwn(detail || {}, "previousValue") ||
+                        detail.previousValue === null);
+                    const restoreHelperCopy =
+                      linkVariant === "organization"
+                        ? "This restores the organization-wide value recorded before this change."
+                        : restoreReturnsToInheritedDefault
+                          ? "This removes the club-specific exception so this area inherits the organization default again."
+                          : "This restores the earlier club-specific value recorded before this change.";
 
                     return `<div class="summary-item">
                       <strong>${escapeHtml(formatPolicyFieldLabel(detail.field))}</strong>
@@ -4165,10 +4175,15 @@ function renderPolicyHistoryCard(
                                     : null
                                 )
                               )}" />
+                              <input type="hidden" name="restoreMode" value="${escapeHtml(
+                                restoreReturnsToInheritedDefault ? "inherit-default" : "saved-value"
+                              )}" />
                               <button type="submit" class="button-secondary">Restore ${escapeHtml(
                                 formatPolicyFieldLabel(detail.field).toLowerCase()
                               )} now</button>
-                              <span class="subtle" data-restore-status style="margin-left:10px;">Ready</span>
+                              <span class="subtle" data-restore-status style="margin-left:10px;">${escapeHtml(
+                                restoreHelperCopy
+                              )}</span>
                             </form>`
                           : ""
                       }
@@ -5541,6 +5556,17 @@ function renderWorkflowSaveSummary(
         actionLabel: "Review"
       }
     ];
+    const removedExceptionsCard =
+      removedAreas.length
+        ? `<div class="summary-item" style="background: rgba(220, 252, 231, 0.62); border:1px solid rgba(22, 101, 52, 0.18);">
+            <strong>Returned to inherited defaults</strong>
+            <p class="subtle" style="margin-top:6px;">This save removed the club-specific exception for ${escapeHtml(
+              removedAreas.map((area) => area.label.toLowerCase()).join(", ")
+            )}, so this club now follows the organization default in ${
+              removedAreas.length === 1 ? "that area" : "those areas"
+            }.</p>
+          </div>`
+        : "";
 
     return `<section class="panel" style="border-color: rgba(23, 103, 68, 0.26); background: linear-gradient(180deg, rgba(235, 248, 240, 0.96), rgba(255, 255, 255, 0.96));">
       <div class="section-header">
@@ -5591,6 +5617,7 @@ function renderWorkflowSaveSummary(
           "This shows how the saved club exception change altered the simulated workflow path for the current scenario."
       })}
       <div class="summary-stack" style="margin-top:16px;">
+        ${removedExceptionsCard}
         <div class="summary-item" style="background: rgba(255,255,255,0.68);">
           <strong>Changed policy areas</strong>
           <div class="badge-row" style="margin-top:10px; align-items:flex-start;">
@@ -7521,6 +7548,7 @@ async function renderWorkflowSettingsPage(
           const fieldKey = String(form.querySelector('[name="fieldKey"]')?.value || '').trim();
           const returnClubSlug = String(form.querySelector('[name="returnClubSlug"]')?.value || '').trim();
           const restoreValueRaw = String(form.querySelector('[name="restoreValue"]')?.value || '').trim();
+          const restoreMode = String(form.querySelector('[name="restoreMode"]')?.value || 'saved-value').trim();
           const scopedActorEmailSelector =
             '.workflow-policy-form[data-scope-type="' + CSS.escape(scopeType) + '"] [name="actorEmail"]';
           const actorEmail =
@@ -7551,11 +7579,15 @@ async function renderWorkflowSettingsPage(
           }
 
           const confirmed = window.confirm(
-            'Restore ' +
-              fieldLabel.toLowerCase() +
-              ' to its previous ' +
-              (scopeType === 'organization' ? 'organization' : 'club') +
-              ' value?'
+            scopeType === 'club' && restoreMode === 'inherit-default'
+              ? 'Restore ' +
+                  fieldLabel.toLowerCase() +
+                  '? This removes the club-specific exception and returns this area to the organization default.'
+              : 'Restore ' +
+                  fieldLabel.toLowerCase() +
+                  ' to its previous ' +
+                  (scopeType === 'organization' ? 'organization' : 'club') +
+                  ' value?'
           );
           if (!confirmed) {
             if (status) status.textContent = 'Restore cancelled.';

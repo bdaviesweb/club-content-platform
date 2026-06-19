@@ -287,6 +287,7 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Preview rollback of notification rule/);
     assert.match(body, /Preview rollback of latest club change/);
     assert.match(body, /Preview rollback of routing rule/);
+    assert.match(body, /This restores the earlier club-specific value recorded before this change\./);
     assert.match(body, /clubArea=approvalRule/);
     assert.match(body, /clubView=inheriting/);
     assert.match(body, /Open this club policy stack/);
@@ -1969,6 +1970,167 @@ test("GET /workflow-settings renders a post-save club exception summary", async 
     assert.match(body, /name="simulationRiskScore" type="number" min="0" max="1" step="0.01" value="0.19"/);
     assert.match(body, /name="simulationModerationFlagged"[\s\S]*?<option value="true" selected/);
     assert.match(body, /name="simulationAgentSuggestedApproverRole"[\s\S]*?<option value="club_admin" selected/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await new Promise((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))
+    );
+  }
+});
+
+test("GET /workflow-settings highlights when a club exception was removed and returned to inherited defaults", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith("/app/readiness")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            demo: {
+              clubSlug: "westside",
+              reviewerEmail: "comms@westside.test"
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/clubs/westside")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            club: { slug: "westside", name: "Westside" },
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubPolicy: {},
+            effectivePolicy: {
+              defaultApproverRole: "team_manager",
+              publicApproverRole: "club_comms",
+              mediumRiskApproverRole: "club_comms",
+              allowAgentRouting: true,
+              autoApproveInternalLowRisk: false,
+              autoApproveMaxRisk: 0.35,
+              autoApprovalRule: {},
+              routingRule: {
+                contentTypeApprovers: { video: "club_admin" }
+              },
+              approvalRule: {},
+              publishingRule: {},
+              notificationRule: { email: true, push: true }
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/organizations/metro")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "metro", name: "Metro Sports" },
+            organizationPolicy: {
+              defaultApproverRole: "team_manager",
+              publicApproverRole: "club_comms",
+              mediumRiskApproverRole: "club_comms",
+              allowAgentRouting: true,
+              autoApproveInternalLowRisk: false,
+              autoApproveMaxRisk: 0.35,
+              autoApprovalRule: {},
+              routingRule: {
+                contentTypeApprovers: { video: "club_admin" }
+              },
+              approvalRule: {},
+              publishingRule: {},
+              notificationRule: { email: true, push: true }
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/organizations/metro/history")) {
+      return {
+        ok: true,
+        async json() {
+          return { items: [] };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/clubs/westside/history")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            items: [
+              {
+                action: "workflow_policy.updated",
+                createdAt: "2026-06-19T17:05:00.000Z",
+                actorEmail: "club-admin@westside.test",
+                actorFullName: "Club Admin",
+                metadata: {
+                  changedFields: ["routingRule"],
+                  changedFieldDetails: [
+                    {
+                      field: "routingRule",
+                      previousValue: { contentTypeApprovers: { video: "team_manager" } },
+                      nextValue: null
+                    }
+                  ]
+                }
+              }
+            ]
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/organizations/metro")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubs: [
+              {
+                slug: "westside",
+                name: "Westside",
+                overrideSummary: {
+                  overrideCount: 0,
+                  overriddenFields: []
+                }
+              }
+            ],
+            admins: []
+          };
+        }
+      };
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  };
+
+  const server = createAdminServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const address = server.address();
+    const response = await originalFetch(
+      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&saveScopeType=club&saveChangedAreaCount=1&saveCurrentOverrideAreaCount=1&saveProjectedOverrideAreaCount=0&saveChangedAreaKeys=routingRule&saveRemovedAreaKeys=routingRule&simulationContentType=video&simulationVisibilityTarget=public&simulationRiskScore=0.72&simulationModerationFlagged=false&simulationAgentSuggestedApproverRole=club_admin`
+    );
+    const body = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(body, /Saved club policy/);
+    assert.match(body, /Returned to inherited defaults/);
+    assert.match(body, /This save removed the club-specific exception for routing rule, so this club now follows the organization default in that area\./);
+    assert.match(body, /Exceptions removed/);
+    assert.match(body, /Routing rule/);
+    assert.match(body, /Review routing rule inheritance/);
+    assert.match(body, /1 -&gt; 0|1 -> 0/);
+    assert.match(body, /Reduced/);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise((resolve, reject) =>
