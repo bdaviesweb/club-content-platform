@@ -1222,6 +1222,7 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
     assert.match(body, /Changed org areas/);
     assert.match(body, /Clubs affected/);
     assert.match(body, /Clubs insulated/);
+    assert.match(body, /Changed area rollout summary/);
     assert.match(body, /Westside/);
     assert.match(body, /2 impacted areas/);
     assert.match(body, /Inherited from this org draft: Public approver, Notification rule/);
@@ -1242,6 +1243,11 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
     assert.match(body, /Review public approver shielding override/);
     assert.match(body, /Review notification rule shielding override/);
     assert.match(body, /Open Eastside policy stack/);
+    assert.match(body, /1 affected \/ 1 insulated/);
+    assert.match(body, /Inherited by: Westside/);
+    assert.match(body, /Shielded by overrides: Eastside/);
+    assert.match(body, /Review public approver across clubs/);
+    assert.match(body, /Review notification rule across clubs/);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise((resolve, reject) =>

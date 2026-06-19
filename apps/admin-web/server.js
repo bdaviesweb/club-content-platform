@@ -3487,6 +3487,23 @@ function buildOrganizationDraftImpact({
   };
 }
 
+function buildOrganizationDraftAreaImpactSummary({ changedAreas = [], clubImpacts = [] }) {
+  return changedAreas.map((area) => {
+    const affectedClubs = clubImpacts.filter((club) =>
+      club.impactedAreas.some((candidate) => candidate.key === area.key)
+    );
+    const insulatedClubs = clubImpacts.filter((club) =>
+      club.insulatedAreas.some((candidate) => candidate.key === area.key)
+    );
+
+    return {
+      ...area,
+      affectedClubs,
+      insulatedClubs
+    };
+  });
+}
+
 function renderOrganizationDraftImpactSummary({
   previewScopeType,
   organizationPolicy,
@@ -3507,6 +3524,10 @@ function renderOrganizationDraftImpactSummary({
     organizationPolicy,
     previewOrganizationPolicy,
     organizationDirectory
+  });
+  const areaImpactSummary = buildOrganizationDraftAreaImpactSummary({
+    changedAreas,
+    clubImpacts
   });
 
   if (!changedAreas.length) {
@@ -3585,6 +3606,42 @@ function renderOrganizationDraftImpactSummary({
         })
         .join("")
     : `<p class="subtle">No clubs are linked to this organization yet.</p>`;
+  const areaRows = areaImpactSummary.length
+    ? areaImpactSummary
+        .map((area) => `<div class="summary-item">
+          <div class="badge-row" style="justify-content:space-between; margin-bottom:6px;">
+            <strong>${escapeHtml(area.label)}</strong>
+            ${renderStatusBadge(
+              `${area.affectedClubs.length} affected / ${area.insulatedClubs.length} insulated`,
+              area.affectedClubs.length ? "review" : "good"
+            )}
+          </div>
+          <p class="subtle">${
+            area.affectedClubs.length
+              ? escapeHtml(
+                  `Inherited by: ${area.affectedClubs.map((club) => club.name).join(", ")}`
+                )
+              : "No clubs currently inherit this changed area."
+          }</p>
+          <p class="subtle" style="margin-top:6px;">${
+            area.insulatedClubs.length
+              ? escapeHtml(
+                  `Shielded by overrides: ${area.insulatedClubs.map((club) => club.name).join(", ")}`
+                )
+              : "No clubs are shielding themselves from this changed area yet."
+          }</p>
+          <div class="badge-row" style="margin-top:10px;">
+            <a class="quick-link" href="${buildWorkflowSettingsLink({
+              clubSlug: selectedClubSlug,
+              clubView: "overrides",
+              clubArea: area.key,
+              previewScopeType: "organization",
+              previewDraftPolicy: JSON.stringify(previewOrganizationPolicy || {})
+            })}">Review ${escapeHtml(area.label.toLowerCase())} across clubs</a>
+          </div>
+        </div>`)
+        .join("")
+    : "";
 
   return `<section class="panel">
     <div class="section-header">
@@ -3610,6 +3667,13 @@ function renderOrganizationDraftImpactSummary({
         <strong>${escapeHtml(String(insulatedClubs.length))}</strong>
         <span class="subtle">Clubs already overriding every changed area</span>
       </div>
+    </div>
+    <div class="summary-stack" style="margin-top:16px;">
+      <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+        <strong>Changed area rollout summary</strong>
+        <p class="subtle" style="margin-top:6px;">Review each changed organization policy area to see where the draft will flow through and where club-specific overrides currently block it.</p>
+      </div>
+      ${areaRows}
     </div>
     <div class="summary-stack" style="margin-top:16px;">
       ${clubRows}
