@@ -720,6 +720,10 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /7 -&gt; 5 override areas|7 -> 5 override areas/);
     assert.match(body, /Clubs that got more complex/);
     assert.match(body, /No clubs gained override burden from this save\./);
+    assert.match(body, /Remaining exception cleanup/);
+    assert.match(body, /These clubs still override one or more organization areas you just changed/);
+    assert.match(body, /Eastside/);
+    assert.match(body, /Still overriding changed areas: Public approver, Notification rule/);
     assert.match(body, /Review changed areas/);
     assert.match(body, /Review public approver exceptions/);
     assert.match(body, /Review notification rule exceptions/);
@@ -1507,6 +1511,9 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
     assert.match(body, /2 -&gt; 0 override areas|2 -> 0 override areas/);
     assert.match(body, /Clubs gaining override burden/);
     assert.match(body, /No clubs would gain new override burden from this draft\./);
+    assert.match(body, /Exception cleanup priority/);
+    assert.match(body, /These clubs still override at least one organization area changed by this draft/);
+    assert.match(body, /Still overriding changed areas: Public approver, Notification rule/);
     assert.match(body, /Changed area rollout summary/);
     assert.match(body, /Westside/);
     assert.match(body, /2 impacted areas/);

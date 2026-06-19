@@ -3913,6 +3913,104 @@ function buildOrganizationDraftAreaImpactSummary({ changedAreas = [], clubImpact
   });
 }
 
+function buildRemainingExceptionCleanupItems({ clubs = [], changedAreas = [] }) {
+  const changedAreaLabels = new Set(changedAreas.map((area) => area.label));
+  const changedAreaMap = new Map(changedAreas.map((area) => [area.label, area]));
+
+  return clubs
+    .map((club) => {
+      const overriddenFields = Array.isArray(club.overrideSummary?.overriddenFields)
+        ? club.overrideSummary.overriddenFields
+        : [];
+      const remainingAreas = overriddenFields
+        .filter((label) => changedAreaLabels.has(label))
+        .map((label) => changedAreaMap.get(label))
+        .filter(Boolean);
+
+      return {
+        club,
+        remainingAreas
+      };
+    })
+    .filter((item) => item.remainingAreas.length > 0)
+    .sort(
+      (left, right) =>
+        right.remainingAreas.length - left.remainingAreas.length ||
+        Number(right.club.overrideSummary?.overrideCount || 0) -
+          Number(left.club.overrideSummary?.overrideCount || 0) ||
+        String(left.club.name || "").localeCompare(String(right.club.name || ""))
+    );
+}
+
+function renderExceptionCleanupSummary({
+  title,
+  subtitle,
+  items = [],
+  selectedClubSlug = "",
+  previewScopeType = null,
+  previewDraftPolicy = null
+}) {
+  if (!items.length) {
+    return "";
+  }
+
+  return `<div class="summary-stack" style="margin-top:16px;">
+    <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+      <strong>${escapeHtml(title)}</strong>
+      <p class="subtle" style="margin-top:6px;">${escapeHtml(subtitle)}</p>
+    </div>
+    ${items
+      .map((item) => {
+        const firstArea = item.remainingAreas[0] || null;
+        return `<div class="summary-item">
+          <div class="badge-row" style="justify-content:space-between; margin-bottom:6px;">
+            <strong>${escapeHtml(item.club.name)}</strong>
+            ${renderStatusBadge(
+              `${item.remainingAreas.length} remaining area${
+                item.remainingAreas.length === 1 ? "" : "s"
+              }`,
+              "review"
+            )}
+          </div>
+          <p class="subtle">${escapeHtml(item.club.slug || "")}</p>
+          <p style="margin-top:6px;">${escapeHtml(
+            `Still overriding changed areas: ${item.remainingAreas
+              .map((area) => area.label)
+              .join(", ")}`
+          )}</p>
+          <div class="badge-row" style="margin-top:10px;">
+            ${item.remainingAreas
+              .map(
+                (area) => `<a class="badge badge-info" href="${buildWorkflowSettingsLink({
+                  clubSlug: selectedClubSlug,
+                  clubView: "overrides",
+                  clubArea: area.key,
+                  previewScopeType,
+                  previewDraftPolicy
+                })}">${escapeHtml(area.label)}</a>`
+              )
+              .join("")}
+          </div>
+          <p style="margin-top:10px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
+            clubSlug: item.club.slug || ""
+          })}">Open ${escapeHtml(item.club.name)} policy stack</a></p>
+          ${
+            firstArea
+              ? `<p style="margin-top:6px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
+                  clubSlug: selectedClubSlug,
+                  clubView: "overrides",
+                  clubArea: firstArea.key,
+                  previewScopeType,
+                  previewDraftPolicy
+                })}">Review ${escapeHtml(firstArea.label.toLowerCase())} exceptions</a></p>`
+              : ""
+          }
+        </div>`;
+      })
+      .join("")}
+  </div>`;
+}
+
 async function fetchOrganizationClubPolicyMap({
   organizationDirectory,
   selectedClubSlug,
@@ -4008,6 +4106,10 @@ function renderOrganizationDraftImpactSummary({
   const areaImpactSummary = buildOrganizationDraftAreaImpactSummary({
     changedAreas,
     clubImpacts
+  });
+  const cleanupItems = buildRemainingExceptionCleanupItems({
+    clubs: organizationDirectory?.clubs || [],
+    changedAreas
   });
 
   if (!changedAreas.length) {
@@ -4230,13 +4332,22 @@ function renderOrganizationDraftImpactSummary({
       ${areaRows}
     </div>
     ${burdenDeltaRows ? `<div class="summary-stack" style="margin-top:16px;">${burdenDeltaRows}</div>` : ""}
+    ${renderExceptionCleanupSummary({
+      title: "Exception cleanup priority",
+      subtitle:
+        "These clubs still override at least one organization area changed by this draft. Start here after you save if you want the rollout to land more uniformly.",
+      items: cleanupItems,
+      selectedClubSlug,
+      previewScopeType: "organization",
+      previewDraftPolicy: JSON.stringify(previewOrganizationPolicy || {})
+    })}
     <div class="summary-stack" style="margin-top:16px;">
       ${clubRows}
     </div>
   </section>`;
 }
 
-function renderWorkflowSaveSummary(saveSummary) {
+function renderWorkflowSaveSummary(saveSummary, organizationDirectory = null) {
   if (!saveSummary || saveSummary.scopeType !== "organization") {
     return "";
   }
@@ -4251,6 +4362,10 @@ function renderWorkflowSaveSummary(saveSummary) {
   const changedAreas = (saveSummary.changedAreaKeys || [])
     .map((key) => trackedPolicyAreaFields.find((area) => area.key === key) || null)
     .filter(Boolean);
+  const cleanupItems = buildRemainingExceptionCleanupItems({
+    clubs: organizationDirectory?.clubs || [],
+    changedAreas
+  });
   const changedAreaLinks = changedAreas.length
     ? `<div class="summary-stack" style="margin-top:16px;">
         <div class="summary-item" style="background: rgba(255,255,255,0.68);">
@@ -4368,6 +4483,13 @@ function renderWorkflowSaveSummary(saveSummary) {
       </div>
     </div>
     <div class="summary-stack" style="margin-top:16px;">${burdenDeltaRows}</div>
+    ${renderExceptionCleanupSummary({
+      title: "Remaining exception cleanup",
+      subtitle:
+        "These clubs still override one or more organization areas you just changed. Review them next if you want the saved default to propagate more consistently.",
+      items: cleanupItems,
+      selectedClubSlug: saveSummary.clubSlug || ""
+    })}
     ${changedAreaLinks}
   </section>`;
 }
@@ -4752,7 +4874,7 @@ async function renderWorkflowSettingsPage(
       </div>
     </section>
 
-    ${renderWorkflowSaveSummary(saveSummary)}
+    ${renderWorkflowSaveSummary(saveSummary, organizationDirectory)}
 
     <section class="panel" style="margin-bottom:18px;">
       <form method="GET" action="/workflow-settings" class="workflow-policy-form workflow-policy-filter">
