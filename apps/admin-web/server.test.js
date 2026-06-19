@@ -542,6 +542,22 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
       };
     }
 
+    if (String(url).endsWith("/workflow-policies/clubs/eastside")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            club: { slug: "eastside", name: "Eastside" },
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubPolicy: {
+              publicApproverRole: "club_admin",
+              notificationRule: { email: false }
+            }
+          };
+        }
+      };
+    }
+
     if (String(url).endsWith("/workflow-policies/organizations/metro")) {
       return {
         ok: true,
@@ -632,7 +648,7 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
   try {
     const address = server.address();
     const response = await originalFetch(
-      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&saveScopeType=organization&saveChangedAreaCount=2&saveAffectedClubCount=1&saveInsulatedClubCount=1&saveChangedAreaKeys=publicApproverRole,notificationRule`
+      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&saveScopeType=organization&saveChangedAreaCount=2&saveAffectedClubCount=1&saveInsulatedClubCount=1&saveCurrentOverrideClubCount=2&saveProjectedOverrideClubCount=1&saveCurrentOverrideAreaCount=9&saveProjectedOverrideAreaCount=7&saveChangedAreaKeys=publicApproverRole,notificationRule`
     );
     const body = await response.text();
 
@@ -643,6 +659,12 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /Clubs now inheriting/);
     assert.match(body, /Clubs still insulating/);
     assert.match(body, /Review exceptions/);
+    assert.match(body, /Override clubs/);
+    assert.match(body, /2 -&gt; 1|2 -> 1/);
+    assert.match(body, /Override areas/);
+    assert.match(body, /9 -&gt; 7|9 -> 7/);
+    assert.match(body, /Override burden/);
+    assert.match(body, /Reduced/);
     assert.match(body, /Review changed areas/);
     assert.match(body, /Review public approver exceptions/);
     assert.match(body, /Review notification rule exceptions/);
@@ -1269,6 +1291,22 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
       };
     }
 
+    if (String(url).endsWith("/workflow-policies/clubs/eastside")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            club: { slug: "eastside", name: "Eastside" },
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubPolicy: {
+              publicApproverRole: "club_admin",
+              notificationRule: { email: false }
+            }
+          };
+        }
+      };
+    }
+
     if (String(url).endsWith("/workflow-policies/organizations/metro")) {
       return {
         ok: true,
@@ -1394,6 +1432,12 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
     assert.match(body, /Changed org areas/);
     assert.match(body, /Clubs affected/);
     assert.match(body, /Clubs insulated/);
+    assert.match(body, /Override clubs/);
+    assert.match(body, /2 -&gt; 1|2 -> 1/);
+    assert.match(body, /Override areas/);
+    assert.match(body, /9 -&gt; 7|9 -> 7/);
+    assert.match(body, /Override burden/);
+    assert.match(body, /Reduced/);
     assert.match(body, /Changed area rollout summary/);
     assert.match(body, /Westside/);
     assert.match(body, /2 impacted areas/);

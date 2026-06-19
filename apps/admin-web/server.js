@@ -2901,7 +2901,11 @@ function renderWorkflowPolicyForm({
   previewAffectedClubCount = 0,
   previewChangedAreaCount = 0,
   previewInsulatedClubCount = 0,
-  previewChangedAreaKeys = []
+  previewChangedAreaKeys = [],
+  previewCurrentOverrideClubCount = 0,
+  previewProjectedOverrideClubCount = 0,
+  previewCurrentOverrideAreaCount = 0,
+  previewProjectedOverrideAreaCount = 0
 }) {
   const roleOptions = [
     { value: "team_manager", label: "Team manager" },
@@ -2995,7 +2999,7 @@ function renderWorkflowPolicyForm({
       </div>
       <span class="badge badge-neutral">${escapeHtml(scopeSlug || "n/a")}</span>
     </div>
-    <form class="workflow-policy-form" data-scope-type="${escapeHtml(scopeType)}" data-scope-slug="${escapeHtml(scopeSlug || "")}" data-preview-warning-count="${escapeHtml(String(previewWarningCount))}" data-preview-affected-club-count="${escapeHtml(String(previewAffectedClubCount))}" data-preview-changed-area-count="${escapeHtml(String(previewChangedAreaCount))}" data-preview-insulated-club-count="${escapeHtml(String(previewInsulatedClubCount))}" data-preview-changed-area-keys="${escapeHtml((previewChangedAreaKeys || []).join(","))}">
+    <form class="workflow-policy-form" data-scope-type="${escapeHtml(scopeType)}" data-scope-slug="${escapeHtml(scopeSlug || "")}" data-preview-warning-count="${escapeHtml(String(previewWarningCount))}" data-preview-affected-club-count="${escapeHtml(String(previewAffectedClubCount))}" data-preview-changed-area-count="${escapeHtml(String(previewChangedAreaCount))}" data-preview-insulated-club-count="${escapeHtml(String(previewInsulatedClubCount))}" data-preview-changed-area-keys="${escapeHtml((previewChangedAreaKeys || []).join(","))}" data-preview-current-override-club-count="${escapeHtml(String(previewCurrentOverrideClubCount))}" data-preview-projected-override-club-count="${escapeHtml(String(previewProjectedOverrideClubCount))}" data-preview-current-override-area-count="${escapeHtml(String(previewCurrentOverrideAreaCount))}" data-preview-projected-override-area-count="${escapeHtml(String(previewProjectedOverrideAreaCount))}">
       ${renderPolicyField({
         label: "Actor email",
         name: "actorEmail",
@@ -3506,12 +3510,82 @@ function buildOrganizationDraftAreaImpactSummary({ changedAreas = [], clubImpact
   });
 }
 
+async function fetchOrganizationClubPolicyMap({
+  organizationDirectory,
+  selectedClubSlug,
+  selectedClubPolicy
+}) {
+  const clubs = organizationDirectory?.clubs || [];
+  const entries = await Promise.all(
+    clubs.map(async (club) => {
+      if (club.slug === selectedClubSlug && selectedClubPolicy) {
+        return [club.slug, selectedClubPolicy];
+      }
+
+      const response = await fetchJson(
+        `/workflow-policies/clubs/${encodeURIComponent(club.slug)}`
+      );
+      return [club.slug, response];
+    })
+  );
+
+  return Object.fromEntries(entries);
+}
+
+function buildOrganizationDraftOverrideBurdenSummary({
+  organizationDirectory,
+  organizationPolicy,
+  previewOrganizationPolicy,
+  clubPolicyMap = {}
+}) {
+  const clubs = organizationDirectory?.clubs || [];
+  const liveOrganizationPolicy = organizationPolicy?.organizationPolicy || {};
+  const nextOrganizationPolicy = previewOrganizationPolicy || {};
+  const comparisons = clubs.map((club) => {
+    const clubPolicy = clubPolicyMap?.[club.slug]?.clubPolicy || {};
+    const liveSummary = buildClubOverrideSummary({
+      clubPolicy,
+      organizationPolicy: liveOrganizationPolicy
+    });
+    const previewSummary = buildClubOverrideSummary({
+      clubPolicy,
+      organizationPolicy: nextOrganizationPolicy
+    });
+
+    return {
+      club,
+      liveOverrideCount: liveSummary.overridden.length,
+      previewOverrideCount: previewSummary.overridden.length
+    };
+  });
+
+  return {
+    currentOverrideClubCount: comparisons.filter((item) => item.liveOverrideCount > 0).length,
+    projectedOverrideClubCount: comparisons.filter((item) => item.previewOverrideCount > 0).length,
+    currentOverrideAreaCount: comparisons.reduce(
+      (sum, item) => sum + item.liveOverrideCount,
+      0
+    ),
+    projectedOverrideAreaCount: comparisons.reduce(
+      (sum, item) => sum + item.previewOverrideCount,
+      0
+    ),
+    clubsReducingOverrides: comparisons.filter(
+      (item) => item.previewOverrideCount < item.liveOverrideCount
+    ),
+    clubsGainingOverrides: comparisons.filter(
+      (item) => item.previewOverrideCount > item.liveOverrideCount
+    )
+  };
+}
+
 function renderOrganizationDraftImpactSummary({
   previewScopeType,
   organizationPolicy,
   previewOrganizationPolicy,
   organizationDirectory,
-  selectedClubSlug = ""
+  selectedClubSlug = "",
+  overrideBurdenSummary = null
 }) {
   if (previewScopeType !== "organization") {
     return "";
@@ -3670,6 +3744,39 @@ function renderOrganizationDraftImpactSummary({
         <span class="subtle">Clubs already overriding every changed area</span>
       </div>
     </div>
+    ${
+      overrideBurdenSummary
+        ? `<div class="topline" style="margin-top:12px;">
+            <div class="metric-card">
+              <span class="metric-label">Override clubs</span>
+              <strong>${escapeHtml(
+                `${overrideBurdenSummary.currentOverrideClubCount} -> ${overrideBurdenSummary.projectedOverrideClubCount}`
+              )}</strong>
+              <span class="subtle">Clubs carrying at least one custom override before versus after this draft</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Override areas</span>
+              <strong>${escapeHtml(
+                `${overrideBurdenSummary.currentOverrideAreaCount} -> ${overrideBurdenSummary.projectedOverrideAreaCount}`
+              )}</strong>
+              <span class="subtle">Total overridden policy areas across clubs before versus after this draft</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Override burden</span>
+              <strong>${escapeHtml(
+                overrideBurdenSummary.projectedOverrideAreaCount <
+                  overrideBurdenSummary.currentOverrideAreaCount
+                  ? "Reduced"
+                  : overrideBurdenSummary.projectedOverrideAreaCount >
+                      overrideBurdenSummary.currentOverrideAreaCount
+                    ? "Increased"
+                    : "Unchanged"
+              )}</strong>
+              <span class="subtle">Use this to confirm whether the draft shrinks or expands exception sprawl.</span>
+            </div>
+          </div>`
+        : ""
+    }
     <div class="summary-stack" style="margin-top:16px;">
       <div class="summary-item" style="background: rgba(255,255,255,0.68);">
         <strong>Changed area rollout summary</strong>
@@ -3691,6 +3798,10 @@ function renderWorkflowSaveSummary(saveSummary) {
   const changedAreaCount = Number(saveSummary.changedAreaCount || 0);
   const affectedClubCount = Number(saveSummary.affectedClubCount || 0);
   const insulatedClubCount = Number(saveSummary.insulatedClubCount || 0);
+  const currentOverrideClubCount = Number(saveSummary.currentOverrideClubCount || 0);
+  const projectedOverrideClubCount = Number(saveSummary.projectedOverrideClubCount || 0);
+  const currentOverrideAreaCount = Number(saveSummary.currentOverrideAreaCount || 0);
+  const projectedOverrideAreaCount = Number(saveSummary.projectedOverrideAreaCount || 0);
   const changedAreas = (saveSummary.changedAreaKeys || [])
     .map((key) => trackedPolicyAreaFields.find((area) => area.key === key) || null)
     .filter(Boolean);
@@ -3745,6 +3856,33 @@ function renderWorkflowSaveSummary(saveSummary) {
             ? "Use the rollout summary below to decide whether those club overrides should remain."
             : "No clubs are currently shielding themselves from these saved organization changes."
         }</span>
+      </div>
+    </div>
+    <div class="topline" style="margin-top:12px;">
+      <div class="metric-card">
+        <span class="metric-label">Override clubs</span>
+        <strong>${escapeHtml(
+          `${currentOverrideClubCount} -> ${projectedOverrideClubCount}`
+        )}</strong>
+        <span class="subtle">Clubs carrying at least one custom override before versus after the save</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Override areas</span>
+        <strong>${escapeHtml(
+          `${currentOverrideAreaCount} -> ${projectedOverrideAreaCount}`
+        )}</strong>
+        <span class="subtle">Total overridden policy areas across the organization before versus after the save</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Override burden</span>
+        <strong>${escapeHtml(
+          projectedOverrideAreaCount < currentOverrideAreaCount
+            ? "Reduced"
+            : projectedOverrideAreaCount > currentOverrideAreaCount
+              ? "Increased"
+              : "Unchanged"
+        )}</strong>
+        <span class="subtle">Measured from the preview comparison captured at save time</span>
       </div>
     </div>
     ${changedAreaLinks}
@@ -4084,6 +4222,23 @@ async function renderWorkflowSettingsPage(
           organizationDirectory
         })
       : null;
+  const organizationClubPolicyMap =
+    organizationDirectory && (previewScopeType === "organization" || saveSummary?.scopeType === "organization")
+      ? await fetchOrganizationClubPolicyMap({
+          organizationDirectory,
+          selectedClubSlug,
+          selectedClubPolicy: clubPolicy
+        })
+      : null;
+  const overrideBurdenSummary =
+    previewScopeType === "organization" && organizationClubPolicyMap
+      ? buildOrganizationDraftOverrideBurdenSummary({
+          organizationDirectory,
+          organizationPolicy,
+          previewOrganizationPolicy,
+          clubPolicyMap: organizationClubPolicyMap
+        })
+      : null;
 
   return layout(`
     <section class="hero">
@@ -4165,7 +4320,8 @@ async function renderWorkflowSettingsPage(
       organizationPolicy,
       previewOrganizationPolicy,
       organizationDirectory,
-      selectedClubSlug
+      selectedClubSlug,
+      overrideBurdenSummary
     })}
     ${renderClubOverrideSummary({
       clubPolicy: previewClubPolicy,
@@ -4207,6 +4363,22 @@ async function renderWorkflowSettingsPage(
           previewScopeType === "organization"
             ? (organizationDraftImpact?.changedAreas || []).map((area) => area.key)
             : [],
+        previewCurrentOverrideClubCount:
+          previewScopeType === "organization"
+            ? overrideBurdenSummary?.currentOverrideClubCount || 0
+            : 0,
+        previewProjectedOverrideClubCount:
+          previewScopeType === "organization"
+            ? overrideBurdenSummary?.projectedOverrideClubCount || 0
+            : 0,
+        previewCurrentOverrideAreaCount:
+          previewScopeType === "organization"
+            ? overrideBurdenSummary?.currentOverrideAreaCount || 0
+            : 0,
+        previewProjectedOverrideAreaCount:
+          previewScopeType === "organization"
+            ? overrideBurdenSummary?.projectedOverrideAreaCount || 0
+            : 0,
         previewWarningCount:
           previewScopeType === "organization" ? previewRiskWarningCount : 0
       })}
@@ -4427,6 +4599,10 @@ async function renderWorkflowSettingsPage(
         const previewChangedAreaCount = Number(form.dataset.previewChangedAreaCount || '0');
         const previewInsulatedClubCount = Number(form.dataset.previewInsulatedClubCount || '0');
         const previewChangedAreaKeys = String(form.dataset.previewChangedAreaKeys || '').trim();
+        const previewCurrentOverrideClubCount = Number(form.dataset.previewCurrentOverrideClubCount || '0');
+        const previewProjectedOverrideClubCount = Number(form.dataset.previewProjectedOverrideClubCount || '0');
+        const previewCurrentOverrideAreaCount = Number(form.dataset.previewCurrentOverrideAreaCount || '0');
+        const previewProjectedOverrideAreaCount = Number(form.dataset.previewProjectedOverrideAreaCount || '0');
         if (scopeType === 'organization' && previewAffectedClubCount > 0) {
           const confirmed = window.confirm(
             'This organization draft changes ' +
@@ -4481,6 +4657,10 @@ async function renderWorkflowSettingsPage(
           params.set('saveChangedAreaCount', String(previewChangedAreaCount));
           params.set('saveAffectedClubCount', String(previewAffectedClubCount));
           params.set('saveInsulatedClubCount', String(previewInsulatedClubCount));
+          params.set('saveCurrentOverrideClubCount', String(previewCurrentOverrideClubCount));
+          params.set('saveProjectedOverrideClubCount', String(previewProjectedOverrideClubCount));
+          params.set('saveCurrentOverrideAreaCount', String(previewCurrentOverrideAreaCount));
+          params.set('saveProjectedOverrideAreaCount', String(previewProjectedOverrideAreaCount));
           if (previewChangedAreaKeys) {
             params.set('saveChangedAreaKeys', previewChangedAreaKeys);
           }
@@ -4653,6 +4833,18 @@ export function createAdminServer() {
                 changedAreaCount: Number(url.searchParams.get("saveChangedAreaCount") || "0"),
                 affectedClubCount: Number(url.searchParams.get("saveAffectedClubCount") || "0"),
                 insulatedClubCount: Number(url.searchParams.get("saveInsulatedClubCount") || "0"),
+                currentOverrideClubCount: Number(
+                  url.searchParams.get("saveCurrentOverrideClubCount") || "0"
+                ),
+                projectedOverrideClubCount: Number(
+                  url.searchParams.get("saveProjectedOverrideClubCount") || "0"
+                ),
+                currentOverrideAreaCount: Number(
+                  url.searchParams.get("saveCurrentOverrideAreaCount") || "0"
+                ),
+                projectedOverrideAreaCount: Number(
+                  url.searchParams.get("saveProjectedOverrideAreaCount") || "0"
+                ),
                 changedAreaKeys: String(url.searchParams.get("saveChangedAreaKeys") || "")
                   .split(",")
                   .map((value) => value.trim())
