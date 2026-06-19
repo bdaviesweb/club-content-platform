@@ -709,8 +709,38 @@ test("loads organization directory with clubs and organization admins", async ()
         if (String(sql).includes("FROM clubs")) {
           return {
             rows: [
-              { id: "club-1", slug: "westside", name: "Westside" },
-              { id: "club-2", slug: "eastside", name: "Eastside" }
+              {
+                id: "club-1",
+                slug: "westside",
+                name: "Westside",
+                clubDefaultApproverRole: "club_admin",
+                clubPublicApproverRole: null,
+                clubMediumRiskApproverRole: null,
+                clubAllowAgentRouting: false,
+                clubAutoApproveInternalLowRisk: null,
+                clubAutoApproveMaxRisk: null,
+                clubAutoApprovalRule: {},
+                clubRoutingRule: {},
+                clubApprovalRule: {},
+                clubPublishingRule: {},
+                clubNotificationRule: {}
+              },
+              {
+                id: "club-2",
+                slug: "eastside",
+                name: "Eastside",
+                clubDefaultApproverRole: null,
+                clubPublicApproverRole: null,
+                clubMediumRiskApproverRole: null,
+                clubAllowAgentRouting: null,
+                clubAutoApproveInternalLowRisk: null,
+                clubAutoApproveMaxRisk: null,
+                clubAutoApprovalRule: {},
+                clubRoutingRule: {},
+                clubApprovalRule: {},
+                clubPublishingRule: {},
+                clubNotificationRule: {}
+              }
             ]
           };
         }
@@ -736,6 +766,12 @@ test("loads organization directory with clubs and organization admins", async ()
   assert.equal(result.found, true);
   assert.equal(result.organization.slug, "metro");
   assert.equal(result.clubs.length, 2);
+  assert.equal(result.clubs[0].overrideSummary.overrideCount, 2);
+  assert.deepEqual(result.clubs[0].overrideSummary.overriddenFields, [
+    "Default approver",
+    "Agent routing"
+  ]);
+  assert.equal(result.clubs[1].overrideSummary.overrideCount, 0);
   assert.equal(result.admins[0].role, "organization_admin");
   assert.match(calls[1].sql, /FROM clubs/);
   assert.match(calls[2].sql, /FROM organization_memberships/);

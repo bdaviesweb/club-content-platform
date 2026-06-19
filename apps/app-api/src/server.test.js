@@ -483,7 +483,24 @@ test("GET /organizations/:slug returns organization directory detail", async () 
 
       if (String(query).includes("FROM clubs")) {
         return {
-          rows: [{ id: "club-1", slug: "westside", name: "Westside" }]
+          rows: [
+            {
+              id: "club-1",
+              slug: "westside",
+              name: "Westside",
+              clubDefaultApproverRole: "club_admin",
+              clubPublicApproverRole: null,
+              clubMediumRiskApproverRole: null,
+              clubAllowAgentRouting: false,
+              clubAutoApproveInternalLowRisk: null,
+              clubAutoApproveMaxRisk: null,
+              clubAutoApprovalRule: {},
+              clubRoutingRule: {},
+              clubApprovalRule: {},
+              clubPublishingRule: {},
+              clubNotificationRule: {}
+            }
+          ]
         };
       }
 
@@ -517,6 +534,11 @@ test("GET /organizations/:slug returns organization directory detail", async () 
     assert.equal(response.status, 200);
     assert.equal(body.organization.slug, "metro");
     assert.equal(body.clubs[0].slug, "westside");
+    assert.equal(body.clubs[0].overrideSummary.overrideCount, 2);
+    assert.deepEqual(body.clubs[0].overrideSummary.overriddenFields, [
+      "Default approver",
+      "Agent routing"
+    ]);
     assert.equal(body.admins[0].role, "organization_admin");
   } finally {
     server.close();

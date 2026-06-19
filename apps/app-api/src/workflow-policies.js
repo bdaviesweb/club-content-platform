@@ -297,6 +297,39 @@ function buildOrganizationPolicyResponse(row) {
   };
 }
 
+const trackedPolicyOverrideFields = [
+  { key: "defaultApproverRole", label: "Default approver" },
+  { key: "publicApproverRole", label: "Public approver" },
+  { key: "mediumRiskApproverRole", label: "Medium-risk approver" },
+  { key: "allowAgentRouting", label: "Agent routing" },
+  { key: "autoApproveInternalLowRisk", label: "Low-risk internal auto-approval" },
+  { key: "autoApproveMaxRisk", label: "Auto-approve max risk" },
+  { key: "autoApprovalRule", label: "Auto-approval rule" },
+  { key: "routingRule", label: "Routing rule" },
+  { key: "approvalRule", label: "Approval rule" },
+  { key: "publishingRule", label: "Publishing rule" },
+  { key: "notificationRule", label: "Notification rule" }
+];
+
+function buildPolicyOverrideSummary({ clubPolicy = {}, organizationPolicy = {} }) {
+  const overriddenFields = trackedPolicyOverrideFields.filter(({ key }) => {
+    const clubValue = clubPolicy?.[key];
+    const organizationValue = organizationPolicy?.[key];
+
+    if (clubValue === null || clubValue === undefined) {
+      return false;
+    }
+
+    return JSON.stringify(clubValue) !== JSON.stringify(organizationValue ?? null);
+  });
+
+  return {
+    overrideCount: overriddenFields.length,
+    inheritedCount: trackedPolicyOverrideFields.length - overriddenFields.length,
+    overriddenFields: overriddenFields.map((field) => field.label)
+  };
+}
+
 export function validateWorkflowPolicyPatch(input, { scopeType }) {
   const patch = {};
 
@@ -786,10 +819,25 @@ export async function loadOrganizationDirectory(pool, organizationSlug) {
 
   const clubsResult = await pool.query(
     `
-    SELECT id, slug, name
-    FROM clubs
-    WHERE organization_id = $1
-    ORDER BY name ASC, created_at ASC
+    SELECT
+      c.id,
+      c.slug,
+      c.name,
+      cp.default_approver_role AS "clubDefaultApproverRole",
+      cp.public_approver_role AS "clubPublicApproverRole",
+      cp.medium_risk_approver_role AS "clubMediumRiskApproverRole",
+      cp.allow_agent_routing AS "clubAllowAgentRouting",
+      cp.auto_approve_internal_low_risk AS "clubAutoApproveInternalLowRisk",
+      cp.auto_approve_max_risk AS "clubAutoApproveMaxRisk",
+      cp.auto_approval_rule AS "clubAutoApprovalRule",
+      cp.routing_rule AS "clubRoutingRule",
+      cp.approval_rule AS "clubApprovalRule",
+      cp.publishing_rule AS "clubPublishingRule",
+      cp.notification_rule AS "clubNotificationRule"
+    FROM clubs c
+    LEFT JOIN club_workflow_policies cp ON cp.club_id = c.id
+    WHERE c.organization_id = $1
+    ORDER BY c.name ASC, c.created_at ASC
     `,
     [organizationRow.organizationId]
   );
@@ -809,6 +857,8 @@ export async function loadOrganizationDirectory(pool, organizationSlug) {
     `,
     [organizationRow.organizationId]
   );
+  const normalizedOrganizationPolicy =
+    buildOrganizationPolicyResponse(organizationRow).organizationPolicy || {};
 
   return {
     found: true,
@@ -820,7 +870,28 @@ export async function loadOrganizationDirectory(pool, organizationSlug) {
     clubs: clubsResult.rows.map((row) => ({
       id: row.id,
       slug: row.slug,
-      name: row.name
+      name: row.name,
+      overrideSummary: buildPolicyOverrideSummary({
+        clubPolicy: normalizeStoredPolicyRow(
+          {
+            defaultApproverRole: row.clubDefaultApproverRole,
+            publicApproverRole: row.clubPublicApproverRole,
+            mediumRiskApproverRole: row.clubMediumRiskApproverRole,
+            allowAgentRouting: row.clubAllowAgentRouting,
+            autoApproveInternalLowRisk: row.clubAutoApproveInternalLowRisk,
+            autoApproveMaxRisk: row.clubAutoApproveMaxRisk,
+            autoApprovalRule: row.clubAutoApprovalRule,
+            routingRule: row.clubRoutingRule,
+            approvalRule: row.clubApprovalRule,
+            publishingRule: row.clubPublishingRule,
+            notificationRule: row.clubNotificationRule
+          },
+          {
+            scopeType: "club"
+          }
+        ),
+        organizationPolicy: normalizedOrganizationPolicy
+      })
     })),
     admins: adminsResult.rows.map((row) => ({
       role: row.role,

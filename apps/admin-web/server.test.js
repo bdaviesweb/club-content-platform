@@ -188,7 +188,16 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
         async json() {
           return {
             organization: { slug: "metro", name: "Metro Sports" },
-            clubs: [{ slug: "westside", name: "Westside" }],
+            clubs: [
+              {
+                slug: "westside",
+                name: "Westside",
+                overrideSummary: {
+                  overrideCount: 2,
+                  overriddenFields: ["Default approver", "Agent routing"]
+                }
+              }
+            ],
             admins: [
               {
                 role: "organization_admin",
@@ -235,6 +244,10 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Changed: Routing Rule/);
     assert.match(body, /Organization directory/);
     assert.match(body, /org-admin@westside.test/);
+    assert.match(body, /2 override areas/);
+    assert.match(body, /Fully inheriting organization defaults|2 override areas/);
+    assert.match(body, /Default approver/);
+    assert.match(body, /Agent routing/);
     assert.match(body, /Auto-approval rule/);
     assert.match(body, /Auto-approve only these content types/);
     assert.match(body, /Never auto-approve these content types/);
@@ -411,7 +424,16 @@ test("GET /workflow-settings previews unsaved club draft values in the simulator
         async json() {
           return {
             organization: { slug: "metro", name: "Metro Sports" },
-            clubs: [{ slug: "westside", name: "Westside" }],
+            clubs: [
+              {
+                slug: "westside",
+                name: "Westside",
+                overrideSummary: {
+                  overrideCount: 0,
+                  overriddenFields: []
+                }
+              }
+            ],
             admins: []
           };
         }
@@ -592,7 +614,16 @@ test("GET /workflow-settings renders a simulated workflow outcome from the effec
         async json() {
           return {
             organization: { slug: "metro", name: "Metro Sports" },
-            clubs: [{ slug: "westside", name: "Westside" }],
+            clubs: [
+              {
+                slug: "westside",
+                name: "Westside",
+                overrideSummary: {
+                  overrideCount: 0,
+                  overriddenFields: []
+                }
+              }
+            ],
             admins: []
           };
         }

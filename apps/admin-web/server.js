@@ -3438,6 +3438,23 @@ function renderOrganizationDirectory(directory) {
           (club) => `<div class="summary-item">
             <strong>${escapeHtml(club.name)}</strong>
             <p class="subtle">${escapeHtml(club.slug)}</p>
+            <p style="margin-top:6px;">${escapeHtml(
+              club.overrideSummary?.overrideCount
+                ? `${club.overrideSummary.overrideCount} override areas`
+                : "Fully inheriting organization defaults"
+            )}</p>
+            ${
+              Array.isArray(club.overrideSummary?.overriddenFields) &&
+              club.overrideSummary.overriddenFields.length
+                ? `<div class="badge-row" style="margin-top:8px;">
+                    ${club.overrideSummary.overriddenFields
+                      .map(
+                        (field) => `<span class="badge badge-good">${escapeHtml(field)}</span>`
+                      )
+                      .join("")}
+                  </div>`
+                : ""
+            }
           </div>`
         )
         .join("")
