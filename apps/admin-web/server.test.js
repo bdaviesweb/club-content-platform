@@ -295,6 +295,13 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Hermes suggested approver/);
     assert.match(body, /Preview club draft/);
     assert.match(body, /Clear club overrides/);
+    assert.match(body, /Inherit this area/);
+    assert.match(body, /data-reset-area-label="Default approver"/);
+    assert.match(body, /data-reset-area-fields="[^"]*defaultApproverRole[^"]*"/);
+    assert.match(body, /data-reset-area-label="Routing rule"/);
+    assert.match(body, /data-reset-area-fields="[^"]*routingRuleApproverVideo[^"]*"/);
+    assert.match(body, /data-reset-area-label="Notification rule"/);
+    assert.match(body, /data-reset-area-fields="[^"]*notificationRulePublishedPush[^"]*"/);
     assert.match(body, /Preview organization draft/);
     assert.match(body, /Club override/);
     assert.match(body, /Organization default/);

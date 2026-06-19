@@ -2099,13 +2099,27 @@ function renderPolicyField({
   label,
   name,
   input,
-  helper = ""
+  helper = "",
+  actionHtml = ""
 }) {
   return `<label class="form-field">
-    <span>${escapeHtml(label)}</span>
+    <span class="badge-row" style="justify-content:space-between; align-items:flex-start;">
+      <span>${escapeHtml(label)}</span>
+      ${actionHtml}
+    </span>
     ${input}
     ${helper ? `<small class="subtle">${escapeHtml(helper)}</small>` : ""}
   </label>`;
+}
+
+function renderPolicyAreaResetButton({ areaLabel, fieldNames = [], allowInheritance = false }) {
+  if (!allowInheritance || !fieldNames.length) {
+    return "";
+  }
+
+  return `<button type="button" class="quick-link" data-reset-area-fields="${escapeHtml(
+    JSON.stringify(fieldNames)
+  )}" data-reset-area-label="${escapeHtml(areaLabel)}">Inherit this area</button>`;
 }
 
 function renderPolicyRulePreview(label, value) {
@@ -3047,7 +3061,8 @@ function renderContentTypeRoleFields({
   helper,
   roleOptions,
   allowInheritance,
-  values = {}
+  values = {},
+  actionHtml = ""
 }) {
   const contentTypes = [
     { key: "photo", label: "Photo" },
@@ -3069,7 +3084,10 @@ function renderContentTypeRoleFields({
     .join("");
 
   return `<div class="form-field">
-    <span>${escapeHtml(label)}</span>
+    <span class="badge-row" style="justify-content:space-between; align-items:flex-start;">
+      <span>${escapeHtml(label)}</span>
+      ${actionHtml}
+    </span>
     ${helper ? `<small class="subtle">${escapeHtml(helper)}</small>` : ""}
     <div class="workflow-settings-grid">
       ${inputs}
@@ -3207,6 +3225,11 @@ function renderWorkflowPolicyForm({
         label: "Default approver",
         name: "defaultApproverRole",
         helper: allowInheritance ? "Leave blank to inherit the organization default." : "Used for normal internal submissions.",
+        actionHtml: renderPolicyAreaResetButton({
+          areaLabel: "Default approver",
+          fieldNames: ["defaultApproverRole"],
+          allowInheritance
+        }),
         input: `<select name="defaultApproverRole">${renderPolicySelectOptions(roleOptions, defaultApprover, {
           allowEmpty: allowInheritance,
           emptyLabel: "Inherit organization default"
@@ -3216,6 +3239,11 @@ function renderWorkflowPolicyForm({
         label: "Public post approver",
         name: "publicApproverRole",
         helper: allowInheritance ? "Used when a club override is needed for public visibility." : "Used when a submission targets public visibility.",
+        actionHtml: renderPolicyAreaResetButton({
+          areaLabel: "Public approver",
+          fieldNames: ["publicApproverRole"],
+          allowInheritance
+        }),
         input: `<select name="publicApproverRole">${renderPolicySelectOptions(roleOptions, publicApprover, {
           allowEmpty: allowInheritance,
           emptyLabel: "Inherit organization default"
@@ -3225,6 +3253,11 @@ function renderWorkflowPolicyForm({
         label: "Medium-risk approver",
         name: "mediumRiskApproverRole",
         helper: allowInheritance ? "Used when a club-specific medium-risk reviewer is needed." : "Used once the review score crosses the medium-risk threshold.",
+        actionHtml: renderPolicyAreaResetButton({
+          areaLabel: "Medium-risk approver",
+          fieldNames: ["mediumRiskApproverRole"],
+          allowInheritance
+        }),
         input: `<select name="mediumRiskApproverRole">${renderPolicySelectOptions(roleOptions, mediumRiskApprover, {
           allowEmpty: allowInheritance,
           emptyLabel: "Inherit organization default"
@@ -3234,6 +3267,11 @@ function renderWorkflowPolicyForm({
         label: "Agent routing",
         name: "allowAgentRouting",
         helper: allowInheritance ? "Choose inherit to follow the organization setting." : "Allows Hermes to override the local fallback approver role.",
+        actionHtml: renderPolicyAreaResetButton({
+          areaLabel: "Agent routing",
+          fieldNames: ["allowAgentRouting"],
+          allowInheritance
+        }),
         input: `<select name="allowAgentRouting">${renderPolicySelectOptions(booleanOptions, allowAgentRouting === null || allowAgentRouting === undefined ? null : String(Boolean(allowAgentRouting)), {
           allowEmpty: allowInheritance,
           emptyLabel: "Inherit organization default"
@@ -3243,6 +3281,11 @@ function renderWorkflowPolicyForm({
         label: "Low-risk internal auto-approval",
         name: "autoApproveInternalLowRisk",
         helper: allowInheritance ? "Choose inherit to fall back to the organization rule." : "Allows low-risk internal posts to skip human review.",
+        actionHtml: renderPolicyAreaResetButton({
+          areaLabel: "Low-risk internal auto-approval",
+          fieldNames: ["autoApproveInternalLowRisk"],
+          allowInheritance
+        }),
         input: `<select name="autoApproveInternalLowRisk">${renderPolicySelectOptions(booleanOptions, autoApproveInternalLowRisk === null || autoApproveInternalLowRisk === undefined ? null : String(Boolean(autoApproveInternalLowRisk)), {
           allowEmpty: allowInheritance,
           emptyLabel: "Inherit organization default"
@@ -3252,12 +3295,25 @@ function renderWorkflowPolicyForm({
         label: "Auto-approve max risk",
         name: "autoApproveMaxRisk",
         helper: allowInheritance ? "Leave blank to inherit the organization threshold." : "Set the maximum risk score allowed for auto-approval.",
+        actionHtml: renderPolicyAreaResetButton({
+          areaLabel: "Auto-approve max risk",
+          fieldNames: ["autoApproveMaxRisk"],
+          allowInheritance
+        }),
         input: `<input name="autoApproveMaxRisk" type="number" min="0" max="1" step="0.01" value="${escapeHtml(autoApproveMaxRisk)}" placeholder="${allowInheritance ? "Inherit organization threshold" : "0.35"}" />`
       })}
       ${renderPolicyField({
         label: "Auto-approve only these content types",
         name: "autoApprovalAllowedContentTypes",
         helper: "Comma-separated content types. Leave blank to allow any content type that passes the risk threshold.",
+        actionHtml: renderPolicyAreaResetButton({
+          areaLabel: "Auto-approval rule",
+          fieldNames: [
+            "autoApprovalAllowedContentTypes",
+            "autoApprovalBlockedContentTypes"
+          ],
+          allowInheritance
+        }),
         input: `<input name="autoApprovalAllowedContentTypes" type="text" value="${escapeHtml(autoApprovalAllowedContentTypes)}" placeholder="photo, text" />`
       })}
       ${renderPolicyField({
@@ -3273,13 +3329,32 @@ function renderWorkflowPolicyForm({
         helper: allowInheritance ? "Set club-specific overrides by content type, or leave fields blank to inherit the organization routing rule." : "Override the normal visibility and risk-based approver for a specific content type.",
         roleOptions,
         allowInheritance,
-        values: routingContentTypeApprovers
+        values: routingContentTypeApprovers,
+        actionHtml: renderPolicyAreaResetButton({
+          areaLabel: "Routing rule",
+          fieldNames: [
+            "routingRuleApproverPhoto",
+            "routingRuleApproverVideo",
+            "routingRuleApproverText",
+            "routingRuleApproverMixed"
+          ],
+          allowInheritance
+        })
       })}
       ${renderPolicyRulePreview("Routing rule", routingRule)}
       ${renderPolicyField({
         label: "Second approval for public posts",
         name: "approvalRuleRequireSecondApproval",
         helper: allowInheritance ? "Leave blank to inherit the organization approval chain." : "Require a second reviewer before public content is published.",
+        actionHtml: renderPolicyAreaResetButton({
+          areaLabel: "Approval rule",
+          fieldNames: [
+            "approvalRuleRequireSecondApproval",
+            "approvalRuleSecondApproverRole",
+            "approvalRuleSecondApprovalContentTypes"
+          ],
+          allowInheritance
+        }),
         input: `<select name="approvalRuleRequireSecondApproval">${renderPolicySelectOptions(booleanOptions, approvalRuleSecondApproval, {
           allowEmpty: true,
           emptyLabel: allowInheritance ? "Inherit organization rule" : "Leave unset"
@@ -3305,6 +3380,15 @@ function renderWorkflowPolicyForm({
         label: "Default publishing destinations",
         name: "publishingRuleDestinations",
         helper: "Comma-separated destination types used when no visibility-specific rule matches.",
+        actionHtml: renderPolicyAreaResetButton({
+          areaLabel: "Publishing rule",
+          fieldNames: [
+            "publishingRuleDestinations",
+            "publishingRuleInternalDestinations",
+            "publishingRulePublicDestinations"
+          ],
+          allowInheritance
+        }),
         input: `<input name="publishingRuleDestinations" type="text" value="${escapeHtml(publishingRuleDestinations)}" placeholder="internal_feed, booster_email" />`
       })}
       ${renderPolicyField({
@@ -3324,6 +3408,18 @@ function renderWorkflowPolicyForm({
         label: "Notification email channel",
         name: "notificationRuleEmail",
         helper: allowInheritance ? "Leave blank to inherit the organization default notification channel." : "Turns submission email updates on or off overall.",
+        actionHtml: renderPolicyAreaResetButton({
+          areaLabel: "Notification rule",
+          fieldNames: [
+            "notificationRuleEmail",
+            "notificationRulePush",
+            "notificationRuleReviewStartedEmail",
+            "notificationRuleReviewStartedPush",
+            "notificationRulePublishedEmail",
+            "notificationRulePublishedPush"
+          ],
+          allowInheritance
+        }),
         input: `<select name="notificationRuleEmail">${renderPolicySelectOptions(booleanOptions, notificationRuleEmail, {
           allowEmpty: true,
           emptyLabel: allowInheritance ? "Inherit organization channel" : "Leave unset"
@@ -5078,6 +5174,37 @@ async function renderWorkflowSettingsPage(
         }
       }
 
+      function resetPolicyArea(form, fieldNames, areaLabel) {
+        const status = form.querySelector('[data-policy-status]');
+        const actorEmail = form.querySelector('[name="actorEmail"]');
+
+        fieldNames.forEach((fieldName) => {
+          const field = form.querySelector('[name="' + CSS.escape(fieldName) + '"]');
+          if (!field) {
+            return;
+          }
+
+          if (field.tagName === 'SELECT') {
+            field.value = '';
+            return;
+          }
+
+          if (field.type === 'number' || field.type === 'text' || field.type === 'email') {
+            field.value = '';
+          }
+        });
+
+        if (actorEmail && !actorEmail.value.trim()) {
+          actorEmail.focus();
+        }
+
+        if (status) {
+          status.textContent =
+            areaLabel +
+            ' reset to inherit the organization default. Preview or save when ready.';
+        }
+      }
+
       document.querySelectorAll('.workflow-policy-form[data-scope-type]').forEach((form) => {
         form.addEventListener('submit', (event) => {
           event.preventDefault();
@@ -5102,6 +5229,23 @@ async function renderWorkflowSettingsPage(
             resetInheritedPolicyDraft(form);
           });
         }
+
+        form.querySelectorAll('[data-reset-area-fields]').forEach((button) => {
+          button.addEventListener('click', () => {
+            let fieldNames = [];
+            try {
+              fieldNames = JSON.parse(button.dataset.resetAreaFields || '[]');
+            } catch {
+              fieldNames = [];
+            }
+
+            resetPolicyArea(
+              form,
+              Array.isArray(fieldNames) ? fieldNames : [],
+              String(button.dataset.resetAreaLabel || 'This area')
+            );
+          });
+        });
       });
     </script>
   `, "Club Content Workflow Settings");
