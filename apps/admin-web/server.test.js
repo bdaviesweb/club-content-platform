@@ -1607,7 +1607,7 @@ test("GET /workflow-settings keeps changed club draft areas visible when preview
       })
     );
     const response = await originalFetch(
-      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&previewScopeType=club&previewDraftPolicy=${previewDraftPolicy}`
+      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&previewScopeType=club&previewDraftPolicy=${previewDraftPolicy}&simulationContentType=photo&simulationVisibilityTarget=internal&simulationRiskScore=0.19&simulationModerationFlagged=true&simulationAgentSuggestedApproverRole=club_admin`
     );
     const body = await response.text();
 
@@ -1624,6 +1624,7 @@ test("GET /workflow-settings keeps changed club draft areas visible when preview
     assert.match(body, /This draft does not add any new club-specific exceptions\./);
     assert.match(body, /This draft does not remove any existing club-specific exceptions\./);
     assert.match(body, /No existing exceptions are being carried forward in this draft\./);
+    assert.match(body, /Reset to live policy[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise((resolve, reject) =>
@@ -2117,6 +2118,7 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
     assert.match(body, /Review notification rule across clubs/);
     assert.match(body, /Review public approver rollout[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
     assert.match(body, /Open Westside policy stack[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
+    assert.match(body, /Reset to live policy[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise((resolve, reject) =>

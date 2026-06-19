@@ -2894,9 +2894,10 @@ function renderPolicySimulator({
         <p class="subtle">This simulation is using the unsaved values from the ${escapeHtml(
           previewContext.scopeType
         )} policy form. Save when you are satisfied, or use the reset link to return to the live policy.</p>
-        <p style="margin-top:10px;"><a class="quick-link" href="/workflow-settings?clubSlug=${encodeURIComponent(
-          clubSlug
-        )}">Reset to live policy</a></p>
+        <p style="margin-top:10px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
+          clubSlug,
+          simulationInput
+        })}">Reset to live policy</a></p>
       </div>`
     : "";
   const riskWarnings = previewContext
