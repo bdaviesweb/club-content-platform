@@ -4398,6 +4398,9 @@ function renderWorkflowSaveSummary(
     const changedAreaCount = Number(saveSummary.changedAreaCount || 0);
     const currentOverrideAreaCount = Number(saveSummary.currentOverrideAreaCount || 0);
     const projectedOverrideAreaCount = Number(saveSummary.projectedOverrideAreaCount || 0);
+    const changedAreas = (saveSummary.changedAreaKeys || [])
+      .map((key) => trackedPolicyAreaFields.find((area) => area.key === key) || null)
+      .filter(Boolean);
     const addedAreas = (saveSummary.addedAreaKeys || [])
       .map((key) => trackedPolicyAreaFields.find((area) => area.key === key) || null)
       .filter(Boolean);
@@ -4465,6 +4468,23 @@ function renderWorkflowSaveSummary(
         </div>
       </div>
       <div class="summary-stack" style="margin-top:16px;">
+        <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+          <strong>Changed policy areas</strong>
+          <div class="badge-row" style="margin-top:10px; align-items:flex-start;">
+            ${
+              changedAreas.length
+                ? changedAreas
+                    .map(
+                      (area) => `<span class="badge badge-info">${escapeHtml(
+                        area.label
+                      )}</span>`
+                    )
+                    .join("")
+                : `<span class="subtle">No changed club policy areas were captured for this save.</span>`
+            }
+          </div>
+          <p class="subtle" style="margin-top:8px;">This list shows what changed in the saved club layer, even when the club still lines up with the organization default afterward.</p>
+        </div>
         ${sections
           .map(
             (section) => `<div class="summary-item" style="background: rgba(255,255,255,0.68);">
