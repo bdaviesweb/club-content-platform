@@ -661,7 +661,14 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
                       previousValue: { email: true, push: true },
                       nextValue: { email: false, push: true }
                     }
-                  ]
+                  ],
+                  cleanupSummary: {
+                    areaKey: "notificationRule",
+                    clubs: [
+                      { slug: "eastside", name: "Eastside" },
+                      { slug: "westside", name: "Westside" }
+                    ]
+                  }
                 }
               }
             ]
@@ -798,6 +805,10 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /After: Club Admin|After: club_admin/);
     assert.match(body, /Before: \{&quot;email&quot;:true,&quot;push&quot;:true\}/);
     assert.match(body, /After: \{&quot;email&quot;:false,&quot;push&quot;:true\}/);
+    assert.match(body, /Cleanup staged into this save/);
+    assert.match(body, /Notification rule exceptions were cleared for 2 clubs as part of this organization update\./);
+    assert.match(body, /Review remaining notification rule exceptions/);
+    assert.match(body, /Review inheriting notification rule clubs/);
     assert.match(body, /clubSlug=westside[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin[\s\S]*?Open Westside policy stack/);
   } finally {
     globalThis.fetch = originalFetch;
@@ -3439,6 +3450,22 @@ test("POST /ui/workflow-policies/organizations/:slug/save-with-cleanup saves org
       body: init.body ? JSON.parse(init.body) : null
     });
 
+    if (String(url).endsWith("/organizations/metro")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubs: [
+              { slug: "eastside", name: "Eastside", overrideSummary: { overrideCount: 1, overriddenFields: ["Notification rule"] } },
+              { slug: "westside", name: "Westside", overrideSummary: { overrideCount: 1, overriddenFields: ["Notification rule"] } }
+            ],
+            admins: []
+          };
+        }
+      };
+    }
+
     if (String(url).endsWith("/workflow-policies/organizations/metro")) {
       return {
         ok: true,
@@ -3491,12 +3518,26 @@ test("POST /ui/workflow-policies/organizations/:slug/save-with-cleanup saves org
     assert.equal(body.ok, true);
     assert.deepEqual(calls, [
       {
+        url: "http://app-api:4000/organizations/metro",
+        method: "GET",
+        body: null
+      },
+      {
         url: "http://app-api:4000/workflow-policies/organizations/metro",
         method: "POST",
         body: {
           actorEmail: "org-admin@example.test",
           defaultApproverRole: "club_comms",
-          publicApproverRole: "club_admin"
+          publicApproverRole: "club_admin",
+          historyContext: {
+            cleanupSummary: {
+              areaKey: "notificationRule",
+              clubs: [
+                { slug: "eastside", name: "Eastside" },
+                { slug: "westside", name: "Westside" }
+              ]
+            }
+          }
         }
       },
       {

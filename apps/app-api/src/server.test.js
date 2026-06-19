@@ -698,7 +698,16 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
             public: ["internal_feed"]
           }
         },
-        notificationRule: { email: true, push: false }
+        notificationRule: { email: true, push: false },
+        historyContext: {
+          cleanupSummary: {
+            areaKey: "notificationRule",
+            clubs: [
+              { slug: "eastside", name: "Eastside" },
+              { slug: "westside", name: "Westside" }
+            ]
+          }
+        }
       })
     });
     const body = await response.json();
@@ -800,6 +809,13 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
         nextValue: { email: true, push: false }
       }
     ]);
+    assert.deepEqual(organizationAuditMetadata.cleanupSummary, {
+      areaKey: "notificationRule",
+      clubs: [
+        { slug: "eastside", name: "Eastside" },
+        { slug: "westside", name: "Westside" }
+      ]
+    });
   } finally {
     server.close();
     await once(server, "close");

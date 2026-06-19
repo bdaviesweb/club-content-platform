@@ -3777,6 +3777,23 @@ function renderPolicyHistoryCard(
           const changedFields = Array.isArray(item.metadata?.changedFields)
             ? item.metadata.changedFields
             : [];
+          const cleanupSummary =
+            item.metadata?.cleanupSummary &&
+            typeof item.metadata.cleanupSummary === "object" &&
+            !Array.isArray(item.metadata.cleanupSummary)
+              ? item.metadata.cleanupSummary
+              : null;
+          const cleanupAreaKey = String(cleanupSummary?.areaKey || "").trim();
+          const cleanupArea =
+            trackedPolicyAreaFields.find((area) => area.key === cleanupAreaKey) || null;
+          const cleanedClubs = Array.isArray(cleanupSummary?.clubs)
+            ? cleanupSummary.clubs
+                .map((club) => ({
+                  slug: String(club?.slug || "").trim(),
+                  name: String(club?.name || club?.slug || "").trim()
+                }))
+                .filter((club) => club.slug)
+            : [];
           const actorLabel = item.actorFullName || item.actorEmail || "Unknown actor";
           const actorEmailSuffix =
             item.actorFullName && item.actorEmail ? ` • ${item.actorEmail}` : "";
@@ -3871,6 +3888,50 @@ function renderPolicyHistoryCard(
                   .join("")}
               </div>`
             : "";
+          const cleanupSummaryCard =
+            cleanupArea && cleanedClubs.length
+              ? `<div class="summary-stack" style="margin-top:12px;">
+                  <div class="summary-item">
+                    <strong>Cleanup staged into this save</strong>
+                    <p class="subtle" style="margin-top:6px;">${escapeHtml(
+                      `${cleanupArea.label} exceptions were cleared for ${cleanedClubs.length} club${
+                        cleanedClubs.length === 1 ? "" : "s"
+                      } as part of this organization update.`
+                    )}</p>
+                    <div class="badge-row" style="margin-top:10px; align-items:flex-start;">
+                      ${cleanedClubs
+                        .map(
+                          (club) => `<span class="badge badge-good">${escapeHtml(
+                            club.name || club.slug
+                          )}</span>`
+                        )
+                        .join("")}
+                    </div>
+                    <div class="badge-row" style="margin-top:10px; align-items:flex-start;">
+                      <a class="quick-link" href="${buildWorkflowSettingsLink({
+                        clubSlug,
+                        clubView: "overrides",
+                        clubArea: cleanupArea.key,
+                        simulationInput,
+                        previewScopeType,
+                        previewDraftPolicy
+                      })}">Review remaining ${escapeHtml(
+                        cleanupArea.label.toLowerCase()
+                      )} exceptions</a>
+                      <a class="quick-link" href="${buildWorkflowSettingsLink({
+                        clubSlug,
+                        clubView: "inheriting",
+                        clubArea: cleanupArea.key,
+                        simulationInput,
+                        previewScopeType,
+                        previewDraftPolicy
+                      })}">Review inheriting ${escapeHtml(
+                        cleanupArea.label.toLowerCase()
+                      )} clubs</a>
+                    </div>
+                  </div>
+                </div>`
+              : "";
 
           return `<div class="summary-item">
             <div class="badge-row" style="justify-content:space-between; margin-bottom:6px;">
@@ -3889,6 +3950,7 @@ function renderPolicyHistoryCard(
             ${changedAreaBadges}
             ${organizationFollowUpLinks}
             ${changeDetailRows}
+            ${cleanupSummaryCard}
             ${followUpLink}
           </div>`;
         })
@@ -7199,13 +7261,47 @@ export function createAdminServer() {
           return;
         }
 
+        const cleanupClubs =
+          cleanupAreaKey && cleanupClubSlugs.length
+            ? (() => {
+                return fetchJson(`/organizations/${encodeURIComponent(organizationSlug)}`)
+                  .then((directory) => {
+                    const nameBySlug = new Map(
+                      (directory?.clubs || []).map((club) => [club.slug, club.name || club.slug])
+                    );
+
+                    return cleanupClubSlugs.map((slug) => ({
+                      slug,
+                      name: nameBySlug.get(slug) || slug
+                    }));
+                  })
+                  .catch(() =>
+                    cleanupClubSlugs.map((slug) => ({
+                      slug,
+                      name: slug
+                    }))
+                  );
+              })()
+            : Promise.resolve([]);
+        const resolvedCleanupClubs = await cleanupClubs;
         const { cleanupAreaKey: _cleanupAreaKey, cleanupClubSlugs: _cleanupClubSlugs, ...policyPayload } = body;
         const policyResult = await fetchJson(
           `/workflow-policies/organizations/${encodeURIComponent(organizationSlug)}`,
           {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify(policyPayload)
+            body: JSON.stringify({
+              ...policyPayload,
+              historyContext:
+                cleanupAreaKey && resolvedCleanupClubs.length
+                  ? {
+                      cleanupSummary: {
+                        areaKey: cleanupAreaKey,
+                        clubs: resolvedCleanupClubs
+                      }
+                    }
+                  : undefined
+            })
           }
         );
 

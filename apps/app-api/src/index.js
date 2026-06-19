@@ -565,6 +565,52 @@ async function handleGetOrganization(res, organizationSlug, { pool = getPool() }
   sendJson(res, 200, directory);
 }
 
+function normalizeWorkflowPolicyHistoryContext(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return null;
+  }
+
+  const cleanupSummary = input.cleanupSummary;
+
+  if (!cleanupSummary || typeof cleanupSummary !== "object" || Array.isArray(cleanupSummary)) {
+    return null;
+  }
+
+  const areaKey = String(cleanupSummary.areaKey || "").trim();
+  const clubs = Array.isArray(cleanupSummary.clubs)
+    ? cleanupSummary.clubs
+        .map((club) => {
+          if (!club || typeof club !== "object" || Array.isArray(club)) {
+            return null;
+          }
+
+          const slug = String(club.slug || "").trim();
+          const name = String(club.name || "").trim();
+
+          if (!slug) {
+            return null;
+          }
+
+          return {
+            slug,
+            name: name || slug
+          };
+        })
+        .filter(Boolean)
+    : [];
+
+  if (!areaKey || !clubs.length) {
+    return null;
+  }
+
+  return {
+    cleanupSummary: {
+      areaKey,
+      clubs
+    }
+  };
+}
+
 async function handleUpdateWorkflowPolicy(
   req,
   res,
@@ -573,7 +619,7 @@ async function handleUpdateWorkflowPolicy(
   { runInTransaction = withTransaction } = {}
 ) {
   const body = await readJson(req);
-  const { actorEmail, ...rawPatch } = body;
+  const { actorEmail, historyContext, ...rawPatch } = body;
 
   if (!actorEmail) {
     sendJson(res, 400, { error: "actorEmail is required" });
@@ -592,7 +638,8 @@ async function handleUpdateWorkflowPolicy(
       scopeType,
       scopeSlug,
       actorEmail,
-      patch: validation.value
+      patch: validation.value,
+      historyContext: normalizeWorkflowPolicyHistoryContext(historyContext)
     })
   );
 

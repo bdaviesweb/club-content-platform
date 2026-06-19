@@ -998,7 +998,7 @@ function buildChangedPolicyFieldDetails(previousPolicy, nextPolicy, changedField
 
 export async function updateWorkflowPolicyScope(
   client,
-  { scopeType, scopeSlug, actorEmail, patch }
+  { scopeType, scopeSlug, actorEmail, patch, historyContext = null }
 ) {
   const current = await loadWorkflowPolicyScope(client, { scopeType, scopeSlug });
 
@@ -1279,7 +1279,8 @@ export async function updateWorkflowPolicyScope(
           changedFields,
           changedFieldDetails,
           previousPolicy: currentOrganizationPolicy,
-          nextPolicy
+          nextPolicy,
+          ...(historyContext && typeof historyContext === "object" ? historyContext : {})
         })
       ]
     );
