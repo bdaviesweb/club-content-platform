@@ -196,6 +196,14 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
                   overrideCount: 2,
                   overriddenFields: ["Default approver", "Agent routing"]
                 }
+              },
+              {
+                slug: "eastside",
+                name: "Eastside",
+                overrideSummary: {
+                  overrideCount: 0,
+                  overriddenFields: []
+                }
               }
             ],
             admins: [
@@ -243,12 +251,18 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Changed: Approval Rule, Notification Rule/);
     assert.match(body, /Changed: Routing Rule/);
     assert.match(body, /Organization directory/);
+    assert.match(body, /Clubs with overrides/);
+    assert.match(body, /Fully inheriting/);
+    assert.match(body, /Clubs needing exception review/);
+    assert.match(body, /Clubs fully inheriting organization defaults/);
+    assert.match(body, /Most customized clubs appear first/);
     assert.match(body, /org-admin@westside.test/);
     assert.match(body, /2 override areas/);
-    assert.match(body, /Fully inheriting organization defaults|2 override areas/);
+    assert.match(body, /Fully inheriting organization defaults/);
     assert.match(body, /Default approver/);
     assert.match(body, /Agent routing/);
     assert.match(body, /Open Westside policy stack/);
+    assert.match(body, /Open Eastside policy stack/);
     assert.match(body, /Auto-approval rule/);
     assert.match(body, /Auto-approve only these content types/);
     assert.match(body, /Never auto-approve these content types/);

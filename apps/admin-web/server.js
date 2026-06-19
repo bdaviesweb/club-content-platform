@@ -3545,35 +3545,83 @@ function renderOrganizationDirectory(directory) {
     return "";
   }
 
-  const clubList = directory.clubs?.length
-    ? directory.clubs
-        .map(
-          (club) => `<div class="summary-item">
-            <strong>${escapeHtml(club.name)}</strong>
-            <p class="subtle">${escapeHtml(club.slug)}</p>
-            <p style="margin-top:6px;">${escapeHtml(
-              club.overrideSummary?.overrideCount
-                ? `${club.overrideSummary.overrideCount} override areas`
-                : "Fully inheriting organization defaults"
-            )}</p>
-            ${
-              Array.isArray(club.overrideSummary?.overriddenFields) &&
-              club.overrideSummary.overriddenFields.length
-                ? `<div class="badge-row" style="margin-top:8px;">
-                    ${club.overrideSummary.overriddenFields
-                      .map(
-                        (field) => `<span class="badge badge-good">${escapeHtml(field)}</span>`
-                      )
-                      .join("")}
-                  </div>`
-                : ""
-            }
-            <p style="margin-top:8px;"><a class="quick-link" href="/workflow-settings?clubSlug=${encodeURIComponent(
-              club.slug || ""
-            )}">Open ${escapeHtml(club.name)} policy stack</a></p>
-          </div>`
-        )
-        .join("")
+  const clubs = Array.isArray(directory.clubs) ? [...directory.clubs] : [];
+  const clubsWithOverrides = clubs
+    .filter((club) => Number(club.overrideSummary?.overrideCount || 0) > 0)
+    .sort(
+      (left, right) =>
+        Number(right.overrideSummary?.overrideCount || 0) -
+          Number(left.overrideSummary?.overrideCount || 0) ||
+        String(left.name || "").localeCompare(String(right.name || ""))
+    );
+  const fullyInheritedClubs = clubs
+    .filter((club) => Number(club.overrideSummary?.overrideCount || 0) === 0)
+    .sort((left, right) =>
+      String(left.name || "").localeCompare(String(right.name || ""))
+    );
+
+  function renderClubDirectoryItem(club) {
+    return `<div class="summary-item">
+      <strong>${escapeHtml(club.name)}</strong>
+      <p class="subtle">${escapeHtml(club.slug)}</p>
+      <p style="margin-top:6px;">${escapeHtml(
+        club.overrideSummary?.overrideCount
+          ? `${club.overrideSummary.overrideCount} override areas`
+          : "Fully inheriting organization defaults"
+      )}</p>
+      ${
+        Array.isArray(club.overrideSummary?.overriddenFields) &&
+        club.overrideSummary.overriddenFields.length
+          ? `<div class="badge-row" style="margin-top:8px;">
+              ${club.overrideSummary.overriddenFields
+                .map(
+                  (field) => `<span class="badge badge-good">${escapeHtml(field)}</span>`
+                )
+                .join("")}
+            </div>`
+          : ""
+      }
+      <p style="margin-top:8px;"><a class="quick-link" href="/workflow-settings?clubSlug=${encodeURIComponent(
+        club.slug || ""
+      )}">Open ${escapeHtml(club.name)} policy stack</a></p>
+    </div>`;
+  }
+
+  const clubList = clubs.length
+    ? `
+      <div class="topline" style="margin-bottom:14px;">
+        <div class="metric-card">
+          <span class="metric-label">Clubs with overrides</span>
+          <strong>${escapeHtml(String(clubsWithOverrides.length))}</strong>
+          <span class="subtle">Clubs still carrying custom policy</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Fully inheriting</span>
+          <strong>${escapeHtml(String(fullyInheritedClubs.length))}</strong>
+          <span class="subtle">Clubs aligned to the organization default</span>
+        </div>
+      </div>
+      <div class="summary-stack" style="margin-top:12px;">
+        <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+          <strong>Clubs needing exception review</strong>
+          <p class="subtle" style="margin-top:6px;">Most customized clubs appear first so you can clean up the biggest outliers quickly.</p>
+        </div>
+        ${
+          clubsWithOverrides.length
+            ? clubsWithOverrides.map(renderClubDirectoryItem).join("")
+            : `<p class="subtle">No clubs in this organization are carrying custom workflow policy right now.</p>`
+        }
+        <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+          <strong>Clubs fully inheriting organization defaults</strong>
+          <p class="subtle" style="margin-top:6px;">These clubs will follow organization-level rollout changes unless a new override is added.</p>
+        </div>
+        ${
+          fullyInheritedClubs.length
+            ? fullyInheritedClubs.map(renderClubDirectoryItem).join("")
+            : `<p class="subtle">Every club in this organization currently has at least one custom override.</p>`
+        }
+      </div>
+    `
     : `<p class="subtle">No clubs linked to this organization yet.</p>`;
 
   const adminList = directory.admins?.length
@@ -3599,7 +3647,7 @@ function renderOrganizationDirectory(directory) {
     <div class="footer-panels" style="margin-top:0;">
       <div class="panel" style="background: rgba(255,255,255,0.72);">
         <h3>Clubs in this organization</h3>
-        <div class="summary-stack" style="margin-top:12px;">${clubList}</div>
+        ${clubList}
       </div>
       <div class="panel" style="background: rgba(255,255,255,0.72);">
         <h3>Organization admins</h3>
