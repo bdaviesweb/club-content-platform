@@ -1217,6 +1217,13 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
     assert.match(body, /Westside/);
     assert.match(body, /2 impacted areas/);
     assert.match(body, /Inherited from this org draft: Public approver, Notification rule/);
+    assert.match(body, /Review public approver rollout/);
+    assert.match(body, /Review notification rule rollout/);
+    assert.match(body, /clubView=overrides/);
+    assert.match(body, /clubArea=publicApproverRole/);
+    assert.match(body, /clubArea=notificationRule/);
+    assert.match(body, /previewScopeType=organization/);
+    assert.match(body, /previewDraftPolicy=/);
     assert.match(body, /Open Westside policy stack/);
     assert.match(body, /Affects 1 club/);
     assert.match(body, /data-preview-affected-club-count="1"/);

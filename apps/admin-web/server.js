@@ -3426,6 +3426,34 @@ function buildOrganizationOverrideAreaSummary(clubs = []) {
     );
 }
 
+function buildWorkflowSettingsLink({
+  clubSlug = "",
+  clubView = null,
+  clubArea = null,
+  previewScopeType = null,
+  previewDraftPolicy = null
+} = {}) {
+  const params = new URLSearchParams();
+
+  if (clubSlug) {
+    params.set("clubSlug", clubSlug);
+  }
+  if (clubView) {
+    params.set("clubView", clubView);
+  }
+  if (clubArea) {
+    params.set("clubArea", clubArea);
+  }
+  if (previewScopeType) {
+    params.set("previewScopeType", previewScopeType);
+  }
+  if (previewDraftPolicy) {
+    params.set("previewDraftPolicy", previewDraftPolicy);
+  }
+
+  return `/workflow-settings?${params.toString()}`;
+}
+
 function buildOrganizationDraftImpact({
   organizationPolicy,
   previewOrganizationPolicy,
@@ -3463,7 +3491,8 @@ function renderOrganizationDraftImpactSummary({
   previewScopeType,
   organizationPolicy,
   previewOrganizationPolicy,
-  organizationDirectory
+  organizationDirectory,
+  selectedClubSlug = ""
 }) {
   if (previewScopeType !== "organization") {
     return "";
@@ -3498,6 +3527,21 @@ function renderOrganizationDraftImpactSummary({
           const impactCopy = club.impactedAreas.length
             ? `${club.impactedAreas.length} impacted area${club.impactedAreas.length === 1 ? "" : "s"}`
             : "Insulated by club overrides";
+          const impactAreaLinks = club.impactedAreas.length
+            ? `<div class="badge-row" style="margin-top:10px;">
+                ${club.impactedAreas
+                  .map(
+                    (area) => `<a class="quick-link" href="${buildWorkflowSettingsLink({
+                      clubSlug: selectedClubSlug,
+                      clubView: "overrides",
+                      clubArea: area.key,
+                      previewScopeType: "organization",
+                      previewDraftPolicy: JSON.stringify(previewOrganizationPolicy || {})
+                    })}">Review ${escapeHtml(area.label.toLowerCase())} rollout</a>`
+                  )
+                  .join("")}
+              </div>`
+            : "";
 
           return `<div class="summary-item">
             <div class="badge-row" style="justify-content:space-between; margin-bottom:6px;">
@@ -3515,9 +3559,10 @@ function renderOrganizationDraftImpactSummary({
                     .join(", ")}`
                 : "This club already overrides every changed organization area."
             )}</p>
-            <p style="margin-top:8px;"><a class="quick-link" href="/workflow-settings?clubSlug=${encodeURIComponent(
-              club.slug || ""
-            )}">Open ${escapeHtml(club.name)} policy stack</a></p>
+            ${impactAreaLinks}
+            <p style="margin-top:8px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
+              clubSlug: club.slug || ""
+            })}">Open ${escapeHtml(club.name)} policy stack</a></p>
           </div>`;
         })
         .join("")
@@ -3631,15 +3676,11 @@ function renderOrganizationDirectory(
   const areaSummary = buildOrganizationOverrideAreaSummary(clubsWithOverrides);
 
   function buildDirectoryLinkParams(nextClubArea, nextClubView = "overrides") {
-    const params = new URLSearchParams();
-    if (selectedClubSlug) {
-      params.set("clubSlug", selectedClubSlug);
-    }
-    params.set("clubView", nextClubView);
-    if (nextClubArea && nextClubArea !== "all") {
-      params.set("clubArea", nextClubArea);
-    }
-    return params.toString();
+    return buildWorkflowSettingsLink({
+      clubSlug: selectedClubSlug,
+      clubView: nextClubView,
+      clubArea: nextClubArea !== "all" ? nextClubArea : null
+    }).replace("/workflow-settings?", "");
   }
 
   function renderClubDirectoryItem(club) {
@@ -3968,7 +4009,8 @@ async function renderWorkflowSettingsPage(
       previewScopeType,
       organizationPolicy,
       previewOrganizationPolicy,
-      organizationDirectory
+      organizationDirectory,
+      selectedClubSlug
     })}
     ${renderClubOverrideSummary({
       clubPolicy: previewClubPolicy,
