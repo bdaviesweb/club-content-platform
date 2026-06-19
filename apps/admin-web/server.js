@@ -4365,6 +4365,12 @@ function renderOrganizationDraftImpactSummary({
                           <p class="subtle" style="margin-top:6px;">${escapeHtml(
                             `${item.club.name} ${group.verb} ${Math.abs(item.previewOverrideCount - item.liveOverrideCount)} override area${Math.abs(item.previewOverrideCount - item.liveOverrideCount) === 1 ? "" : "s"} under this draft.`
                           )}</p>
+                          <p style="margin-top:8px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
+                            clubSlug: item.club.slug || "",
+                            simulationInput,
+                            previewScopeType: "organization",
+                            previewDraftPolicy: JSON.stringify(previewOrganizationPolicy || {})
+                          })}">Open ${escapeHtml(item.club.name)} policy stack</a></p>
                         </div>`
                       )
                       .join("")
@@ -4683,6 +4689,14 @@ function renderWorkflowSaveSummary(
                       <p class="subtle" style="margin-top:6px;">${escapeHtml(
                         `${item.liveOverrideCount} -> ${item.previewOverrideCount} override areas`
                       )}</p>
+                      ${
+                        item.slug
+                          ? `<p style="margin-top:8px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
+                              clubSlug: item.slug,
+                              simulationInput
+                            })}">Open ${escapeHtml(item.name)} policy stack</a></p>`
+                          : ""
+                      }
                     </div>`
                   )
                   .join("")
@@ -5570,6 +5584,7 @@ async function renderWorkflowSettingsPage(
           previewScopeType === "organization"
             ? (overrideBurdenSummary?.clubsReducingOverrides || []).map((item) => ({
                 name: item.club.name,
+                slug: item.club.slug,
                 liveOverrideCount: item.liveOverrideCount,
                 previewOverrideCount: item.previewOverrideCount
               }))
@@ -5578,6 +5593,7 @@ async function renderWorkflowSettingsPage(
           previewScopeType === "organization"
             ? (overrideBurdenSummary?.clubsGainingOverrides || []).map((item) => ({
                 name: item.club.name,
+                slug: item.club.slug,
                 liveOverrideCount: item.liveOverrideCount,
                 previewOverrideCount: item.previewOverrideCount
               }))
@@ -5644,6 +5660,7 @@ async function renderWorkflowSettingsPage(
             .filter((item) => item && typeof item === 'object')
             .map((item) => ({
               name: String(item.name || '').trim(),
+              slug: String(item.slug || '').trim(),
               liveOverrideCount: Number(item.liveOverrideCount || 0),
               previewOverrideCount: Number(item.previewOverrideCount || 0)
             }))

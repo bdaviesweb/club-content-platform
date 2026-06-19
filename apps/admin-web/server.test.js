@@ -306,7 +306,7 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Agent routing/);
     assert.match(body, /Open Westside policy stack/);
     assert.match(body, /Open Eastside policy stack/);
-    assert.match(body, /Open Westside policy stack[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
+    assert.match(body, /clubSlug=westside[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin[\s\S]*?Open Westside policy stack/);
     assert.match(body, /Auto-approval rule/);
     assert.match(body, /Auto-approve only these content types/);
     assert.match(body, /Never auto-approve these content types/);
@@ -721,6 +721,7 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /Clubs that got simpler/);
     assert.match(body, /Westside/);
     assert.match(body, /7 -&gt; 5 override areas|7 -> 5 override areas/);
+    assert.match(body, /7 -&gt; 5 override areas[\s\S]*?Open Westside policy stack/);
     assert.match(body, /Clubs that got more complex/);
     assert.match(body, /No clubs gained override burden from this save\./);
     assert.match(body, /Remaining exception cleanup/);
@@ -743,6 +744,7 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /name="simulationAgentSuggestedApproverRole"[\s\S]*?<option value="club_admin" selected/);
     assert.match(body, /Review public approver exceptions[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
     assert.match(body, /Review public approver inheriting clubs[\s\S]*?clubView=inheriting[\s\S]*?clubArea=publicApproverRole[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
+    assert.match(body, /clubSlug=westside[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin[\s\S]*?Open Westside policy stack/);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise((resolve, reject) =>
@@ -2277,6 +2279,7 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
     assert.match(body, /Clubs reducing override burden/);
     assert.match(body, /Eastside reduces 2 override areas under this draft\./);
     assert.match(body, /2 -&gt; 0 override areas|2 -> 0 override areas/);
+    assert.match(body, /2 -&gt; 0 override areas[\s\S]*?Open Eastside policy stack/);
     assert.match(body, /Clubs gaining override burden/);
     assert.match(body, /No clubs would gain new override burden from this draft\./);
     assert.match(body, /Exception cleanup priority/);
@@ -2311,7 +2314,8 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
     assert.match(body, /Review public approver across clubs/);
     assert.match(body, /Review notification rule across clubs/);
     assert.match(body, /Review public approver rollout[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
-    assert.match(body, /Open Westside policy stack[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
+    assert.match(body, /clubSlug=westside[\s\S]*?previewScopeType=organization[\s\S]*?previewDraftPolicy=[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin[\s\S]*?Open Westside policy stack/);
+    assert.match(body, /clubSlug=eastside[\s\S]*?previewScopeType=organization[\s\S]*?previewDraftPolicy=[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin[\s\S]*?Open Eastside policy stack/);
     assert.match(body, /Review approval rule exceptions[\s\S]*?previewScopeType=organization[\s\S]*?previewDraftPolicy=[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
     assert.match(body, /Reset to live policy[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
   } finally {
