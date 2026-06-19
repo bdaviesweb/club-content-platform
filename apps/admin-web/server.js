@@ -3835,6 +3835,40 @@ function buildOrganizationOverrideAreaSummary(clubs = []) {
     );
 }
 
+function buildOrganizationGovernanceSummary(clubs = []) {
+  const totalClubs = clubs.length;
+
+  return trackedPolicyAreaFields
+    .map((area) => {
+      const matchingClubs = clubs.filter((club) =>
+        Array.isArray(club.overrideSummary?.overriddenFields)
+          ? club.overrideSummary.overriddenFields.includes(area.label)
+          : false
+      );
+      const overrideClubCount = matchingClubs.length;
+      const posture =
+        overrideClubCount === 0
+          ? "Centralized"
+          : overrideClubCount === totalClubs && totalClubs > 0
+            ? "Club-defined"
+            : overrideClubCount >= Math.ceil(totalClubs / 2)
+              ? "Fragmented"
+              : "Watchlist";
+
+      return {
+        ...area,
+        overrideClubCount,
+        matchingClubs,
+        posture
+      };
+    })
+    .sort(
+      (left, right) =>
+        right.overrideClubCount - left.overrideClubCount ||
+        left.label.localeCompare(right.label)
+    );
+}
+
 function buildWorkflowSettingsLink({
   clubSlug = "",
   clubView = null,
@@ -4541,6 +4575,7 @@ function renderOrganizationDirectory(
   }
 
   const clubs = Array.isArray(directory.clubs) ? [...directory.clubs] : [];
+  const totalClubs = clubs.length;
   const normalizedClubView =
     clubView === "overrides" || clubView === "inheriting" ? clubView : "all";
   const areaOption = trackedPolicyAreaFields.find(({ key }) => key === clubArea) || null;
@@ -4569,6 +4604,7 @@ function renderOrganizationDirectory(
       String(left.name || "").localeCompare(String(right.name || ""))
     );
   const areaSummary = buildOrganizationOverrideAreaSummary(clubsWithOverrides);
+  const governanceSummary = buildOrganizationGovernanceSummary(clubs);
 
   function buildDirectoryLinkParams(nextClubArea, nextClubView = "overrides") {
     return buildWorkflowSettingsLink({
@@ -4645,6 +4681,45 @@ function renderOrganizationDirectory(
           }</span>
         </div>
       </div>
+      ${
+        governanceSummary.length
+          ? `<div class="summary-item" style="background: rgba(255,255,255,0.68); margin-bottom:12px;">
+              <strong>Governance watchlist</strong>
+              <p class="subtle" style="margin-top:6px;">Use this to see which policy areas are still centralized at the organization level and which are becoming club-by-club exceptions.</p>
+              <div class="summary-stack" style="margin-top:12px;">
+                ${governanceSummary
+                  .map(
+                    (area) => `<div class="summary-item">
+                      <div class="badge-row" style="justify-content:space-between; margin-bottom:6px;">
+                        <strong>${escapeHtml(area.label)}</strong>
+                        ${renderStatusBadge(area.posture, area.posture === "Centralized" ? "good" : area.posture === "Watchlist" ? "info" : "review")}
+                      </div>
+                      <p class="subtle" style="margin-top:6px;">${escapeHtml(
+                        area.overrideClubCount === 0
+                          ? "No clubs are overriding this area right now."
+                          : area.overrideClubCount === 1
+                            ? `1 of ${totalClubs} clubs is overriding this area.`
+                            : `${area.overrideClubCount} of ${totalClubs} clubs are overriding this area.`
+                      )}</p>
+                      <p class="subtle" style="margin-top:6px;">${escapeHtml(
+                        area.matchingClubs.length
+                          ? area.matchingClubs.map((club) => club.name).join(", ")
+                          : "Organization default is fully holding here."
+                      )}</p>
+                      <p style="margin-top:8px;"><a class="quick-link" href="/workflow-settings?${buildDirectoryLinkParams(
+                        area.key
+                      )}">${
+                        area.overrideClubCount
+                          ? `Review ${escapeHtml(area.label.toLowerCase())} exceptions`
+                          : `Review ${escapeHtml(area.label.toLowerCase())} alignment`
+                      }</a></p>
+                    </div>`
+                  )
+                  .join("")}
+              </div>
+            </div>`
+          : ""
+      }
       ${
         normalizedClubView !== "inheriting" && areaSummary.length
           ? `<div class="summary-item" style="background: rgba(255,255,255,0.68); margin-bottom:12px;">

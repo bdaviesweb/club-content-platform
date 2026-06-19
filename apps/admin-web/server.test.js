@@ -1060,6 +1060,15 @@ test("GET /workflow-settings summarizes override hotspots by policy area", async
     const body = await response.text();
 
     assert.equal(response.status, 200);
+    assert.match(body, /Governance watchlist/);
+    assert.match(body, /which policy areas are still centralized at the organization level/);
+    assert.match(body, /Fragmented/);
+    assert.match(body, /2 of 3 clubs are overriding this area\./);
+    assert.match(body, /Watchlist/);
+    assert.match(body, /1 of 3 clubs is overriding this area\./);
+    assert.match(body, /Centralized/);
+    assert.match(body, /No clubs are overriding this area right now\./);
+    assert.match(body, /Review public approver alignment/);
     assert.match(body, /Policy area hotspots/);
     assert.match(body, /Default approver/);
     assert.match(body, /2 clubs overriding this area/);
