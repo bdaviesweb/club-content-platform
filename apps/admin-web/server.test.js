@@ -1162,6 +1162,14 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
                   overrideCount: 2,
                   overriddenFields: ["Default approver", "Agent routing"]
                 }
+              },
+              {
+                slug: "eastside",
+                name: "Eastside",
+                overrideSummary: {
+                  overrideCount: 2,
+                  overriddenFields: ["Public approver", "Notification rule"]
+                }
               }
             ],
             admins: []
@@ -1228,6 +1236,12 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
     assert.match(body, /Affects 1 club/);
     assert.match(body, /data-preview-affected-club-count="1"/);
     assert.match(body, /data-preview-changed-area-count="2"/);
+    assert.match(body, /Eastside/);
+    assert.match(body, /No inherited change/);
+    assert.match(body, /This club already overrides every changed organization area: Public approver, Notification rule\./);
+    assert.match(body, /Review public approver shielding override/);
+    assert.match(body, /Review notification rule shielding override/);
+    assert.match(body, /Open Eastside policy stack/);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise((resolve, reject) =>

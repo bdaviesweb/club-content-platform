@@ -3542,6 +3542,21 @@ function renderOrganizationDraftImpactSummary({
                   .join("")}
               </div>`
             : "";
+          const insulatedAreaLinks = !club.impactedAreas.length && club.insulatedAreas.length
+            ? `<div class="badge-row" style="margin-top:10px;">
+                ${club.insulatedAreas
+                  .map(
+                    (area) => `<a class="quick-link" href="${buildWorkflowSettingsLink({
+                      clubSlug: selectedClubSlug,
+                      clubView: "overrides",
+                      clubArea: area.key,
+                      previewScopeType: "organization",
+                      previewDraftPolicy: JSON.stringify(previewOrganizationPolicy || {})
+                    })}">Review ${escapeHtml(area.label.toLowerCase())} shielding override</a>`
+                  )
+                  .join("")}
+              </div>`
+            : "";
 
           return `<div class="summary-item">
             <div class="badge-row" style="justify-content:space-between; margin-bottom:6px;">
@@ -3557,9 +3572,12 @@ function renderOrganizationDraftImpactSummary({
                 ? `Inherited from this org draft: ${club.impactedAreas
                     .map((area) => area.label)
                     .join(", ")}`
-                : "This club already overrides every changed organization area."
+                : `This club already overrides every changed organization area: ${club.insulatedAreas
+                    .map((area) => area.label)
+                    .join(", ")}.`
             )}</p>
             ${impactAreaLinks}
+            ${insulatedAreaLinks}
             <p style="margin-top:8px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
               clubSlug: club.slug || ""
             })}">Open ${escapeHtml(club.name)} policy stack</a></p>
