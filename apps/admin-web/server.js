@@ -3358,22 +3358,22 @@ function renderPolicyHistorySection({ organizationHistory, clubHistory }) {
   </section>`;
 }
 
-function buildClubOverrideSummary({ clubPolicy = {}, organizationPolicy = {} }) {
-  const trackedFields = [
-    { key: "defaultApproverRole", label: "Default approver" },
-    { key: "publicApproverRole", label: "Public approver" },
-    { key: "mediumRiskApproverRole", label: "Medium-risk approver" },
-    { key: "allowAgentRouting", label: "Agent routing" },
-    { key: "autoApproveInternalLowRisk", label: "Low-risk internal auto-approval" },
-    { key: "autoApproveMaxRisk", label: "Auto-approve max risk" },
-    { key: "autoApprovalRule", label: "Auto-approval rule" },
-    { key: "routingRule", label: "Routing rule" },
-    { key: "approvalRule", label: "Approval rule" },
-    { key: "publishingRule", label: "Publishing rule" },
-    { key: "notificationRule", label: "Notification rule" }
-  ];
+const trackedPolicyAreaFields = [
+  { key: "defaultApproverRole", label: "Default approver" },
+  { key: "publicApproverRole", label: "Public approver" },
+  { key: "mediumRiskApproverRole", label: "Medium-risk approver" },
+  { key: "allowAgentRouting", label: "Agent routing" },
+  { key: "autoApproveInternalLowRisk", label: "Low-risk internal auto-approval" },
+  { key: "autoApproveMaxRisk", label: "Auto-approve max risk" },
+  { key: "autoApprovalRule", label: "Auto-approval rule" },
+  { key: "routingRule", label: "Routing rule" },
+  { key: "approvalRule", label: "Approval rule" },
+  { key: "publishingRule", label: "Publishing rule" },
+  { key: "notificationRule", label: "Notification rule" }
+];
 
-  const overridden = trackedFields.filter(({ key }) => {
+function buildClubOverrideSummary({ clubPolicy = {}, organizationPolicy = {} }) {
+  const overridden = trackedPolicyAreaFields.filter(({ key }) => {
     const clubValue = clubPolicy?.[key];
     const orgValue = organizationPolicy?.[key];
 
@@ -3385,10 +3385,120 @@ function buildClubOverrideSummary({ clubPolicy = {}, organizationPolicy = {} }) 
   });
 
   return {
-    total: trackedFields.length,
+    total: trackedPolicyAreaFields.length,
     overridden,
-    inheritedCount: trackedFields.length - overridden.length
+    inheritedCount: trackedPolicyAreaFields.length - overridden.length
   };
+}
+
+function listChangedPolicyAreas({ livePolicy = {}, previewPolicy = {} }) {
+  return trackedPolicyAreaFields.filter(({ key }) => {
+    return JSON.stringify(livePolicy?.[key] ?? null) !== JSON.stringify(previewPolicy?.[key] ?? null);
+  });
+}
+
+function renderOrganizationDraftImpactSummary({
+  previewScopeType,
+  organizationPolicy,
+  previewOrganizationPolicy,
+  organizationDirectory
+}) {
+  if (previewScopeType !== "organization") {
+    return "";
+  }
+
+  const changedAreas = listChangedPolicyAreas({
+    livePolicy: organizationPolicy?.organizationPolicy || {},
+    previewPolicy: previewOrganizationPolicy || {}
+  });
+
+  if (!changedAreas.length) {
+    return `<section class="panel">
+      <div class="section-header">
+        <div>
+          <div class="eyebrow">Organization rollout impact</div>
+          <h2>No club rollout impact detected yet</h2>
+          <p class="subtle" style="margin-top:8px;">This organization draft does not currently change any top-level policy area from the live organization default.</p>
+        </div>
+      </div>
+    </section>`;
+  }
+
+  const clubImpacts = (organizationDirectory?.clubs || []).map((club) => {
+    const overriddenFields = Array.isArray(club.overrideSummary?.overriddenFields)
+      ? club.overrideSummary.overriddenFields
+      : [];
+    const impactedAreas = changedAreas.filter(
+      (area) => !overriddenFields.includes(area.label)
+    );
+
+    return {
+      ...club,
+      impactedAreas,
+      insulatedAreas: changedAreas.filter((area) => overriddenFields.includes(area.label))
+    };
+  });
+
+  const affectedClubs = clubImpacts.filter((club) => club.impactedAreas.length);
+  const insulatedClubs = clubImpacts.filter((club) => !club.impactedAreas.length);
+
+  const clubRows = clubImpacts.length
+    ? clubImpacts
+        .map((club) => {
+          const impactCopy = club.impactedAreas.length
+            ? `${club.impactedAreas.length} impacted area${club.impactedAreas.length === 1 ? "" : "s"}`
+            : "Insulated by club overrides";
+
+          return `<div class="summary-item">
+            <div class="badge-row" style="justify-content:space-between; margin-bottom:6px;">
+              <strong>${escapeHtml(club.name)}</strong>
+              ${renderStatusBadge(
+                club.impactedAreas.length ? impactCopy : "No inherited change",
+                club.impactedAreas.length ? "review" : "good"
+              )}
+            </div>
+            <p class="subtle">${escapeHtml(club.slug)}</p>
+            <p style="margin-top:6px;">${escapeHtml(
+              club.impactedAreas.length
+                ? `Inherited from this org draft: ${club.impactedAreas
+                    .map((area) => area.label)
+                    .join(", ")}`
+                : "This club already overrides every changed organization area."
+            )}</p>
+          </div>`;
+        })
+        .join("")
+    : `<p class="subtle">No clubs are linked to this organization yet.</p>`;
+
+  return `<section class="panel">
+    <div class="section-header">
+      <div>
+        <div class="eyebrow">Organization rollout impact</div>
+        <h2>Which clubs this organization draft will change</h2>
+        <p class="subtle" style="margin-top:8px;">This preview compares the live organization default against the unsaved organization draft and maps the changed areas onto each club's override footprint.</p>
+      </div>
+    </div>
+    <div class="topline">
+      <div class="metric-card">
+        <span class="metric-label">Changed org areas</span>
+        <strong>${escapeHtml(String(changedAreas.length))}</strong>
+        <span class="subtle">${escapeHtml(changedAreas.map((area) => area.label).join(", "))}</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Clubs affected</span>
+        <strong>${escapeHtml(String(affectedClubs.length))}</strong>
+        <span class="subtle">Clubs inheriting at least one changed area</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Clubs insulated</span>
+        <strong>${escapeHtml(String(insulatedClubs.length))}</strong>
+        <span class="subtle">Clubs already overriding every changed area</span>
+      </div>
+    </div>
+    <div class="summary-stack" style="margin-top:16px;">
+      ${clubRows}
+    </div>
+  </section>`;
 }
 
 function renderClubOverrideSummary({ clubPolicy = {}, organizationPolicy = {} }) {
@@ -3601,6 +3711,12 @@ async function renderWorkflowSettingsPage(
     ${renderPolicyHistorySection({
       organizationHistory,
       clubHistory
+    })}
+    ${renderOrganizationDraftImpactSummary({
+      previewScopeType,
+      organizationPolicy,
+      previewOrganizationPolicy,
+      organizationDirectory
     })}
     ${renderClubOverrideSummary({
       clubPolicy: previewClubPolicy,
