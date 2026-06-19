@@ -3310,6 +3310,12 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
     assert.match(body, /override areas[\s\S]*?Open Eastside policy stack/);
     assert.match(body, /Clubs gaining override burden/);
     assert.match(body, /No clubs would gain new override burden from this draft\./);
+    assert.match(body, /Inheritance cleanup opportunities in this draft/);
+    assert.match(body, /These clubs would still carry explicit values in changed organization areas even though those values already match this draft\./);
+    assert.match(body, /Matching this draft already: Public approver, Notification rule/);
+    assert.match(body, /Preview inheriting public approver/);
+    assert.match(body, /Preview inheriting notification rule/);
+    assert.match(body, /clubSlug=eastside[\s\S]*?previewScopeType=organization[\s\S]*?previewDraftPolicy=[\s\S]*?previewResetArea=publicApproverRole[\s\S]*?Preview inheriting public approver/);
     assert.match(body, /Exception cleanup priority/);
     assert.match(body, /Bulk cleanup by area/);
     assert.match(body, /These clubs still override at least one organization area changed by this draft/);
@@ -3525,6 +3531,7 @@ test("GET /workflow-settings stages bulk cleanup inside an organization draft pr
     assert.equal(response.status, 200);
     assert.match(body, /data-preview-cleanup-area-key="notificationRule"/);
     assert.match(body, /data-preview-cleanup-club-slugs="westside,eastside"/);
+    assert.doesNotMatch(body, /Inheritance cleanup opportunities in this draft/);
     assert.match(body, /Review notification rule exceptions/);
     assert.match(body, /Review inheriting notification rule clubs|Review notification rule inheriting clubs/);
   } finally {

@@ -5311,6 +5311,12 @@ function renderOrganizationDraftImpactSummary({
     clubPolicyMap,
     organizationPolicy: previewOrganizationPolicy || {}
   });
+  const inheritanceCleanupItems = buildOrganizationInheritanceCleanupItems({
+    clubs: organizationDirectory?.clubs || [],
+    changedAreas,
+    clubPolicyMap,
+    organizationPolicy: previewOrganizationPolicy || {}
+  });
 
   if (!changedAreas.length) {
     return `<section class="panel">
@@ -5544,6 +5550,65 @@ function renderOrganizationDraftImpactSummary({
       ${areaRows}
     </div>
     ${burdenDeltaRows ? `<div class="summary-stack" style="margin-top:16px;">${burdenDeltaRows}</div>` : ""}
+    ${
+      inheritanceCleanupItems.length
+        ? `<div class="summary-stack" style="margin-top:16px;">
+            <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+              <strong>Inheritance cleanup opportunities in this draft</strong>
+              <p class="subtle" style="margin-top:6px;">These clubs would still carry explicit values in changed organization areas even though those values already match this draft. Preview inheriting them before you save if you want the rollout to land with less exception sprawl.</p>
+            </div>
+            ${inheritanceCleanupItems
+              .map(
+                (item) => `<div class="summary-item">
+                  <div class="badge-row" style="justify-content:space-between; margin-bottom:6px;">
+                    <strong>${escapeHtml(item.club.name)}</strong>
+                    ${renderStatusBadge(
+                      `${item.matchingAreas.length} redundant area${
+                        item.matchingAreas.length === 1 ? "" : "s"
+                      }`,
+                      "info"
+                    )}
+                  </div>
+                  <p class="subtle">${escapeHtml(item.club.slug || "")}</p>
+                  <p style="margin-top:6px;">${escapeHtml(
+                    `Matching this draft already: ${item.matchingAreas
+                      .map((area) => area.label)
+                      .join(", ")}`
+                  )}</p>
+                  <div class="badge-row" style="margin-top:10px; align-items:flex-start;">
+                    ${item.matchingAreas
+                      .map(
+                        (area) => `<span class="badge badge-info">${escapeHtml(area.label)}</span>`
+                      )
+                      .join("")}
+                  </div>
+                  <div class="badge-row" style="margin-top:10px;">
+                    ${item.matchingAreas
+                      .map(
+                        (area) => `<a class="quick-link" href="${buildWorkflowSettingsLink({
+                          clubSlug: item.club.slug || "",
+                          previewResetArea: area.key,
+                          simulationInput,
+                          previewScopeType: "organization",
+                          previewDraftPolicy: JSON.stringify(previewOrganizationPolicy || {})
+                        })}${buildPolicyAreaAnchor(area.key)}">Preview inheriting ${escapeHtml(
+                          area.label.toLowerCase()
+                        )}</a>`
+                      )
+                      .join("")}
+                  </div>
+                  <p style="margin-top:8px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
+                    clubSlug: item.club.slug || "",
+                    simulationInput,
+                    previewScopeType: "organization",
+                    previewDraftPolicy: JSON.stringify(previewOrganizationPolicy || {})
+                  })}">Open ${escapeHtml(item.club.name)} policy stack</a></p>
+                </div>`
+              )
+              .join("")}
+          </div>`
+        : ""
+    }
     ${renderExceptionCleanupSummary({
       title: "Exception cleanup priority",
       subtitle:
