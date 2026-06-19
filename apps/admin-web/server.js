@@ -3404,6 +3404,28 @@ function listChangedPolicyAreas({ livePolicy = {}, previewPolicy = {} }) {
   });
 }
 
+function buildOrganizationOverrideAreaSummary(clubs = []) {
+  return trackedPolicyAreaFields
+    .map((area) => {
+      const clubsMatchingArea = clubs.filter((club) =>
+        Array.isArray(club.overrideSummary?.overriddenFields)
+          ? club.overrideSummary.overriddenFields.includes(area.label)
+          : false
+      );
+
+      return {
+        ...area,
+        clubCount: clubsMatchingArea.length,
+        clubNames: clubsMatchingArea.map((club) => club.name)
+      };
+    })
+    .filter((area) => area.clubCount > 0)
+    .sort(
+      (left, right) =>
+        right.clubCount - left.clubCount || left.label.localeCompare(right.label)
+    );
+}
+
 function buildOrganizationDraftImpact({
   organizationPolicy,
   previewOrganizationPolicy,
@@ -3568,7 +3590,12 @@ function renderClubOverrideSummary({ clubPolicy = {}, organizationPolicy = {} })
   </section>`;
 }
 
-function renderOrganizationDirectory(directory, clubView = "all", clubArea = "all") {
+function renderOrganizationDirectory(
+  directory,
+  clubView = "all",
+  clubArea = "all",
+  selectedClubSlug = ""
+) {
   if (!directory) {
     return "";
   }
@@ -3601,6 +3628,19 @@ function renderOrganizationDirectory(directory, clubView = "all", clubArea = "al
     .sort((left, right) =>
       String(left.name || "").localeCompare(String(right.name || ""))
     );
+  const areaSummary = buildOrganizationOverrideAreaSummary(clubsWithOverrides);
+
+  function buildDirectoryLinkParams(nextClubArea, nextClubView = "overrides") {
+    const params = new URLSearchParams();
+    if (selectedClubSlug) {
+      params.set("clubSlug", selectedClubSlug);
+    }
+    params.set("clubView", nextClubView);
+    if (nextClubArea && nextClubArea !== "all") {
+      params.set("clubArea", nextClubArea);
+    }
+    return params.toString();
+  }
 
   function renderClubDirectoryItem(club) {
     return `<div class="summary-item">
@@ -3669,6 +3709,34 @@ function renderOrganizationDirectory(directory, clubView = "all", clubArea = "al
           }</span>
         </div>
       </div>
+      ${
+        normalizedClubView !== "inheriting" && areaSummary.length
+          ? `<div class="summary-item" style="background: rgba(255,255,255,0.68); margin-bottom:12px;">
+              <strong>Policy area hotspots</strong>
+              <p class="subtle" style="margin-top:6px;">Use these counts to find the workflow area creating the most club-level exceptions.</p>
+              <div class="summary-stack" style="margin-top:12px;">
+                ${areaSummary
+                  .map(
+                    (area) => `<div class="summary-item">
+                      <strong>${escapeHtml(area.label)}</strong>
+                      <p class="subtle" style="margin-top:6px;">${escapeHtml(
+                        area.clubCount === 1
+                          ? "1 club overriding this area"
+                          : `${area.clubCount} clubs overriding this area`
+                      )}</p>
+                      <p class="subtle" style="margin-top:6px;">${escapeHtml(
+                        area.clubNames.join(", ")
+                      )}</p>
+                      <p style="margin-top:8px;"><a class="quick-link" href="/workflow-settings?${buildDirectoryLinkParams(
+                        area.key
+                      )}">Review ${escapeHtml(area.label.toLowerCase())} exceptions</a></p>
+                    </div>`
+                  )
+                  .join("")}
+              </div>
+            </div>`
+          : ""
+      }
       <div class="summary-stack" style="margin-top:12px;">
         ${
           normalizedClubView !== "inheriting"
@@ -3906,7 +3974,12 @@ async function renderWorkflowSettingsPage(
       clubPolicy: previewClubPolicy,
       organizationPolicy: previewOrganizationPolicy
     })}
-    ${renderOrganizationDirectory(organizationDirectory, clubView, clubArea)}
+    ${renderOrganizationDirectory(
+      organizationDirectory,
+      clubView,
+      clubArea,
+      selectedClubSlug
+    )}
     
 
     <section class="workflow-settings-grid">
