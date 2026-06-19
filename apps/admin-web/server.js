@@ -4488,17 +4488,23 @@ function renderWorkflowSaveSummary(
       {
         title: "New exceptions",
         items: addedAreas,
-        empty: "This save did not add any new club-specific exceptions."
+        empty: "This save did not add any new club-specific exceptions.",
+        linkVariant: "overrides",
+        actionLabel: "Review"
       },
       {
         title: "Exceptions removed",
         items: removedAreas,
-        empty: "This save did not remove any existing club-specific exceptions."
+        empty: "This save did not remove any existing club-specific exceptions.",
+        linkVariant: "inheriting",
+        actionLabel: "Review"
       },
       {
         title: "Exceptions retained",
         items: retainedAreas,
-        empty: "This save did not carry forward any existing club-specific exceptions."
+        empty: "This save did not carry forward any existing club-specific exceptions.",
+        linkVariant: "overrides",
+        actionLabel: "Review"
       }
     ];
 
@@ -4576,6 +4582,24 @@ function renderWorkflowSaveSummary(
                     : `<span class="subtle">${escapeHtml(section.empty)}</span>`
                 }
               </div>
+              ${
+                section.items.length
+                  ? `<div class="badge-row" style="margin-top:10px;">
+                      ${section.items
+                        .map(
+                          (area) => `<a class="quick-link" href="${buildWorkflowSettingsLink({
+                            clubSlug: saveSummary.clubSlug || "",
+                            clubView: section.linkVariant,
+                            clubArea: area.key,
+                            simulationInput
+                          })}">${escapeHtml(section.actionLabel)} ${escapeHtml(
+                            area.label.toLowerCase()
+                          )} ${section.linkVariant === "inheriting" ? "inheritance" : "exceptions"}</a>`
+                        )
+                        .join("")}
+                    </div>`
+                  : ""
+              }
             </div>`
           )
           .join("")}
@@ -4808,7 +4832,9 @@ function renderClubDraftOverrideImpactSummary({
   previewScopeType,
   organizationPolicy,
   liveClubPolicy,
-  previewClubPolicy
+  previewClubPolicy,
+  selectedClubSlug = "",
+  simulationInput = null
 }) {
   if (previewScopeType !== "club") {
     return "";
@@ -4827,17 +4853,20 @@ function renderClubDraftOverrideImpactSummary({
     {
       title: "New club exceptions",
       items: impact.added,
-      empty: "This draft does not add any new club-specific exceptions."
+      empty: "This draft does not add any new club-specific exceptions.",
+      linkVariant: "overrides"
     },
     {
       title: "Exceptions removed",
       items: impact.removed,
-      empty: "This draft does not remove any existing club-specific exceptions."
+      empty: "This draft does not remove any existing club-specific exceptions.",
+      linkVariant: "inheriting"
     },
     {
       title: "Exceptions retained",
       items: impact.retained,
-      empty: "No existing exceptions are being carried forward in this draft."
+      empty: "No existing exceptions are being carried forward in this draft.",
+      linkVariant: "overrides"
     }
   ];
 
@@ -4914,6 +4943,26 @@ function renderClubDraftOverrideImpactSummary({
                   : `<span class="subtle">${escapeHtml(section.empty)}</span>`
               }
             </div>
+            ${
+              section.items.length
+                ? `<div class="badge-row" style="margin-top:10px;">
+                    ${section.items
+                      .map(
+                        (field) => `<a class="quick-link" href="${buildWorkflowSettingsLink({
+                          clubSlug: selectedClubSlug,
+                          clubView: section.linkVariant,
+                          clubArea: field.key,
+                          previewScopeType: "club",
+                          previewDraftPolicy: JSON.stringify(previewClubPolicy || {}),
+                          simulationInput
+                        })}">Review ${escapeHtml(field.label.toLowerCase())} ${
+                          section.linkVariant === "inheriting" ? "inheritance" : "exceptions"
+                        }</a>`
+                      )
+                      .join("")}
+                  </div>`
+                : ""
+            }
           </div>`
         )
         .join("")}
@@ -5457,7 +5506,9 @@ async function renderWorkflowSettingsPage(
       previewScopeType,
       organizationPolicy: previewOrganizationPolicy,
       liveClubPolicy: clubPolicy.clubPolicy || {},
-      previewClubPolicy
+      previewClubPolicy,
+      selectedClubSlug,
+      simulationInput: normalizedSimulationInput
     })}
     ${renderOrganizationDirectory(
       organizationDirectory,

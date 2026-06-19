@@ -1452,6 +1452,9 @@ test("GET /workflow-settings renders a post-save club exception summary", async 
     assert.match(body, /Notification rule/);
     assert.match(body, /This save did not remove any existing club-specific exceptions\./);
     assert.match(body, /This save did not carry forward any existing club-specific exceptions\./);
+    assert.match(body, /Review agent routing exceptions/);
+    assert.match(body, /Review notification rule exceptions/);
+    assert.match(body, /Review agent routing exceptions[\s\S]*?clubView=overrides[\s\S]*?clubArea=allowAgentRouting[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
     assert.match(body, /Run the simulator below against this saved policy/);
     assert.match(body, /name="simulationContentType"[\s\S]*?<option value="photo" selected/);
     assert.match(body, /name="simulationVisibilityTarget"[\s\S]*?<option value="internal" selected/);
@@ -2033,6 +2036,10 @@ test("GET /workflow-settings previews unsaved club draft values in the simulator
     assert.match(body, /This routes to Team Manager from Routing Rule Content Type/);
     assert.match(body, /This goes through one human approval step before publishing/);
     assert.match(body, /Published email: Disabled \(Notification Policy Email Disabled\)/);
+    assert.match(body, /Review agent routing exceptions/);
+    assert.match(body, /Review notification rule exceptions/);
+    assert.match(body, /clubView=overrides[\s\S]*?clubArea=allowAgentRouting[\s\S]*?previewScopeType=club[\s\S]*?previewDraftPolicy=[\s\S]*?simulationContentType=video[\s\S]*?simulationVisibilityTarget=public[\s\S]*?simulationRiskScore=0\.2[\s\S]*?simulationModerationFlagged=false[\s\S]*?Review agent routing exceptions/);
+    assert.match(body, /clubView=overrides[\s\S]*?clubArea=notificationRule[\s\S]*?previewScopeType=club[\s\S]*?previewDraftPolicy=[\s\S]*?simulationContentType=video[\s\S]*?simulationVisibilityTarget=public[\s\S]*?simulationRiskScore=0\.2[\s\S]*?simulationModerationFlagged=false[\s\S]*?Review notification rule exceptions/);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise((resolve, reject) =>
