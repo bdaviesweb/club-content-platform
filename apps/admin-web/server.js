@@ -3980,6 +3980,7 @@ function renderPolicyHistoryCard(
   emptyLabel,
   {
     clubSlug = "",
+    historyView = null,
     organizationSlug = "",
     currentActorEmail = "",
     linkVariant = "stack",
@@ -4041,6 +4042,7 @@ function renderPolicyHistoryCard(
                       linkVariant === "organization"
                         ? buildWorkflowSettingsLink({
                             clubSlug,
+                            historyView,
                             clubView: "overrides",
                             clubArea: field,
                             simulationInput,
@@ -4049,6 +4051,7 @@ function renderPolicyHistoryCard(
                           })
                         : buildWorkflowSettingsLink({
                             clubSlug,
+                            historyView,
                             simulationInput,
                             previewScopeType,
                             previewDraftPolicy
@@ -4071,6 +4074,7 @@ function renderPolicyHistoryCard(
               ? `<p style="margin-top:10px;"><a class="quick-link" href="${escapeHtml(
                   buildWorkflowSettingsLink({
                     clubSlug,
+                    historyView,
                     simulationInput,
                     previewScopeType,
                     previewDraftPolicy
@@ -4085,6 +4089,7 @@ function renderPolicyHistoryCard(
                       const label = formatPolicyFieldLabel(field).toLowerCase();
                       return `<a class="quick-link" href="${buildWorkflowSettingsLink({
                         clubSlug,
+                        historyView,
                         clubView: "overrides",
                         clubArea: field,
                         simulationInput,
@@ -4093,6 +4098,7 @@ function renderPolicyHistoryCard(
                       })}">Review ${escapeHtml(label)} exceptions</a>
                       <a class="quick-link" href="${buildWorkflowSettingsLink({
                         clubSlug,
+                        historyView,
                         clubView: "inheriting",
                         clubArea: field,
                         simulationInput,
@@ -4143,6 +4149,7 @@ function renderPolicyHistoryCard(
                         detailRollbackPreviewPolicy
                           ? `<p style="margin-top:8px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
                               clubSlug,
+                              historyView,
                               previewScopeType:
                                 linkVariant === "organization" ? "organization" : "club",
                               previewDraftPolicy: JSON.stringify(detailRollbackPreviewPolicy),
@@ -4214,6 +4221,7 @@ function renderPolicyHistoryCard(
                     <div class="badge-row" style="margin-top:10px; align-items:flex-start;">
                       <a class="quick-link" href="${buildWorkflowSettingsLink({
                         clubSlug,
+                        historyView,
                         clubView: "overrides",
                         clubArea: cleanupArea.key,
                         simulationInput,
@@ -4224,6 +4232,7 @@ function renderPolicyHistoryCard(
                       )} exceptions</a>
                       <a class="quick-link" href="${buildWorkflowSettingsLink({
                         clubSlug,
+                        historyView,
                         clubView: "inheriting",
                         clubArea: cleanupArea.key,
                         simulationInput,
@@ -4261,6 +4270,7 @@ function renderPolicyHistoryCard(
               ? `<div class="badge-row" style="margin-top:10px; align-items:flex-start;">
                   <a class="quick-link" href="${buildWorkflowSettingsLink({
                     clubSlug,
+                    historyView,
                     previewScopeType:
                       linkVariant === "organization" ? "organization" : "club",
                     previewDraftPolicy: JSON.stringify(rollbackPreviewPolicy),
@@ -4401,6 +4411,7 @@ function renderPolicyHistorySection({
   organizationHistory,
   clubHistory,
   selectedClubSlug = "",
+  historyView = "all",
   organizationSlug = "",
   currentActorEmail = "",
   currentOrganizationPolicy = null,
@@ -4413,45 +4424,88 @@ function renderPolicyHistorySection({
     return "";
   }
 
+  const normalizedHistoryView =
+    historyView === "organization" || historyView === "club" ? historyView : "all";
+  const showOrganizationHistory = normalizedHistoryView === "all" || normalizedHistoryView === "organization";
+  const showClubHistory = normalizedHistoryView === "all" || normalizedHistoryView === "club";
+  const historySummaryCopy =
+    normalizedHistoryView === "organization"
+      ? "Showing organization history only."
+      : normalizedHistoryView === "club"
+        ? "Showing club history only."
+        : "Showing organization and club history together.";
+
+  function buildHistoryViewLink(nextHistoryView) {
+    return buildWorkflowSettingsLink({
+      clubSlug: selectedClubSlug,
+      historyView: nextHistoryView !== "all" ? nextHistoryView : null,
+      simulationInput,
+      previewScopeType,
+      previewDraftPolicy
+    });
+  }
+
   return `<section class="panel">
     <div class="section-header">
       <div>
         <div class="eyebrow">Policy history</div>
         <h2>Recent workflow policy changes</h2>
         <p class="subtle" style="margin-top:8px;">Use this to confirm who last changed the organization default or the club override layer.</p>
+        <p class="subtle" style="margin-top:8px;">${escapeHtml(historySummaryCopy)}</p>
+      </div>
+      <div class="badge-row" style="align-items:flex-start;">
+        <a class="${normalizedHistoryView === "all" ? "badge badge-info" : "quick-link"}" href="${buildHistoryViewLink(
+          "all"
+        )}">All history</a>
+        <a class="${normalizedHistoryView === "organization" ? "badge badge-info" : "quick-link"}" href="${buildHistoryViewLink(
+          "organization"
+        )}">Organization only</a>
+        <a class="${normalizedHistoryView === "club" ? "badge badge-info" : "quick-link"}" href="${buildHistoryViewLink(
+          "club"
+        )}">Club only</a>
       </div>
     </div>
     <div class="footer-panels" style="margin-top:0;">
-      ${renderPolicyHistoryCard(
-        "Organization changes",
-        organizationHistory,
-        "No organization policy changes recorded yet.",
-        {
-          clubSlug: selectedClubSlug,
-          organizationSlug,
-          currentActorEmail,
-          linkVariant: "organization",
-          currentPolicy: currentOrganizationPolicy,
-          simulationInput,
-          previewScopeType,
-          previewDraftPolicy
-        }
-      )}
-      ${renderPolicyHistoryCard(
-        "Club changes",
-        clubHistory,
-        "No club-specific policy changes recorded yet.",
-        {
-          clubSlug: selectedClubSlug,
-          organizationSlug,
-          currentActorEmail,
-          linkVariant: "club",
-          currentPolicy: currentClubPolicy,
-          simulationInput,
-          previewScopeType,
-          previewDraftPolicy
-        }
-      )}
+      ${
+        showOrganizationHistory
+          ? renderPolicyHistoryCard(
+              "Organization changes",
+              organizationHistory,
+              "No organization policy changes recorded yet.",
+              {
+                clubSlug: selectedClubSlug,
+                historyView: normalizedHistoryView,
+                organizationSlug,
+                currentActorEmail,
+                linkVariant: "organization",
+                currentPolicy: currentOrganizationPolicy,
+                simulationInput,
+                previewScopeType,
+                previewDraftPolicy
+              }
+            )
+          : ""
+      }
+      ${
+        showClubHistory
+          ? renderPolicyHistoryCard(
+              "Club changes",
+              clubHistory,
+              "No club-specific policy changes recorded yet.",
+              {
+                clubSlug: selectedClubSlug,
+                historyView: normalizedHistoryView,
+                organizationSlug,
+                currentActorEmail,
+                linkVariant: "club",
+                currentPolicy: currentClubPolicy,
+                simulationInput,
+                previewScopeType,
+                previewDraftPolicy
+              }
+            )
+          : ""
+      }
     </div>
   </section>`;
 }
@@ -4553,6 +4607,7 @@ function buildOrganizationGovernanceSummary(clubs = []) {
 
 function buildWorkflowSettingsLink({
   clubSlug = "",
+  historyView = null,
   clubView = null,
   clubArea = null,
   previewScopeType = null,
@@ -4566,6 +4621,9 @@ function buildWorkflowSettingsLink({
 
   if (clubSlug) {
     params.set("clubSlug", clubSlug);
+  }
+  if (historyView) {
+    params.set("historyView", historyView);
   }
   if (clubView) {
     params.set("clubView", clubView);
@@ -6879,6 +6937,7 @@ async function renderWorkflowSettingsPage(
   clubSlug,
   simulationInput = {},
   previewDraft = null,
+  historyView = "all",
   clubView = "all",
   clubArea = "all",
   saveSummary = null,
@@ -7140,6 +7199,7 @@ async function renderWorkflowSettingsPage(
       organizationHistory,
       clubHistory,
       selectedClubSlug,
+      historyView,
       organizationSlug,
       currentActorEmail: reviewerEmail,
       currentOrganizationPolicy: organizationPolicy?.organizationPolicy || null,
@@ -8190,7 +8250,7 @@ export function createAdminServer() {
         }, {
           scopeType: url.searchParams.get("previewScopeType"),
           payload: parsePreviewDraft(url.searchParams.get("previewDraftPolicy"))
-        }, url.searchParams.get("clubView"), url.searchParams.get("clubArea"), saveSummary, url.searchParams.get("previewResetArea"), url.searchParams.get("previewCleanupArea"), String(url.searchParams.get("previewCleanupClubs") || "").split(",").map((value) => value.trim()).filter(Boolean));
+        }, url.searchParams.get("historyView"), url.searchParams.get("clubView"), url.searchParams.get("clubArea"), saveSummary, url.searchParams.get("previewResetArea"), url.searchParams.get("previewCleanupArea"), String(url.searchParams.get("previewCleanupClubs") || "").split(",").map((value) => value.trim()).filter(Boolean));
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         res.end(html);
         return;
