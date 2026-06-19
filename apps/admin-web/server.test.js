@@ -201,12 +201,14 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Save organization policy/);
     assert.match(body, /Simulate a submission before it hits the queue/);
     assert.match(body, /Hermes suggested approver/);
+    assert.match(body, /Preview club draft/);
+    assert.match(body, /Preview organization draft/);
     assert.match(body, /Club override/);
     assert.match(body, /Organization default/);
     assert.match(body, /Blocked: video/);
-    assert.match(body, /Video -&gt; Club Admin/);
-    assert.match(body, /Public posts need second approval by Club Admin for video/);
-    assert.match(body, /Internal -&gt; internal_feed/);
+    assert.match(body, /Video -&gt; Team Manager/);
+    assert.match(body, /No second public approval requirement is active/);
+    assert.match(body, /Publishes to the internal feed by default/);
     assert.match(body, /Channels: email inherit\/default, push enabled/);
     assert.deepEqual(calls, [
       "http://app-api:4000/app/readiness",
@@ -214,6 +216,166 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
       "http://app-api:4000/workflow-policies/organizations/metro",
       "http://app-api:4000/organizations/metro"
     ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await new Promise((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))
+    );
+  }
+});
+
+test("GET /workflow-settings previews unsaved club draft values in the simulator", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith("/app/readiness")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            demo: {
+              clubSlug: "westside",
+              reviewerEmail: "comms@westside.test"
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/clubs/westside")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            club: { slug: "westside", name: "Westside" },
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubPolicy: {
+              defaultApproverRole: null,
+              publicApproverRole: null,
+              mediumRiskApproverRole: null,
+              allowAgentRouting: null,
+              autoApproveInternalLowRisk: null,
+              autoApproveMaxRisk: null,
+              autoApprovalRule: null,
+              routingRule: null,
+              approvalRule: null,
+              publishingRule: null,
+              notificationRule: null
+            },
+            effectivePolicy: {
+              defaultApproverRole: "team_manager",
+              publicApproverRole: "club_comms",
+              mediumRiskApproverRole: "club_comms",
+              allowAgentRouting: true,
+              autoApproveInternalLowRisk: false,
+              autoApproveMaxRisk: 0.35,
+              autoApprovalRule: {},
+              routingRule: {},
+              approvalRule: {
+                requireSecondApprovalForPublic: true,
+                secondApproverRole: "club_admin",
+                secondApprovalContentTypes: ["video"]
+              },
+              publishingRule: {
+                visibilityDestinations: {
+                  internal: ["internal_feed"],
+                  public: ["internal_feed"]
+                }
+              },
+              notificationRule: {
+                email: true,
+                push: true
+              }
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/organizations/metro")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "metro", name: "Metro Sports" },
+            organizationPolicy: {
+              defaultApproverRole: "team_manager",
+              publicApproverRole: "club_comms",
+              mediumRiskApproverRole: "club_comms",
+              allowAgentRouting: true,
+              autoApproveInternalLowRisk: false,
+              autoApproveMaxRisk: 0.35,
+              autoApprovalRule: {},
+              routingRule: {},
+              approvalRule: {
+                requireSecondApprovalForPublic: true,
+                secondApproverRole: "club_admin",
+                secondApprovalContentTypes: ["video"]
+              },
+              publishingRule: {
+                visibilityDestinations: {
+                  internal: ["internal_feed"],
+                  public: ["internal_feed"]
+                }
+              },
+              notificationRule: {
+                email: true,
+                push: true
+              }
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/organizations/metro")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubs: [{ slug: "westside", name: "Westside" }],
+            admins: []
+          };
+        }
+      };
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  };
+
+  const server = createAdminServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const address = server.address();
+    const previewDraftPolicy = encodeURIComponent(
+      JSON.stringify({
+        actorEmail: "comms@westside.test",
+        defaultApproverRole: null,
+        publicApproverRole: null,
+        mediumRiskApproverRole: null,
+        allowAgentRouting: false,
+        autoApproveInternalLowRisk: true,
+        autoApproveMaxRisk: 0.2,
+        autoApprovalRule: { allowedContentTypes: ["photo"] },
+        routingRule: { contentTypeApprovers: { video: "team_manager" } },
+        approvalRule: { requireSecondApprovalForPublic: false },
+        publishingRule: { destinations: ["internal_feed"] },
+        notificationRule: { email: false, push: true }
+      })
+    );
+    const response = await originalFetch(
+      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&simulationContentType=video&simulationVisibilityTarget=public&simulationRiskScore=0.2&simulationModerationFlagged=false&previewScopeType=club&previewDraftPolicy=${previewDraftPolicy}`
+    );
+    const body = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(body, /Previewing unsaved club draft/);
+    assert.match(body, /Previewing draft/);
+    assert.match(body, /This routes to Team Manager from Routing Rule Content Type/);
+    assert.match(body, /This goes through one human approval step before publishing/);
+    assert.match(body, /Published email: Disabled \(Notification Policy Email Disabled\)/);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise((resolve, reject) =>
@@ -337,10 +499,10 @@ test("GET /workflow-settings renders a simulated workflow outcome from the effec
     assert.equal(response.status, 200);
     assert.match(body, /Expected first approver/);
     assert.match(body, /Club Admin/);
-    assert.match(body, /Two approvals/);
-    assert.match(body, /This goes through primary review and then a second public approval/);
+    assert.match(body, /One approval/);
+    assert.match(body, /This goes through one human approval step before publishing/);
     assert.match(body, /If approved, this publishes to Internal Feed/);
-    assert.match(body, /Review started email: Disabled \(Notification Policy Email Event Disabled\)/);
+    assert.match(body, /Review started email: Enabled/);
     assert.match(body, /Published email: Enabled/);
   } finally {
     globalThis.fetch = originalFetch;

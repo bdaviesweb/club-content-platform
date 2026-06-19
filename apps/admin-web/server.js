@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import {
   choosePolicyApproverRole,
   choosePublishingPlan,
+  defaultWorkflowPolicy,
   describePolicyApproverSource,
   shouldAutoApproveSubmission,
   shouldRequireSecondApproval
@@ -2125,6 +2126,97 @@ function describePolicySource({ clubValue, organizationValue }) {
   return { label: "Platform default", tone: "neutral" };
 }
 
+function pickPolicyValue(overrideValue, fallbackValue, defaultValue) {
+  if (overrideValue !== null && overrideValue !== undefined) {
+    return overrideValue;
+  }
+
+  if (fallbackValue !== null && fallbackValue !== undefined) {
+    return fallbackValue;
+  }
+
+  return defaultValue;
+}
+
+function buildEffectivePolicyFromPolicies({
+  organizationPolicy = {},
+  clubPolicy = {}
+} = {}) {
+  return {
+    defaultApproverRole: pickPolicyValue(
+      clubPolicy.defaultApproverRole,
+      organizationPolicy.defaultApproverRole,
+      defaultWorkflowPolicy.defaultApproverRole
+    ),
+    publicApproverRole: pickPolicyValue(
+      clubPolicy.publicApproverRole,
+      organizationPolicy.publicApproverRole,
+      defaultWorkflowPolicy.publicApproverRole
+    ),
+    mediumRiskApproverRole: pickPolicyValue(
+      clubPolicy.mediumRiskApproverRole,
+      organizationPolicy.mediumRiskApproverRole,
+      defaultWorkflowPolicy.mediumRiskApproverRole
+    ),
+    allowAgentRouting: pickPolicyValue(
+      clubPolicy.allowAgentRouting,
+      organizationPolicy.allowAgentRouting,
+      defaultWorkflowPolicy.allowAgentRouting
+    ),
+    autoApproveInternalLowRisk: pickPolicyValue(
+      clubPolicy.autoApproveInternalLowRisk,
+      organizationPolicy.autoApproveInternalLowRisk,
+      defaultWorkflowPolicy.autoApproveInternalLowRisk
+    ),
+    autoApproveMaxRisk: pickPolicyValue(
+      clubPolicy.autoApproveMaxRisk,
+      organizationPolicy.autoApproveMaxRisk,
+      defaultWorkflowPolicy.autoApproveMaxRisk
+    ),
+    autoApprovalRule: pickPolicyValue(
+      clubPolicy.autoApprovalRule,
+      organizationPolicy.autoApprovalRule,
+      defaultWorkflowPolicy.autoApprovalRule
+    ),
+    routingRule: pickPolicyValue(
+      clubPolicy.routingRule,
+      organizationPolicy.routingRule,
+      defaultWorkflowPolicy.routingRule
+    ),
+    approvalRule: pickPolicyValue(
+      clubPolicy.approvalRule,
+      organizationPolicy.approvalRule,
+      defaultWorkflowPolicy.approvalRule
+    ),
+    publishingRule: pickPolicyValue(
+      clubPolicy.publishingRule,
+      organizationPolicy.publishingRule,
+      defaultWorkflowPolicy.publishingRule
+    ),
+    notificationRule: pickPolicyValue(
+      clubPolicy.notificationRule,
+      organizationPolicy.notificationRule,
+      defaultWorkflowPolicy.notificationRule
+    )
+  };
+}
+
+function parsePreviewDraft(rawValue) {
+  if (!rawValue) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 function summarizeContentTypeApprovers(rule = {}) {
   const approvers = rule?.contentTypeApprovers;
   if (!approvers || typeof approvers !== "object" || Array.isArray(approvers)) {
@@ -2355,7 +2447,12 @@ function describeNotificationResult(result) {
     : `Disabled (${formatLabel(result?.reason || "policy_disabled")})`;
 }
 
-function renderPolicySimulator({ effectivePolicy, simulationInput, clubSlug }) {
+function renderPolicySimulator({
+  effectivePolicy,
+  simulationInput,
+  clubSlug,
+  previewContext = null
+}) {
   if (!effectivePolicy) {
     return "";
   }
@@ -2412,6 +2509,20 @@ function renderPolicySimulator({ effectivePolicy, simulationInput, clubSlug }) {
   const publishSummary = `If approved, this publishes to ${publishingPlan.destinationTypes
     .map((destination) => formatLabel(destination))
     .join(", ")}.`;
+  const previewNotice = previewContext
+    ? `<div class="signal-card" style="margin-bottom:16px;">
+        <div class="badge-row" style="margin-bottom:10px;">
+          <strong>Previewing unsaved ${escapeHtml(previewContext.scopeType)} draft</strong>
+          ${renderStatusBadge("Draft only", "review")}
+        </div>
+        <p class="subtle">This simulation is using the unsaved values from the ${escapeHtml(
+          previewContext.scopeType
+        )} policy form. Save when you are satisfied, or use the reset link to return to the live policy.</p>
+        <p style="margin-top:10px;"><a class="quick-link" href="/workflow-settings?clubSlug=${encodeURIComponent(
+          clubSlug
+        )}">Reset to live policy</a></p>
+      </div>`
+    : "";
 
   return `<section class="panel" style="margin-top:18px;">
     <div class="section-header">
@@ -2423,6 +2534,7 @@ function renderPolicySimulator({ effectivePolicy, simulationInput, clubSlug }) {
         )} to preview routing, approval depth, publishing, and notification behavior.</p>
       </div>
     </div>
+    ${previewNotice}
 
     <form method="GET" action="/workflow-settings" class="workflow-policy-form">
       <input type="hidden" name="clubSlug" value="${escapeHtml(clubSlug)}" />
@@ -2620,7 +2732,8 @@ function renderWorkflowPolicyForm({
   subtitle,
   policy,
   actorEmail = "",
-  allowInheritance = false
+  allowInheritance = false,
+  previewScopeType = null
 }) {
   const roleOptions = [
     { value: "team_manager", label: "Team manager" },
@@ -2895,7 +3008,9 @@ function renderWorkflowPolicyForm({
       ${renderPolicyRulePreview("Notification rule", notificationRule)}
       <div class="policy-actions">
         <button type="submit" class="button-primary">Save ${escapeHtml(scopeType)} policy</button>
+        <button type="button" class="button-secondary" data-preview-policy>Preview ${escapeHtml(scopeType)} draft</button>
         <span class="subtle policy-status" data-policy-status>Ready</span>
+        ${previewScopeType === scopeType ? `<span class="badge badge-review">Previewing draft</span>` : ""}
       </div>
     </form>
   </section>`;
@@ -3061,7 +3176,11 @@ function renderOrganizationDirectory(directory) {
   </section>`;
 }
 
-async function renderWorkflowSettingsPage(clubSlug, simulationInput = {}) {
+async function renderWorkflowSettingsPage(
+  clubSlug,
+  simulationInput = {},
+  previewDraft = null
+) {
   const readiness = await fetchJson("/app/readiness");
   const selectedClubSlug = clubSlug || readiness?.demo?.clubSlug || "demo-soccer-club";
   const clubPolicy = await fetchJson(`/workflow-policies/clubs/${encodeURIComponent(selectedClubSlug)}`);
@@ -3073,6 +3192,26 @@ async function renderWorkflowSettingsPage(clubSlug, simulationInput = {}) {
     ? await fetchJson(`/organizations/${encodeURIComponent(organizationSlug)}`)
     : null;
   const reviewerEmail = readiness?.demo?.reviewerEmail || "comms@demo-club.local";
+  const previewScopeType =
+    previewDraft?.scopeType === "club" || previewDraft?.scopeType === "organization"
+      ? previewDraft.scopeType
+      : null;
+  const previewPayload =
+    previewDraft?.payload && typeof previewDraft.payload === "object" && !Array.isArray(previewDraft.payload)
+      ? previewDraft.payload
+      : null;
+  const previewOrganizationPolicy =
+    previewScopeType === "organization" && previewPayload
+      ? previewPayload
+      : organizationPolicy?.organizationPolicy || {};
+  const previewClubPolicy =
+    previewScopeType === "club" && previewPayload
+      ? previewPayload
+      : clubPolicy.clubPolicy || {};
+  const effectivePolicy = buildEffectivePolicyFromPolicies({
+    organizationPolicy: previewOrganizationPolicy,
+    clubPolicy: previewClubPolicy
+  });
 
   return layout(`
     <section class="hero">
@@ -3102,14 +3241,17 @@ async function renderWorkflowSettingsPage(clubSlug, simulationInput = {}) {
     </section>
 
     ${renderEffectivePolicySummary({
-      effectivePolicy: clubPolicy.effectivePolicy,
-      clubPolicy: clubPolicy.clubPolicy,
-      organizationPolicy: organizationPolicy?.organizationPolicy
+      effectivePolicy,
+      clubPolicy: previewClubPolicy,
+      organizationPolicy: previewOrganizationPolicy
     })}
     ${renderPolicySimulator({
-      effectivePolicy: clubPolicy.effectivePolicy,
+      effectivePolicy,
       simulationInput,
-      clubSlug: selectedClubSlug
+      clubSlug: selectedClubSlug,
+      previewContext: previewScopeType
+        ? { scopeType: previewScopeType }
+        : null
     })}
     ${renderOrganizationDirectory(organizationDirectory)}
 
@@ -3121,18 +3263,20 @@ async function renderWorkflowSettingsPage(clubSlug, simulationInput = {}) {
         subtitle: organizationSlug
           ? "These defaults apply across clubs unless a club override is set."
           : "This club does not currently belong to an organization.",
-        policy: organizationPolicy?.organizationPolicy || {},
+        policy: previewOrganizationPolicy,
         actorEmail: reviewerEmail,
-        allowInheritance: false
+        allowInheritance: false,
+        previewScopeType
       })}
       ${renderWorkflowPolicyForm({
         scopeType: "club",
         scopeSlug: selectedClubSlug,
         title: clubPolicy.club?.name || selectedClubSlug,
         subtitle: "Use club overrides only where this club needs different behavior from the organization default.",
-        policy: clubPolicy.clubPolicy || {},
+        policy: previewClubPolicy,
         actorEmail: reviewerEmail,
-        allowInheritance: true
+        allowInheritance: true,
+        previewScopeType
       })}
     </section>
 
@@ -3172,6 +3316,25 @@ async function renderWorkflowSettingsPage(clubSlug, simulationInput = {}) {
 
       function finalizeRuleObject(rule, allowBlankAsNull) {
         return Object.keys(rule).length ? rule : (allowBlankAsNull ? null : {});
+      }
+
+      function buildPolicyPayload(formData, allowInheritance) {
+        return {
+          actorEmail: String(formData.get('actorEmail') || '').trim(),
+          defaultApproverRole: parseOptionalRole(String(formData.get('defaultApproverRole') || '')),
+          publicApproverRole: parseOptionalRole(String(formData.get('publicApproverRole') || '')),
+          mediumRiskApproverRole: parseOptionalRole(String(formData.get('mediumRiskApproverRole') || '')),
+          allowAgentRouting: parseOptionalBoolean(String(formData.get('allowAgentRouting') || '')),
+          autoApproveInternalLowRisk: parseOptionalBoolean(String(formData.get('autoApproveInternalLowRisk') || '')),
+          autoApproveMaxRisk: String(formData.get('autoApproveMaxRisk') || '').trim() === ''
+            ? null
+            : Number(formData.get('autoApproveMaxRisk')),
+          autoApprovalRule: buildAutoApprovalRulePayload(formData, allowInheritance),
+          routingRule: buildRoutingRulePayload(formData, allowInheritance),
+          approvalRule: buildApprovalRulePayload(formData, allowInheritance),
+          publishingRule: buildPublishingRulePayload(formData, allowInheritance),
+          notificationRule: buildNotificationRulePayload(formData, allowInheritance)
+        };
       }
 
       function buildApprovalRulePayload(formData, allowBlankAsNull) {
@@ -3306,22 +3469,7 @@ async function renderWorkflowSettingsPage(clubSlug, simulationInput = {}) {
 
         let payload;
         try {
-          payload = {
-            actorEmail: String(formData.get('actorEmail') || '').trim(),
-            defaultApproverRole: parseOptionalRole(String(formData.get('defaultApproverRole') || '')),
-            publicApproverRole: parseOptionalRole(String(formData.get('publicApproverRole') || '')),
-            mediumRiskApproverRole: parseOptionalRole(String(formData.get('mediumRiskApproverRole') || '')),
-            allowAgentRouting: parseOptionalBoolean(String(formData.get('allowAgentRouting') || '')),
-            autoApproveInternalLowRisk: parseOptionalBoolean(String(formData.get('autoApproveInternalLowRisk') || '')),
-            autoApproveMaxRisk: String(formData.get('autoApproveMaxRisk') || '').trim() === ''
-              ? null
-              : Number(formData.get('autoApproveMaxRisk')),
-            autoApprovalRule: buildAutoApprovalRulePayload(formData, allowInheritance),
-            routingRule: buildRoutingRulePayload(formData, allowInheritance),
-            approvalRule: buildApprovalRulePayload(formData, allowInheritance),
-            publishingRule: buildPublishingRulePayload(formData, allowInheritance),
-            notificationRule: buildNotificationRulePayload(formData, allowInheritance)
-          };
+          payload = buildPolicyPayload(formData, allowInheritance);
         } catch (error) {
           status.textContent = 'Fix the policy fields before saving.';
           return;
@@ -3349,6 +3497,49 @@ async function renderWorkflowSettingsPage(clubSlug, simulationInput = {}) {
         window.location.reload();
       }
 
+      function previewPolicyDraft(form) {
+        const scopeType = form.dataset.scopeType;
+        const scopeSlug = form.dataset.scopeSlug;
+        const status = form.querySelector('[data-policy-status]');
+        const formData = new FormData(form);
+        const simulatorForm = document.querySelector('form[action="/workflow-settings"]:not([data-scope-type])');
+        const simulatorData = simulatorForm ? new FormData(simulatorForm) : new FormData();
+        const allowInheritance = scopeType === 'club';
+
+        if (!scopeSlug) {
+          if (status) {
+            status.textContent = 'This scope is not available for the selected club.';
+          }
+          return;
+        }
+
+        let payload;
+        try {
+          payload = buildPolicyPayload(formData, allowInheritance);
+        } catch (error) {
+          if (status) {
+            status.textContent = 'Fix the policy fields before previewing.';
+          }
+          return;
+        }
+
+        const params = new URLSearchParams();
+        params.set('clubSlug', String(simulatorData.get('clubSlug') || scopeSlug));
+        params.set('simulationContentType', String(simulatorData.get('simulationContentType') || 'video'));
+        params.set('simulationVisibilityTarget', String(simulatorData.get('simulationVisibilityTarget') || 'public'));
+        params.set('simulationRiskScore', String(simulatorData.get('simulationRiskScore') || '0.42'));
+        params.set('simulationModerationFlagged', String(simulatorData.get('simulationModerationFlagged') || 'false'));
+        if (String(simulatorData.get('simulationAgentSuggestedApproverRole') || '').trim()) {
+          params.set(
+            'simulationAgentSuggestedApproverRole',
+            String(simulatorData.get('simulationAgentSuggestedApproverRole') || '').trim()
+          );
+        }
+        params.set('previewScopeType', scopeType);
+        params.set('previewDraftPolicy', JSON.stringify(payload));
+        window.location.assign('/workflow-settings?' + params.toString());
+      }
+
       document.querySelectorAll('.workflow-policy-form[data-scope-type]').forEach((form) => {
         form.addEventListener('submit', (event) => {
           event.preventDefault();
@@ -3359,6 +3550,13 @@ async function renderWorkflowSettingsPage(clubSlug, simulationInput = {}) {
             }
           });
         });
+
+        const previewButton = form.querySelector('[data-preview-policy]');
+        if (previewButton) {
+          previewButton.addEventListener('click', () => {
+            previewPolicyDraft(form);
+          });
+        }
       });
     </script>
   `, "Club Content Workflow Settings");
@@ -3424,6 +3622,9 @@ export function createAdminServer() {
           riskScore: url.searchParams.get("simulationRiskScore"),
           moderationFlagged: url.searchParams.get("simulationModerationFlagged"),
           agentSuggestedApproverRole: url.searchParams.get("simulationAgentSuggestedApproverRole")
+        }, {
+          scopeType: url.searchParams.get("previewScopeType"),
+          payload: parsePreviewDraft(url.searchParams.get("previewDraftPolicy"))
         });
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         res.end(html);
