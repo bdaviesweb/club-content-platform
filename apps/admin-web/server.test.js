@@ -809,6 +809,11 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /Notification rule exceptions were cleared for 2 clubs as part of this organization update\./);
     assert.match(body, /Review remaining notification rule exceptions/);
     assert.match(body, /Review inheriting notification rule clubs/);
+    assert.match(body, /Current rollout state by changed area/);
+    assert.match(body, /Use this live view to confirm which clubs are now inheriting each saved organization area and which clubs are still insulating themselves with overrides\./);
+    assert.match(body, /1 inheriting \/ 1 insulated/);
+    assert.match(body, /Currently inheriting: Westside/);
+    assert.match(body, /Still insulated by overrides: Eastside/);
     assert.match(body, /clubSlug=westside[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin[\s\S]*?Open Westside policy stack/);
   } finally {
     globalThis.fetch = originalFetch;

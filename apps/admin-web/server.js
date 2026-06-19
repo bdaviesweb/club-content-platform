@@ -4975,6 +4975,112 @@ function renderOrganizationDraftImpactSummary({
   </section>`;
 }
 
+function buildLiveOrganizationAreaRolloutSummary({
+  organizationDirectory = null,
+  changedAreas = []
+}) {
+  const clubs = organizationDirectory?.clubs || [];
+
+  return changedAreas.map((area) => {
+    const inheritingClubs = [];
+    const insulatedClubs = [];
+
+    clubs.forEach((club) => {
+      const overriddenFields = Array.isArray(club.overrideSummary?.overriddenFields)
+        ? club.overrideSummary.overriddenFields
+        : [];
+
+      if (overriddenFields.includes(area.label)) {
+        insulatedClubs.push(club);
+      } else {
+        inheritingClubs.push(club);
+      }
+    });
+
+    return {
+      ...area,
+      inheritingClubs,
+      insulatedClubs
+    };
+  });
+}
+
+function renderCurrentOrganizationRolloutState({
+  organizationDirectory = null,
+  changedAreas = [],
+  selectedClubSlug = "",
+  simulationInput = null,
+  previewScopeType = null,
+  previewDraftPolicy = null,
+  title = "Current rollout state",
+  subtitle = "This is the live organization rollout state for the areas changed by the latest save."
+}) {
+  const items = buildLiveOrganizationAreaRolloutSummary({
+    organizationDirectory,
+    changedAreas
+  });
+
+  if (!items.length) {
+    return "";
+  }
+
+  return `<div class="summary-stack" style="margin-top:16px;">
+      <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+        <strong>${escapeHtml(title)}</strong>
+        <p class="subtle" style="margin-top:6px;">${escapeHtml(subtitle)}</p>
+      </div>
+      ${items
+        .map(
+          (area) => `<div class="summary-item">
+            <div class="badge-row" style="justify-content:space-between; margin-bottom:6px;">
+              <strong>${escapeHtml(area.label)}</strong>
+              ${renderStatusBadge(
+                `${area.inheritingClubs.length} inheriting / ${area.insulatedClubs.length} insulated`,
+                area.insulatedClubs.length ? "review" : "good"
+              )}
+            </div>
+            <p class="subtle">${
+              area.inheritingClubs.length
+                ? escapeHtml(
+                    `Currently inheriting: ${area.inheritingClubs
+                      .map((club) => club.name)
+                      .join(", ")}`
+                  )
+                : "No clubs are currently inheriting this area."
+            }</p>
+            <p class="subtle" style="margin-top:6px;">${
+              area.insulatedClubs.length
+                ? escapeHtml(
+                    `Still insulated by overrides: ${area.insulatedClubs
+                      .map((club) => club.name)
+                      .join(", ")}`
+                  )
+                : "No clubs are still insulating themselves from this area."
+            }</p>
+            <div class="badge-row" style="margin-top:10px; align-items:flex-start;">
+              <a class="quick-link" href="${buildWorkflowSettingsLink({
+                clubSlug: selectedClubSlug,
+                clubView: "overrides",
+                clubArea: area.key,
+                simulationInput,
+                previewScopeType,
+                previewDraftPolicy
+              })}">Review ${escapeHtml(area.label.toLowerCase())} exceptions</a>
+              <a class="quick-link" href="${buildWorkflowSettingsLink({
+                clubSlug: selectedClubSlug,
+                clubView: "inheriting",
+                clubArea: area.key,
+                simulationInput,
+                previewScopeType,
+                previewDraftPolicy
+              })}">Review ${escapeHtml(area.label.toLowerCase())} inheriting clubs</a>
+            </div>
+          </div>`
+        )
+        .join("")}
+    </div>`;
+}
+
 function renderWorkflowSaveSummary(
   saveSummary,
   organizationDirectory = null,
@@ -5409,6 +5515,15 @@ function renderWorkflowSaveSummary(
           </div>`
         : ""
     }
+    ${renderCurrentOrganizationRolloutState({
+      organizationDirectory,
+      changedAreas,
+      selectedClubSlug: saveSummary.clubSlug || "",
+      simulationInput,
+      title: "Current rollout state by changed area",
+      subtitle:
+        "Use this live view to confirm which clubs are now inheriting each saved organization area and which clubs are still insulating themselves with overrides."
+    })}
     <div class="summary-stack" style="margin-top:16px;">${burdenDeltaRows}</div>
     ${renderExceptionCleanupSummary({
       title: "Remaining exception cleanup",
