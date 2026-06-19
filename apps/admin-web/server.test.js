@@ -372,6 +372,16 @@ test("GET /workflow-settings previews unsaved club draft values in the simulator
 
     assert.equal(response.status, 200);
     assert.match(body, /Previewing unsaved club draft/);
+    assert.match(body, /What changes if you save this club draft/);
+    assert.match(body, /Live vs draft/);
+    assert.match(body, /First approver/);
+    assert.match(body, /No change/);
+    assert.match(body, /Approval path/);
+    assert.match(body, /Live[\s\S]*Two approvals/);
+    assert.match(body, /Draft[\s\S]*One approval/);
+    assert.match(body, /Published email/);
+    assert.match(body, /Live[\s\S]*Enabled/);
+    assert.match(body, /Draft[\s\S]*Disabled \(Notification Policy Email Disabled\)/);
     assert.match(body, /Previewing draft/);
     assert.match(body, /This routes to Team Manager from Routing Rule Content Type/);
     assert.match(body, /This goes through one human approval step before publishing/);

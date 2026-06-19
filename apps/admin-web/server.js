@@ -2447,10 +2447,81 @@ function describeNotificationResult(result) {
     : `Disabled (${formatLabel(result?.reason || "policy_disabled")})`;
 }
 
+function describeOutcomePath(outcome) {
+  if (outcome.autoApproval.allowed) {
+    return "Auto-approved";
+  }
+
+  if (outcome.secondApproval.required) {
+    return "Two approvals";
+  }
+
+  return "One approval";
+}
+
+function summarizeOutcomeForDiff(outcome) {
+  return {
+    approver: formatLabel(outcome.routingDecision.approverRole),
+    routing: formatRoutingSourceLabel(outcome.routingDecision.routingSource),
+    path: describeOutcomePath(outcome),
+    publishDestinations: outcome.publishingPlan.destinationTypes
+      .map((destination) => formatLabel(destination))
+      .join(", "),
+    publishedEmail: describeNotificationResult(outcome.publishedNotifications.email),
+    publishedPush: describeNotificationResult(outcome.publishedNotifications.push)
+  };
+}
+
+function renderOutcomeDiffRow(label, liveValue, draftValue) {
+  const changed = liveValue !== draftValue;
+  return `<div class="signal-card">
+    <div class="badge-row" style="justify-content:space-between; margin-bottom:10px;">
+      <strong>${escapeHtml(label)}</strong>
+      ${changed ? renderStatusBadge("Changed", "review") : renderStatusBadge("No change", "neutral")}
+    </div>
+    <div class="workflow-settings-grid" style="margin-top:0;">
+      <div>
+        <div class="metric-label">Live</div>
+        <p>${escapeHtml(liveValue)}</p>
+      </div>
+      <div>
+        <div class="metric-label">Draft</div>
+        <p>${escapeHtml(draftValue)}</p>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderOutcomeDiffCard({ liveOutcome, previewOutcome, previewScopeType }) {
+  if (!liveOutcome || !previewOutcome || !previewScopeType) {
+    return "";
+  }
+
+  const liveSummary = summarizeOutcomeForDiff(liveOutcome);
+  const previewSummary = summarizeOutcomeForDiff(previewOutcome);
+
+  return `<div class="signal-card" style="margin-bottom:16px;">
+    <div class="badge-row" style="margin-bottom:10px;">
+      <strong>What changes if you save this ${escapeHtml(previewScopeType)} draft</strong>
+      ${renderStatusBadge("Live vs draft", "info")}
+    </div>
+    <p class="subtle">Compare the current workflow outcome against the unsaved draft before you commit the policy change.</p>
+    <div class="signal-list" style="margin-top:14px;">
+      ${renderOutcomeDiffRow("First approver", liveSummary.approver, previewSummary.approver)}
+      ${renderOutcomeDiffRow("Routing source", liveSummary.routing, previewSummary.routing)}
+      ${renderOutcomeDiffRow("Approval path", liveSummary.path, previewSummary.path)}
+      ${renderOutcomeDiffRow("Publish destination", liveSummary.publishDestinations, previewSummary.publishDestinations)}
+      ${renderOutcomeDiffRow("Published email", liveSummary.publishedEmail, previewSummary.publishedEmail)}
+      ${renderOutcomeDiffRow("Published push", liveSummary.publishedPush, previewSummary.publishedPush)}
+    </div>
+  </div>`;
+}
+
 function renderPolicySimulator({
   effectivePolicy,
   simulationInput,
   clubSlug,
+  liveEffectivePolicy = null,
   previewContext = null
 }) {
   if (!effectivePolicy) {
@@ -2458,6 +2529,9 @@ function renderPolicySimulator({
   }
 
   const outcome = simulatePolicyOutcome(effectivePolicy, simulationInput);
+  const liveOutcome = liveEffectivePolicy
+    ? simulatePolicyOutcome(liveEffectivePolicy, simulationInput)
+    : null;
   const {
     simulation,
     routingDecision,
@@ -2523,6 +2597,13 @@ function renderPolicySimulator({
         )}">Reset to live policy</a></p>
       </div>`
     : "";
+  const outcomeDiffCard = previewContext
+    ? renderOutcomeDiffCard({
+        liveOutcome,
+        previewOutcome: outcome,
+        previewScopeType: previewContext.scopeType
+      })
+    : "";
 
   return `<section class="panel" style="margin-top:18px;">
     <div class="section-header">
@@ -2535,6 +2616,7 @@ function renderPolicySimulator({
       </div>
     </div>
     ${previewNotice}
+    ${outcomeDiffCard}
 
     <form method="GET" action="/workflow-settings" class="workflow-policy-form">
       <input type="hidden" name="clubSlug" value="${escapeHtml(clubSlug)}" />
@@ -3212,6 +3294,10 @@ async function renderWorkflowSettingsPage(
     organizationPolicy: previewOrganizationPolicy,
     clubPolicy: previewClubPolicy
   });
+  const liveEffectivePolicy = buildEffectivePolicyFromPolicies({
+    organizationPolicy: organizationPolicy?.organizationPolicy || {},
+    clubPolicy: clubPolicy.clubPolicy || {}
+  });
 
   return layout(`
     <section class="hero">
@@ -3247,6 +3333,7 @@ async function renderWorkflowSettingsPage(
     })}
     ${renderPolicySimulator({
       effectivePolicy,
+      liveEffectivePolicy,
       simulationInput,
       clubSlug: selectedClubSlug,
       previewContext: previewScopeType
