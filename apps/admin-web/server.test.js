@@ -853,6 +853,12 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /Published email disabled/);
     assert.match(body, /Published email coverage drops for 1 affected club that inherit this draft\./);
     assert.match(body, /clubView=inheriting[\s\S]*?clubArea=notificationRule[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin[\s\S]*?Review notification rule inheriting clubs/);
+    assert.match(body, /Rollout snapshot/);
+    assert.match(body, /This is the live club-level picture after the saved organization change\./);
+    assert.match(body, /Now following the saved default/);
+    assert.match(body, /Inherited areas: Public approver, Notification rule/);
+    assert.match(body, /Still blocking the rollout with overrides/);
+    assert.match(body, /Still insulated in: Public approver, Notification rule/);
     assert.match(body, /Latest recorded field changes/);
     assert.match(body, /These before-and-after values come from the latest recorded organization policy update\./);
     assert.match(body, /Simulated workflow trace for this save/);

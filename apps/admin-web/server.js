@@ -5343,6 +5343,53 @@ function buildLiveOrganizationAreaRolloutSummary({
   });
 }
 
+function buildLiveOrganizationRolloutSnapshot({
+  organizationDirectory = null,
+  changedAreas = []
+}) {
+  const areaSummaries = buildLiveOrganizationAreaRolloutSummary({
+    organizationDirectory,
+    changedAreas
+  });
+  const inheritingBySlug = new Map();
+  const insulatedBySlug = new Map();
+
+  areaSummaries.forEach((area) => {
+    area.inheritingClubs.forEach((club) => {
+      if (!club?.slug) {
+        return;
+      }
+      if (!inheritingBySlug.has(club.slug)) {
+        inheritingBySlug.set(club.slug, {
+          slug: club.slug,
+          name: club.name || club.slug,
+          areas: []
+        });
+      }
+      inheritingBySlug.get(club.slug).areas.push(area.label);
+    });
+
+    area.insulatedClubs.forEach((club) => {
+      if (!club?.slug) {
+        return;
+      }
+      if (!insulatedBySlug.has(club.slug)) {
+        insulatedBySlug.set(club.slug, {
+          slug: club.slug,
+          name: club.name || club.slug,
+          areas: []
+        });
+      }
+      insulatedBySlug.get(club.slug).areas.push(area.label);
+    });
+  });
+
+  return {
+    inheritingClubs: Array.from(inheritingBySlug.values()),
+    insulatedClubs: Array.from(insulatedBySlug.values())
+  };
+}
+
 function renderCurrentOrganizationRolloutState({
   organizationDirectory = null,
   changedAreas = [],
@@ -5738,6 +5785,57 @@ function renderWorkflowSaveSummary(
     saveSummary.changedAreaKeys || []
   );
   const simulationTrace = saveSummary.simulationTrace || null;
+  const rolloutSnapshot = buildLiveOrganizationRolloutSnapshot({
+    organizationDirectory,
+    changedAreas
+  });
+  const rolloutSnapshotCard =
+    rolloutSnapshot.inheritingClubs.length || rolloutSnapshot.insulatedClubs.length
+      ? `<div class="summary-stack" style="margin-top:16px;">
+          <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+            <strong>Rollout snapshot</strong>
+            <p class="subtle" style="margin-top:6px;">This is the live club-level picture after the saved organization change.</p>
+          </div>
+          <div class="summary-item" style="background: rgba(220, 252, 231, 0.62); border:1px solid rgba(22, 101, 52, 0.18);">
+            <strong>Now following the saved default</strong>
+            ${
+              rolloutSnapshot.inheritingClubs.length
+                ? `<div class="summary-stack" style="margin-top:12px;">
+                    ${rolloutSnapshot.inheritingClubs
+                      .map(
+                        (club) => `<div class="summary-item">
+                          <strong>${escapeHtml(club.name)}</strong>
+                          <p class="subtle" style="margin-top:6px;">${escapeHtml(
+                            `Inherited areas: ${club.areas.join(", ")}`
+                          )}</p>
+                        </div>`
+                      )
+                      .join("")}
+                  </div>`
+                : `<p class="subtle" style="margin-top:6px;">No clubs are currently inheriting the changed organization areas.</p>`
+            }
+          </div>
+          <div class="summary-item" style="background: rgba(255, 247, 237, 0.82); border:1px solid rgba(154, 52, 18, 0.16);">
+            <strong>Still blocking the rollout with overrides</strong>
+            ${
+              rolloutSnapshot.insulatedClubs.length
+                ? `<div class="summary-stack" style="margin-top:12px;">
+                    ${rolloutSnapshot.insulatedClubs
+                      .map(
+                        (club) => `<div class="summary-item">
+                          <strong>${escapeHtml(club.name)}</strong>
+                          <p class="subtle" style="margin-top:6px;">${escapeHtml(
+                            `Still insulated in: ${club.areas.join(", ")}`
+                          )}</p>
+                        </div>`
+                      )
+                      .join("")}
+                  </div>`
+                : `<p class="subtle" style="margin-top:6px;">No clubs are still insulating themselves from the changed organization areas.</p>`
+            }
+          </div>
+        </div>`
+      : "";
   const burdenDeltaRows = [
     {
       title: "Clubs that got simpler",
@@ -5877,6 +5975,7 @@ function renderWorkflowSaveSummary(
           </div>`
         : ""
     }
+    ${rolloutSnapshotCard}
     ${renderCurrentOrganizationRolloutState({
       organizationDirectory,
       changedAreas,
