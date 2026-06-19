@@ -3602,7 +3602,12 @@ function renderEffectivePolicySummary({
   </section>`;
 }
 
-function renderPolicyHistoryCard(title, history, emptyLabel) {
+function renderPolicyHistoryCard(
+  title,
+  history,
+  emptyLabel,
+  { clubSlug = "", linkVariant = "stack" } = {}
+) {
   const items = history?.items || [];
   const content = items.length
     ? items
@@ -3613,6 +3618,51 @@ function renderPolicyHistoryCard(title, history, emptyLabel) {
           const actorLabel = item.actorFullName || item.actorEmail || "Unknown actor";
           const actorEmailSuffix =
             item.actorFullName && item.actorEmail ? ` • ${item.actorEmail}` : "";
+          const changedAreaBadges = changedFields.length
+            ? `<div class="badge-row" style="margin-top:10px;">
+                ${changedFields
+                  .map((field) => {
+                    const label = formatPolicyFieldLabel(field);
+                    const href =
+                      linkVariant === "organization"
+                        ? buildWorkflowSettingsLink({
+                            clubSlug,
+                            clubView: "overrides",
+                            clubArea: field
+                          })
+                        : buildWorkflowSettingsLink({
+                            clubSlug
+                          });
+
+                    return `<a class="badge badge-info" href="${href}">${escapeHtml(
+                      label
+                    )}</a>`;
+                  })
+                  .join("")}
+              </div>`
+            : "";
+          const followUpCopy = changedFields.length
+            ? linkVariant === "organization"
+              ? "Review the changed organization areas across clubs."
+              : "Open the club stack to confirm whether these overrides should stay."
+            : "No changed-area detail was recorded for this update.";
+          const followUpLink = changedFields.length
+            ? `<p style="margin-top:10px;"><a class="quick-link" href="${escapeHtml(
+                linkVariant === "organization"
+                  ? buildWorkflowSettingsLink({
+                      clubSlug,
+                      clubView: "overrides",
+                      clubArea: changedFields[0]
+                    })
+                  : buildWorkflowSettingsLink({
+                      clubSlug
+                    })
+              )}">${escapeHtml(
+                linkVariant === "organization"
+                  ? `Review ${formatPolicyFieldLabel(changedFields[0]).toLowerCase()} exceptions`
+                  : "Open this club policy stack"
+              )}</a></p>`
+            : "";
 
           return `<div class="summary-item">
             <div class="badge-row" style="justify-content:space-between; margin-bottom:6px;">
@@ -3620,11 +3670,16 @@ function renderPolicyHistoryCard(title, history, emptyLabel) {
               <span class="subtle">${escapeHtml(formatRelativeTime(item.createdAt))}</span>
             </div>
             <p class="subtle">${escapeHtml(item.action || "workflow_policy.updated")}${escapeHtml(actorEmailSuffix)}</p>
-            <p style="margin-top:6px;">Changed: ${escapeHtml(
+            <p style="margin-top:6px;">Changed ${escapeHtml(
+              changedFields.length === 1 ? "1 area" : `${changedFields.length} areas`
+            )}: ${escapeHtml(
               changedFields.length
                 ? changedFields.map((field) => formatPolicyFieldLabel(field)).join(", ")
                 : "No field summary recorded"
             )}</p>
+            <p class="subtle" style="margin-top:8px;">${escapeHtml(followUpCopy)}</p>
+            ${changedAreaBadges}
+            ${followUpLink}
           </div>`;
         })
         .join("")
@@ -3636,7 +3691,11 @@ function renderPolicyHistoryCard(title, history, emptyLabel) {
   </div>`;
 }
 
-function renderPolicyHistorySection({ organizationHistory, clubHistory }) {
+function renderPolicyHistorySection({
+  organizationHistory,
+  clubHistory,
+  selectedClubSlug = ""
+}) {
   if (!organizationHistory && !clubHistory) {
     return "";
   }
@@ -3653,12 +3712,14 @@ function renderPolicyHistorySection({ organizationHistory, clubHistory }) {
       ${renderPolicyHistoryCard(
         "Organization changes",
         organizationHistory,
-        "No organization policy changes recorded yet."
+        "No organization policy changes recorded yet.",
+        { clubSlug: selectedClubSlug, linkVariant: "organization" }
       )}
       ${renderPolicyHistoryCard(
         "Club changes",
         clubHistory,
-        "No club-specific policy changes recorded yet."
+        "No club-specific policy changes recorded yet.",
+        { clubSlug: selectedClubSlug, linkVariant: "club" }
       )}
     </div>
   </section>`;
@@ -4703,7 +4764,8 @@ async function renderWorkflowSettingsPage(
     })}
     ${renderPolicyHistorySection({
       organizationHistory,
-      clubHistory
+      clubHistory,
+      selectedClubSlug
     })}
     ${renderOrganizationDraftImpactSummary({
       previewScopeType,

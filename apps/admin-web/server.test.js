@@ -253,8 +253,13 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Notification rule/);
     assert.match(body, /Organization changes/);
     assert.match(body, /Club changes/);
-    assert.match(body, /Changed: Approval Rule, Notification Rule/);
-    assert.match(body, /Changed: Routing Rule/);
+    assert.match(body, /Changed 2 areas: Approval Rule, Notification Rule/);
+    assert.match(body, /Changed 1 area: Routing Rule/);
+    assert.match(body, /Review the changed organization areas across clubs/);
+    assert.match(body, /Open the club stack to confirm whether these overrides should stay/);
+    assert.match(body, /Review approval rule exceptions/);
+    assert.match(body, /clubArea=approvalRule/);
+    assert.match(body, /Open this club policy stack/);
     assert.match(body, /Organization directory/);
     assert.match(body, /Clubs with overrides/);
     assert.match(body, /Fully inheriting/);
