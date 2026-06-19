@@ -3691,32 +3691,46 @@ function renderPolicyHistoryCard(
             : "";
           const followUpCopy = changedFields.length
             ? linkVariant === "organization"
-              ? "Review the changed organization areas across clubs."
+              ? "Review the changed organization areas across clubs, including both remaining exceptions and clubs inheriting the default."
               : "Open the club stack to confirm whether these overrides should stay."
             : "No changed-area detail was recorded for this update.";
-          const followUpLink = changedFields.length
-            ? `<p style="margin-top:10px;"><a class="quick-link" href="${escapeHtml(
-                linkVariant === "organization"
-                  ? buildWorkflowSettingsLink({
-                      clubSlug,
-                      clubView: "overrides",
-                      clubArea: changedFields[0],
-                      simulationInput,
-                      previewScopeType,
-                      previewDraftPolicy
+          const followUpLink =
+            changedFields.length && linkVariant !== "organization"
+              ? `<p style="margin-top:10px;"><a class="quick-link" href="${escapeHtml(
+                  buildWorkflowSettingsLink({
+                    clubSlug,
+                    simulationInput,
+                    previewScopeType,
+                    previewDraftPolicy
+                  })
+                )}">Open this club policy stack</a></p>`
+              : "";
+          const organizationFollowUpLinks =
+            changedFields.length && linkVariant === "organization"
+              ? `<div class="badge-row" style="margin-top:10px; align-items:flex-start;">
+                  ${changedFields
+                    .map((field) => {
+                      const label = formatPolicyFieldLabel(field).toLowerCase();
+                      return `<a class="quick-link" href="${buildWorkflowSettingsLink({
+                        clubSlug,
+                        clubView: "overrides",
+                        clubArea: field,
+                        simulationInput,
+                        previewScopeType,
+                        previewDraftPolicy
+                      })}">Review ${escapeHtml(label)} exceptions</a>
+                      <a class="quick-link" href="${buildWorkflowSettingsLink({
+                        clubSlug,
+                        clubView: "inheriting",
+                        clubArea: field,
+                        simulationInput,
+                        previewScopeType,
+                        previewDraftPolicy
+                      })}">Review ${escapeHtml(label)} inheriting clubs</a>`;
                     })
-                  : buildWorkflowSettingsLink({
-                      clubSlug,
-                      simulationInput,
-                      previewScopeType,
-                      previewDraftPolicy
-                    })
-              )}">${escapeHtml(
-                linkVariant === "organization"
-                  ? `Review ${formatPolicyFieldLabel(changedFields[0]).toLowerCase()} exceptions`
-                  : "Open this club policy stack"
-              )}</a></p>`
-            : "";
+                    .join("")}
+                </div>`
+              : "";
           const changeDetailRows = changedFieldDetails.length
             ? `<div class="summary-stack" style="margin-top:12px;">
                 ${changedFieldDetails
@@ -3750,6 +3764,7 @@ function renderPolicyHistoryCard(
             )}</p>
             <p class="subtle" style="margin-top:8px;">${escapeHtml(followUpCopy)}</p>
             ${changedAreaBadges}
+            ${organizationFollowUpLinks}
             ${changeDetailRows}
             ${followUpLink}
           </div>`;

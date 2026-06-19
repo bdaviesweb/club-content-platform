@@ -278,12 +278,15 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Club changes/);
     assert.match(body, /Changed 2 areas: Approval Rule, Notification Rule/);
     assert.match(body, /Changed 1 area: Routing Rule/);
-    assert.match(body, /Review the changed organization areas across clubs/);
+    assert.match(body, /Review the changed organization areas across clubs, including both remaining exceptions and clubs inheriting the default\./);
     assert.match(body, /Open the club stack to confirm whether these overrides should stay/);
     assert.match(body, /Review approval rule exceptions/);
+    assert.match(body, /Review approval rule inheriting clubs/);
     assert.match(body, /clubArea=approvalRule/);
+    assert.match(body, /clubView=inheriting/);
     assert.match(body, /Open this club policy stack/);
     assert.match(body, /Review approval rule exceptions[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
+    assert.match(body, /Review approval rule inheriting clubs[\s\S]*?clubView=inheriting[\s\S]*?clubArea=approvalRule[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
     assert.match(body, /Open this club policy stack[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
     assert.match(body, /Before: Unset/);
     assert.match(body, /After: \{&quot;requireSecondApprovalForPublic&quot;:true\}/);
