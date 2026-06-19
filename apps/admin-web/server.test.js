@@ -735,6 +735,7 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /name="simulationRiskScore" type="number" min="0" max="1" step="0.01" value="0.19"/);
     assert.match(body, /name="simulationModerationFlagged"[\s\S]*?<option value="true" selected/);
     assert.match(body, /name="simulationAgentSuggestedApproverRole"[\s\S]*?<option value="club_admin" selected/);
+    assert.match(body, /Review public approver exceptions[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise((resolve, reject) =>
@@ -2055,7 +2056,7 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
       })
     );
     const response = await originalFetch(
-      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&previewScopeType=organization&previewDraftPolicy=${previewDraftPolicy}`
+      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&previewScopeType=organization&previewDraftPolicy=${previewDraftPolicy}&simulationContentType=photo&simulationVisibilityTarget=internal&simulationRiskScore=0.19&simulationModerationFlagged=true&simulationAgentSuggestedApproverRole=club_admin`
     );
     const body = await response.text();
 
@@ -2111,6 +2112,8 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
     assert.match(body, /Shielded by overrides: Eastside/);
     assert.match(body, /Review public approver across clubs/);
     assert.match(body, /Review notification rule across clubs/);
+    assert.match(body, /Review public approver rollout[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
+    assert.match(body, /Open Westside policy stack[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise((resolve, reject) =>

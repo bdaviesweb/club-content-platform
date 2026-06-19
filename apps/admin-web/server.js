@@ -3878,7 +3878,8 @@ function buildWorkflowSettingsLink({
   clubView = null,
   clubArea = null,
   previewScopeType = null,
-  previewDraftPolicy = null
+  previewDraftPolicy = null,
+  simulationInput = null
 } = {}) {
   const params = new URLSearchParams();
 
@@ -3896,6 +3897,30 @@ function buildWorkflowSettingsLink({
   }
   if (previewDraftPolicy) {
     params.set("previewDraftPolicy", previewDraftPolicy);
+  }
+  if (simulationInput?.contentType) {
+    params.set("simulationContentType", String(simulationInput.contentType));
+  }
+  if (simulationInput?.visibilityTarget) {
+    params.set("simulationVisibilityTarget", String(simulationInput.visibilityTarget));
+  }
+  if (simulationInput?.riskScore !== null && simulationInput?.riskScore !== undefined) {
+    params.set("simulationRiskScore", String(simulationInput.riskScore));
+  }
+  if (
+    simulationInput?.moderationFlagged !== null &&
+    simulationInput?.moderationFlagged !== undefined
+  ) {
+    params.set(
+      "simulationModerationFlagged",
+      String(Boolean(simulationInput.moderationFlagged))
+    );
+  }
+  if (simulationInput?.agentSuggestedApproverRole) {
+    params.set(
+      "simulationAgentSuggestedApproverRole",
+      String(simulationInput.agentSuggestedApproverRole)
+    );
   }
 
   return `/workflow-settings?${params.toString()}`;
@@ -3986,7 +4011,8 @@ function renderExceptionCleanupSummary({
   items = [],
   selectedClubSlug = "",
   previewScopeType = null,
-  previewDraftPolicy = null
+  previewDraftPolicy = null,
+  simulationInput = null
 }) {
   if (!items.length) {
     return "";
@@ -4024,13 +4050,15 @@ function renderExceptionCleanupSummary({
                   clubView: "overrides",
                   clubArea: area.key,
                   previewScopeType,
-                  previewDraftPolicy
+                  previewDraftPolicy,
+                  simulationInput
                 })}">${escapeHtml(area.label)}</a>`
               )
               .join("")}
           </div>
           <p style="margin-top:10px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
-            clubSlug: item.club.slug || ""
+            clubSlug: item.club.slug || "",
+            simulationInput
           })}">Open ${escapeHtml(item.club.name)} policy stack</a></p>
           ${
             firstArea
@@ -4039,7 +4067,8 @@ function renderExceptionCleanupSummary({
                   clubView: "overrides",
                   clubArea: firstArea.key,
                   previewScopeType,
-                  previewDraftPolicy
+                  previewDraftPolicy,
+                  simulationInput
                 })}">Review ${escapeHtml(firstArea.label.toLowerCase())} exceptions</a></p>`
               : ""
           }
@@ -4125,7 +4154,8 @@ function renderOrganizationDraftImpactSummary({
   previewOrganizationPolicy,
   organizationDirectory,
   selectedClubSlug = "",
-  overrideBurdenSummary = null
+  overrideBurdenSummary = null,
+  simulationInput = null
 }) {
   if (previewScopeType !== "organization") {
     return "";
@@ -4177,7 +4207,8 @@ function renderOrganizationDraftImpactSummary({
                       clubView: "overrides",
                       clubArea: area.key,
                       previewScopeType: "organization",
-                      previewDraftPolicy: JSON.stringify(previewOrganizationPolicy || {})
+                      previewDraftPolicy: JSON.stringify(previewOrganizationPolicy || {}),
+                      simulationInput
                     })}">Review ${escapeHtml(area.label.toLowerCase())} rollout</a>`
                   )
                   .join("")}
@@ -4192,7 +4223,8 @@ function renderOrganizationDraftImpactSummary({
                       clubView: "overrides",
                       clubArea: area.key,
                       previewScopeType: "organization",
-                      previewDraftPolicy: JSON.stringify(previewOrganizationPolicy || {})
+                      previewDraftPolicy: JSON.stringify(previewOrganizationPolicy || {}),
+                      simulationInput
                     })}">Review ${escapeHtml(area.label.toLowerCase())} shielding override</a>`
                   )
                   .join("")}
@@ -4220,7 +4252,8 @@ function renderOrganizationDraftImpactSummary({
             ${impactAreaLinks}
             ${insulatedAreaLinks}
             <p style="margin-top:8px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
-              clubSlug: club.slug || ""
+              clubSlug: club.slug || "",
+              simulationInput
             })}">Open ${escapeHtml(club.name)} policy stack</a></p>
           </div>`;
         })
@@ -4256,7 +4289,8 @@ function renderOrganizationDraftImpactSummary({
               clubView: "overrides",
               clubArea: area.key,
               previewScopeType: "organization",
-              previewDraftPolicy: JSON.stringify(previewOrganizationPolicy || {})
+              previewDraftPolicy: JSON.stringify(previewOrganizationPolicy || {}),
+              simulationInput
             })}">Review ${escapeHtml(area.label.toLowerCase())} across clubs</a>
           </div>
         </div>`)
@@ -4377,7 +4411,8 @@ function renderOrganizationDraftImpactSummary({
       items: cleanupItems,
       selectedClubSlug,
       previewScopeType: "organization",
-      previewDraftPolicy: JSON.stringify(previewOrganizationPolicy || {})
+      previewDraftPolicy: JSON.stringify(previewOrganizationPolicy || {}),
+      simulationInput
     })}
     <div class="summary-stack" style="margin-top:16px;">
       ${clubRows}
@@ -4388,7 +4423,8 @@ function renderOrganizationDraftImpactSummary({
 function renderWorkflowSaveSummary(
   saveSummary,
   organizationDirectory = null,
-  selectedClubName = ""
+  selectedClubName = "",
+  simulationInput = null
 ) {
   if (!saveSummary) {
     return "";
@@ -4544,7 +4580,8 @@ function renderWorkflowSaveSummary(
               <p style="margin-top:8px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
                 clubSlug: saveSummary.clubSlug || "",
                 clubView: "overrides",
-                clubArea: area.key
+                clubArea: area.key,
+                simulationInput
               })}">Review ${escapeHtml(area.label.toLowerCase())} exceptions</a></p>
             </div>`
           )
@@ -4653,7 +4690,8 @@ function renderWorkflowSaveSummary(
       subtitle:
         "These clubs still override one or more organization areas you just changed. Review them next if you want the saved default to propagate more consistently.",
       items: cleanupItems,
-      selectedClubSlug: saveSummary.clubSlug || ""
+      selectedClubSlug: saveSummary.clubSlug || "",
+      simulationInput
     })}
     ${changedAreaLinks}
   </section>`;
@@ -5242,7 +5280,8 @@ async function renderWorkflowSettingsPage(
     ${renderWorkflowSaveSummary(
       saveSummary,
       organizationDirectory,
-      clubPolicy.club?.name || selectedClubSlug
+      clubPolicy.club?.name || selectedClubSlug,
+      normalizedSimulationInput
     )}
 
     <section class="panel" style="margin-bottom:18px;">
@@ -5313,7 +5352,8 @@ async function renderWorkflowSettingsPage(
       previewOrganizationPolicy,
       organizationDirectory,
       selectedClubSlug,
-      overrideBurdenSummary
+      overrideBurdenSummary,
+      simulationInput: normalizedSimulationInput
     })}
     ${renderClubOverrideSummary({
       clubPolicy: previewClubPolicy,
