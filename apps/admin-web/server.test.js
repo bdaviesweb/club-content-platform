@@ -250,7 +250,7 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
   try {
     const address = server.address();
     const response = await originalFetch(
-      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside`
+      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&simulationContentType=photo&simulationVisibilityTarget=internal&simulationRiskScore=0.19&simulationModerationFlagged=true&simulationAgentSuggestedApproverRole=club_admin`
     );
     const body = await response.text();
 
@@ -283,6 +283,8 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Review approval rule exceptions/);
     assert.match(body, /clubArea=approvalRule/);
     assert.match(body, /Open this club policy stack/);
+    assert.match(body, /Review approval rule exceptions[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
+    assert.match(body, /Open this club policy stack[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
     assert.match(body, /Before: Unset/);
     assert.match(body, /After: \{&quot;requireSecondApprovalForPublic&quot;:true\}/);
     assert.match(body, /Before: \{&quot;email&quot;:true\}/);
@@ -304,6 +306,7 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Agent routing/);
     assert.match(body, /Open Westside policy stack/);
     assert.match(body, /Open Eastside policy stack/);
+    assert.match(body, /Open Westside policy stack[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
     assert.match(body, /Auto-approval rule/);
     assert.match(body, /Auto-approve only these content types/);
     assert.match(body, /Never auto-approve these content types/);

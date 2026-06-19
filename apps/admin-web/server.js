@@ -3638,7 +3638,7 @@ function renderPolicyHistoryCard(
   title,
   history,
   emptyLabel,
-  { clubSlug = "", linkVariant = "stack" } = {}
+  { clubSlug = "", linkVariant = "stack", simulationInput = null } = {}
 ) {
   const items = history?.items || [];
   const content = items.length
@@ -3663,10 +3663,12 @@ function renderPolicyHistoryCard(
                         ? buildWorkflowSettingsLink({
                             clubSlug,
                             clubView: "overrides",
-                            clubArea: field
+                            clubArea: field,
+                            simulationInput
                           })
                         : buildWorkflowSettingsLink({
-                            clubSlug
+                            clubSlug,
+                            simulationInput
                           });
 
                     return `<a class="badge badge-info" href="${href}">${escapeHtml(
@@ -3687,10 +3689,12 @@ function renderPolicyHistoryCard(
                   ? buildWorkflowSettingsLink({
                       clubSlug,
                       clubView: "overrides",
-                      clubArea: changedFields[0]
+                      clubArea: changedFields[0],
+                      simulationInput
                     })
                   : buildWorkflowSettingsLink({
-                      clubSlug
+                      clubSlug,
+                      simulationInput
                     })
               )}">${escapeHtml(
                 linkVariant === "organization"
@@ -3747,7 +3751,8 @@ function renderPolicyHistoryCard(
 function renderPolicyHistorySection({
   organizationHistory,
   clubHistory,
-  selectedClubSlug = ""
+  selectedClubSlug = "",
+  simulationInput = null
 }) {
   if (!organizationHistory && !clubHistory) {
     return "";
@@ -3766,13 +3771,17 @@ function renderPolicyHistorySection({
         "Organization changes",
         organizationHistory,
         "No organization policy changes recorded yet.",
-        { clubSlug: selectedClubSlug, linkVariant: "organization" }
+        {
+          clubSlug: selectedClubSlug,
+          linkVariant: "organization",
+          simulationInput
+        }
       )}
       ${renderPolicyHistoryCard(
         "Club changes",
         clubHistory,
         "No club-specific policy changes recorded yet.",
-        { clubSlug: selectedClubSlug, linkVariant: "club" }
+        { clubSlug: selectedClubSlug, linkVariant: "club", simulationInput }
       )}
     </div>
   </section>`;
@@ -4881,7 +4890,8 @@ function renderOrganizationDirectory(
   directory,
   clubView = "all",
   clubArea = "all",
-  selectedClubSlug = ""
+  selectedClubSlug = "",
+  simulationInput = null
 ) {
   if (!directory) {
     return "";
@@ -4923,7 +4933,8 @@ function renderOrganizationDirectory(
     return buildWorkflowSettingsLink({
       clubSlug: selectedClubSlug,
       clubView: nextClubView,
-      clubArea: nextClubArea !== "all" ? nextClubArea : null
+      clubArea: nextClubArea !== "all" ? nextClubArea : null,
+      simulationInput
     }).replace("/workflow-settings?", "");
   }
 
@@ -4948,9 +4959,10 @@ function renderOrganizationDirectory(
             </div>`
           : ""
       }
-      <p style="margin-top:8px;"><a class="quick-link" href="/workflow-settings?clubSlug=${encodeURIComponent(
-        club.slug || ""
-      )}">Open ${escapeHtml(club.name)} policy stack</a></p>
+      <p style="margin-top:8px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
+        clubSlug: club.slug || "",
+        simulationInput
+      })}">Open ${escapeHtml(club.name)} policy stack</a></p>
     </div>`;
   }
 
@@ -5344,7 +5356,8 @@ async function renderWorkflowSettingsPage(
     ${renderPolicyHistorySection({
       organizationHistory,
       clubHistory,
-      selectedClubSlug
+      selectedClubSlug,
+      simulationInput: normalizedSimulationInput
     })}
     ${renderOrganizationDraftImpactSummary({
       previewScopeType,
@@ -5369,7 +5382,8 @@ async function renderWorkflowSettingsPage(
       organizationDirectory,
       clubView,
       clubArea,
-      selectedClubSlug
+      selectedClubSlug,
+      normalizedSimulationInput
     )}
     
 
