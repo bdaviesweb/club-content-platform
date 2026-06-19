@@ -2224,6 +2224,30 @@ function parsePreviewDraft(rawValue) {
   }
 }
 
+function parseSavedClubDeltaList(rawValue) {
+  if (!rawValue) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .filter((item) => item && typeof item === "object")
+      .map((item) => ({
+        name: String(item.name || "").trim(),
+        liveOverrideCount: Number(item.liveOverrideCount || 0),
+        previewOverrideCount: Number(item.previewOverrideCount || 0)
+      }))
+      .filter((item) => item.name);
+  } catch {
+    return [];
+  }
+}
+
 function summarizeContentTypeApprovers(rule = {}) {
   const approvers = rule?.contentTypeApprovers;
   if (!approvers || typeof approvers !== "object" || Array.isArray(approvers)) {
@@ -2905,7 +2929,9 @@ function renderWorkflowPolicyForm({
   previewCurrentOverrideClubCount = 0,
   previewProjectedOverrideClubCount = 0,
   previewCurrentOverrideAreaCount = 0,
-  previewProjectedOverrideAreaCount = 0
+  previewProjectedOverrideAreaCount = 0,
+  previewReducingClubs = [],
+  previewGainingClubs = []
 }) {
   const roleOptions = [
     { value: "team_manager", label: "Team manager" },
@@ -2999,7 +3025,7 @@ function renderWorkflowPolicyForm({
       </div>
       <span class="badge badge-neutral">${escapeHtml(scopeSlug || "n/a")}</span>
     </div>
-    <form class="workflow-policy-form" data-scope-type="${escapeHtml(scopeType)}" data-scope-slug="${escapeHtml(scopeSlug || "")}" data-preview-warning-count="${escapeHtml(String(previewWarningCount))}" data-preview-affected-club-count="${escapeHtml(String(previewAffectedClubCount))}" data-preview-changed-area-count="${escapeHtml(String(previewChangedAreaCount))}" data-preview-insulated-club-count="${escapeHtml(String(previewInsulatedClubCount))}" data-preview-changed-area-keys="${escapeHtml((previewChangedAreaKeys || []).join(","))}" data-preview-current-override-club-count="${escapeHtml(String(previewCurrentOverrideClubCount))}" data-preview-projected-override-club-count="${escapeHtml(String(previewProjectedOverrideClubCount))}" data-preview-current-override-area-count="${escapeHtml(String(previewCurrentOverrideAreaCount))}" data-preview-projected-override-area-count="${escapeHtml(String(previewProjectedOverrideAreaCount))}">
+    <form class="workflow-policy-form" data-scope-type="${escapeHtml(scopeType)}" data-scope-slug="${escapeHtml(scopeSlug || "")}" data-preview-warning-count="${escapeHtml(String(previewWarningCount))}" data-preview-affected-club-count="${escapeHtml(String(previewAffectedClubCount))}" data-preview-changed-area-count="${escapeHtml(String(previewChangedAreaCount))}" data-preview-insulated-club-count="${escapeHtml(String(previewInsulatedClubCount))}" data-preview-changed-area-keys="${escapeHtml((previewChangedAreaKeys || []).join(","))}" data-preview-current-override-club-count="${escapeHtml(String(previewCurrentOverrideClubCount))}" data-preview-projected-override-club-count="${escapeHtml(String(previewProjectedOverrideClubCount))}" data-preview-current-override-area-count="${escapeHtml(String(previewCurrentOverrideAreaCount))}" data-preview-projected-override-area-count="${escapeHtml(String(previewProjectedOverrideAreaCount))}" data-preview-reducing-clubs="${escapeHtml(JSON.stringify(previewReducingClubs || []))}" data-preview-gaining-clubs="${escapeHtml(JSON.stringify(previewGainingClubs || []))}">
       ${renderPolicyField({
         label: "Actor email",
         name: "actorEmail",
@@ -3575,7 +3601,8 @@ function buildOrganizationDraftOverrideBurdenSummary({
     ),
     clubsGainingOverrides: comparisons.filter(
       (item) => item.previewOverrideCount > item.liveOverrideCount
-    )
+    ),
+    comparisons
   };
 }
 
@@ -3718,6 +3745,47 @@ function renderOrganizationDraftImpactSummary({
         </div>`)
         .join("")
     : "";
+  const burdenDeltaRows = overrideBurdenSummary
+    ? [
+        {
+          title: "Clubs reducing override burden",
+          items: overrideBurdenSummary.clubsReducingOverrides,
+          empty: "No clubs would reduce override burden from this draft.",
+          verb: "reduces"
+        },
+        {
+          title: "Clubs gaining override burden",
+          items: overrideBurdenSummary.clubsGainingOverrides,
+          empty: "No clubs would gain new override burden from this draft.",
+          verb: "gains"
+        }
+      ]
+        .map(
+          (group) => `<div class="summary-item" style="background: rgba(255,255,255,0.68);">
+            <strong>${escapeHtml(group.title)}</strong>
+            <div class="summary-stack" style="margin-top:12px;">
+              ${
+                group.items.length
+                  ? group.items
+                      .map(
+                        (item) => `<div class="summary-item">
+                          <strong>${escapeHtml(item.club.name)}</strong>
+                          <p class="subtle" style="margin-top:6px;">${escapeHtml(
+                            `${item.liveOverrideCount} -> ${item.previewOverrideCount} override areas`
+                          )}</p>
+                          <p class="subtle" style="margin-top:6px;">${escapeHtml(
+                            `${item.club.name} ${group.verb} ${Math.abs(item.previewOverrideCount - item.liveOverrideCount)} override area${Math.abs(item.previewOverrideCount - item.liveOverrideCount) === 1 ? "" : "s"} under this draft.`
+                          )}</p>
+                        </div>`
+                      )
+                      .join("")
+                  : `<p class="subtle">${escapeHtml(group.empty)}</p>`
+              }
+            </div>
+          </div>`
+        )
+        .join("")
+    : "";
 
   return `<section class="panel">
     <div class="section-header">
@@ -3784,6 +3852,7 @@ function renderOrganizationDraftImpactSummary({
       </div>
       ${areaRows}
     </div>
+    ${burdenDeltaRows ? `<div class="summary-stack" style="margin-top:16px;">${burdenDeltaRows}</div>` : ""}
     <div class="summary-stack" style="margin-top:16px;">
       ${clubRows}
     </div>
@@ -3825,6 +3894,42 @@ function renderWorkflowSaveSummary(saveSummary) {
           .join("")}
       </div>`
     : "";
+  const reducingClubs = saveSummary.reducingClubs || [];
+  const gainingClubs = saveSummary.gainingClubs || [];
+  const burdenDeltaRows = [
+    {
+      title: "Clubs that got simpler",
+      items: reducingClubs,
+      empty: "No clubs reduced override burden from this save."
+    },
+    {
+      title: "Clubs that got more complex",
+      items: gainingClubs,
+      empty: "No clubs gained override burden from this save."
+    }
+  ]
+    .map(
+      (group) => `<div class="summary-item" style="background: rgba(255,255,255,0.68);">
+        <strong>${escapeHtml(group.title)}</strong>
+        <div class="summary-stack" style="margin-top:12px;">
+          ${
+            group.items.length
+              ? group.items
+                  .map(
+                    (item) => `<div class="summary-item">
+                      <strong>${escapeHtml(item.name)}</strong>
+                      <p class="subtle" style="margin-top:6px;">${escapeHtml(
+                        `${item.liveOverrideCount} -> ${item.previewOverrideCount} override areas`
+                      )}</p>
+                    </div>`
+                  )
+                  .join("")
+              : `<p class="subtle">${escapeHtml(group.empty)}</p>`
+          }
+        </div>
+      </div>`
+    )
+    .join("");
 
   return `<section class="panel" style="border-color: rgba(23, 103, 68, 0.26); background: linear-gradient(180deg, rgba(235, 248, 240, 0.96), rgba(255, 255, 255, 0.96));">
     <div class="section-header">
@@ -3885,6 +3990,7 @@ function renderWorkflowSaveSummary(saveSummary) {
         <span class="subtle">Measured from the preview comparison captured at save time</span>
       </div>
     </div>
+    <div class="summary-stack" style="margin-top:16px;">${burdenDeltaRows}</div>
     ${changedAreaLinks}
   </section>`;
 }
@@ -4379,6 +4485,22 @@ async function renderWorkflowSettingsPage(
           previewScopeType === "organization"
             ? overrideBurdenSummary?.projectedOverrideAreaCount || 0
             : 0,
+        previewReducingClubs:
+          previewScopeType === "organization"
+            ? (overrideBurdenSummary?.clubsReducingOverrides || []).map((item) => ({
+                name: item.club.name,
+                liveOverrideCount: item.liveOverrideCount,
+                previewOverrideCount: item.previewOverrideCount
+              }))
+            : [],
+        previewGainingClubs:
+          previewScopeType === "organization"
+            ? (overrideBurdenSummary?.clubsGainingOverrides || []).map((item) => ({
+                name: item.club.name,
+                liveOverrideCount: item.liveOverrideCount,
+                previewOverrideCount: item.previewOverrideCount
+              }))
+            : [],
         previewWarningCount:
           previewScopeType === "organization" ? previewRiskWarningCount : 0
       })}
@@ -4398,6 +4520,26 @@ async function renderWorkflowSettingsPage(
     <script>
       function parseOptionalRole(value) {
         return value ? value : null;
+      }
+
+      function parsePreviewClubDeltaList(value) {
+        try {
+          const parsed = JSON.parse(value || '[]');
+          if (!Array.isArray(parsed)) {
+            return [];
+          }
+
+          return parsed
+            .filter((item) => item && typeof item === 'object')
+            .map((item) => ({
+              name: String(item.name || '').trim(),
+              liveOverrideCount: Number(item.liveOverrideCount || 0),
+              previewOverrideCount: Number(item.previewOverrideCount || 0)
+            }))
+            .filter((item) => item.name);
+        } catch {
+          return [];
+        }
       }
 
       function parseOptionalBoolean(value) {
@@ -4603,6 +4745,8 @@ async function renderWorkflowSettingsPage(
         const previewProjectedOverrideClubCount = Number(form.dataset.previewProjectedOverrideClubCount || '0');
         const previewCurrentOverrideAreaCount = Number(form.dataset.previewCurrentOverrideAreaCount || '0');
         const previewProjectedOverrideAreaCount = Number(form.dataset.previewProjectedOverrideAreaCount || '0');
+        const previewReducingClubs = parsePreviewClubDeltaList(form.dataset.previewReducingClubs);
+        const previewGainingClubs = parsePreviewClubDeltaList(form.dataset.previewGainingClubs);
         if (scopeType === 'organization' && previewAffectedClubCount > 0) {
           const confirmed = window.confirm(
             'This organization draft changes ' +
@@ -4661,6 +4805,8 @@ async function renderWorkflowSettingsPage(
           params.set('saveProjectedOverrideClubCount', String(previewProjectedOverrideClubCount));
           params.set('saveCurrentOverrideAreaCount', String(previewCurrentOverrideAreaCount));
           params.set('saveProjectedOverrideAreaCount', String(previewProjectedOverrideAreaCount));
+          params.set('saveReducingClubs', JSON.stringify(previewReducingClubs));
+          params.set('saveGainingClubs', JSON.stringify(previewGainingClubs));
           if (previewChangedAreaKeys) {
             params.set('saveChangedAreaKeys', previewChangedAreaKeys);
           }
@@ -4844,6 +4990,12 @@ export function createAdminServer() {
                 ),
                 projectedOverrideAreaCount: Number(
                   url.searchParams.get("saveProjectedOverrideAreaCount") || "0"
+                ),
+                reducingClubs: parseSavedClubDeltaList(
+                  url.searchParams.get("saveReducingClubs")
+                ),
+                gainingClubs: parseSavedClubDeltaList(
+                  url.searchParams.get("saveGainingClubs")
                 ),
                 changedAreaKeys: String(url.searchParams.get("saveChangedAreaKeys") || "")
                   .split(",")

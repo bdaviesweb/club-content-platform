@@ -647,8 +647,18 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
 
   try {
     const address = server.address();
+    const reducingClubs = encodeURIComponent(
+      JSON.stringify([
+        {
+          name: "Westside",
+          liveOverrideCount: 7,
+          previewOverrideCount: 5
+        }
+      ])
+    );
+    const gainingClubs = encodeURIComponent(JSON.stringify([]));
     const response = await originalFetch(
-      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&saveScopeType=organization&saveChangedAreaCount=2&saveAffectedClubCount=1&saveInsulatedClubCount=1&saveCurrentOverrideClubCount=2&saveProjectedOverrideClubCount=1&saveCurrentOverrideAreaCount=9&saveProjectedOverrideAreaCount=7&saveChangedAreaKeys=publicApproverRole,notificationRule`
+      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&saveScopeType=organization&saveChangedAreaCount=2&saveAffectedClubCount=1&saveInsulatedClubCount=1&saveCurrentOverrideClubCount=2&saveProjectedOverrideClubCount=1&saveCurrentOverrideAreaCount=9&saveProjectedOverrideAreaCount=7&saveReducingClubs=${reducingClubs}&saveGainingClubs=${gainingClubs}&saveChangedAreaKeys=publicApproverRole,notificationRule`
     );
     const body = await response.text();
 
@@ -665,6 +675,11 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /9 -&gt; 7|9 -> 7/);
     assert.match(body, /Override burden/);
     assert.match(body, /Reduced/);
+    assert.match(body, /Clubs that got simpler/);
+    assert.match(body, /Westside/);
+    assert.match(body, /7 -&gt; 5 override areas|7 -> 5 override areas/);
+    assert.match(body, /Clubs that got more complex/);
+    assert.match(body, /No clubs gained override burden from this save\./);
     assert.match(body, /Review changed areas/);
     assert.match(body, /Review public approver exceptions/);
     assert.match(body, /Review notification rule exceptions/);
@@ -1438,6 +1453,11 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
     assert.match(body, /9 -&gt; 7|9 -> 7/);
     assert.match(body, /Override burden/);
     assert.match(body, /Reduced/);
+    assert.match(body, /Clubs reducing override burden/);
+    assert.match(body, /Eastside reduces 2 override areas under this draft\./);
+    assert.match(body, /2 -&gt; 0 override areas|2 -> 0 override areas/);
+    assert.match(body, /Clubs gaining override burden/);
+    assert.match(body, /No clubs would gain new override burden from this draft\./);
     assert.match(body, /Changed area rollout summary/);
     assert.match(body, /Westside/);
     assert.match(body, /2 impacted areas/);
@@ -1453,6 +1473,8 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
     assert.match(body, /Affects 1 club/);
     assert.match(body, /data-preview-affected-club-count="1"/);
     assert.match(body, /data-preview-changed-area-count="2"/);
+    assert.match(body, /data-preview-reducing-clubs="[^"]*Eastside[^"]*"/);
+    assert.match(body, /data-preview-gaining-clubs="\[\]"/);
     assert.match(body, /Eastside/);
     assert.match(body, /No inherited change/);
     assert.match(body, /This club already overrides every changed organization area: Public approver, Notification rule\./);
