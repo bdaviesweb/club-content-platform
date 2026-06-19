@@ -2899,7 +2899,8 @@ function renderWorkflowPolicyForm({
   previewScopeType = null,
   previewWarningCount = 0,
   previewAffectedClubCount = 0,
-  previewChangedAreaCount = 0
+  previewChangedAreaCount = 0,
+  previewInsulatedClubCount = 0
 }) {
   const roleOptions = [
     { value: "team_manager", label: "Team manager" },
@@ -2993,7 +2994,7 @@ function renderWorkflowPolicyForm({
       </div>
       <span class="badge badge-neutral">${escapeHtml(scopeSlug || "n/a")}</span>
     </div>
-    <form class="workflow-policy-form" data-scope-type="${escapeHtml(scopeType)}" data-scope-slug="${escapeHtml(scopeSlug || "")}" data-preview-warning-count="${escapeHtml(String(previewWarningCount))}" data-preview-affected-club-count="${escapeHtml(String(previewAffectedClubCount))}" data-preview-changed-area-count="${escapeHtml(String(previewChangedAreaCount))}">
+    <form class="workflow-policy-form" data-scope-type="${escapeHtml(scopeType)}" data-scope-slug="${escapeHtml(scopeSlug || "")}" data-preview-warning-count="${escapeHtml(String(previewWarningCount))}" data-preview-affected-club-count="${escapeHtml(String(previewAffectedClubCount))}" data-preview-changed-area-count="${escapeHtml(String(previewChangedAreaCount))}" data-preview-insulated-club-count="${escapeHtml(String(previewInsulatedClubCount))}">
       ${renderPolicyField({
         label: "Actor email",
         name: "actorEmail",
@@ -3681,6 +3682,50 @@ function renderOrganizationDraftImpactSummary({
   </section>`;
 }
 
+function renderWorkflowSaveSummary(saveSummary) {
+  if (!saveSummary || saveSummary.scopeType !== "organization") {
+    return "";
+  }
+
+  const changedAreaCount = Number(saveSummary.changedAreaCount || 0);
+  const affectedClubCount = Number(saveSummary.affectedClubCount || 0);
+  const insulatedClubCount = Number(saveSummary.insulatedClubCount || 0);
+
+  return `<section class="panel" style="border-color: rgba(23, 103, 68, 0.26); background: linear-gradient(180deg, rgba(235, 248, 240, 0.96), rgba(255, 255, 255, 0.96));">
+    <div class="section-header">
+      <div>
+        <div class="eyebrow">Saved organization policy</div>
+        <h2>Organization defaults saved with rollout context</h2>
+        <p class="subtle" style="margin-top:8px;">This save changed ${escapeHtml(String(changedAreaCount))} organization policy area${changedAreaCount === 1 ? "" : "s"}.</p>
+      </div>
+      <span class="badge badge-good">Saved</span>
+    </div>
+    <div class="topline" style="margin-top:16px;">
+      <div class="metric-card">
+        <span class="metric-label">Clubs now inheriting</span>
+        <strong>${escapeHtml(String(affectedClubCount))}</strong>
+        <span class="subtle">Clubs that will follow these saved organization changes</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Clubs still insulating</span>
+        <strong>${escapeHtml(String(insulatedClubCount))}</strong>
+        <span class="subtle">Clubs still shielding themselves with overrides in the changed areas</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Next step</span>
+        <strong>${escapeHtml(
+          insulatedClubCount > 0 ? "Review exceptions" : "Rollout aligned"
+        )}</strong>
+        <span class="subtle">${
+          insulatedClubCount > 0
+            ? "Use the rollout summary below to decide whether those club overrides should remain."
+            : "No clubs are currently shielding themselves from these saved organization changes."
+        }</span>
+      </div>
+    </div>
+  </section>`;
+}
+
 function renderClubOverrideSummary({ clubPolicy = {}, organizationPolicy = {} }) {
   const summary = buildClubOverrideSummary({ clubPolicy, organizationPolicy });
   const overrideList = summary.overridden.length
@@ -3945,7 +3990,8 @@ async function renderWorkflowSettingsPage(
   simulationInput = {},
   previewDraft = null,
   clubView = "all",
-  clubArea = "all"
+  clubArea = "all",
+  saveSummary = null
 ) {
   const readiness = await fetchJson("/app/readiness");
   const selectedClubSlug = clubSlug || readiness?.demo?.clubSlug || "demo-soccer-club";
@@ -4025,6 +4071,8 @@ async function renderWorkflowSettingsPage(
         <a class="quick-link" href="/">Open review workspace</a>
       </div>
     </section>
+
+    ${renderWorkflowSaveSummary(saveSummary)}
 
     <section class="panel" style="margin-bottom:18px;">
       <form method="GET" action="/workflow-settings" class="workflow-policy-form workflow-policy-filter">
@@ -4125,6 +4173,10 @@ async function renderWorkflowSettingsPage(
         previewChangedAreaCount:
           previewScopeType === "organization"
             ? organizationDraftImpact?.changedAreas.length || 0
+            : 0,
+        previewInsulatedClubCount:
+          previewScopeType === "organization"
+            ? organizationDraftImpact?.insulatedClubs.length || 0
             : 0,
         previewWarningCount:
           previewScopeType === "organization" ? previewRiskWarningCount : 0
@@ -4344,6 +4396,7 @@ async function renderWorkflowSettingsPage(
 
         const previewAffectedClubCount = Number(form.dataset.previewAffectedClubCount || '0');
         const previewChangedAreaCount = Number(form.dataset.previewChangedAreaCount || '0');
+        const previewInsulatedClubCount = Number(form.dataset.previewInsulatedClubCount || '0');
         if (scopeType === 'organization' && previewAffectedClubCount > 0) {
           const confirmed = window.confirm(
             'This organization draft changes ' +
@@ -4391,6 +4444,17 @@ async function renderWorkflowSettingsPage(
         }
 
         status.textContent = 'Saved. Reloading effective policy...';
+        if (scopeType === 'organization') {
+          const params = new URLSearchParams();
+          params.set('clubSlug', scopeSlug);
+          params.set('saveScopeType', 'organization');
+          params.set('saveChangedAreaCount', String(previewChangedAreaCount));
+          params.set('saveAffectedClubCount', String(previewAffectedClubCount));
+          params.set('saveInsulatedClubCount', String(previewInsulatedClubCount));
+          window.location.assign('/workflow-settings?' + params.toString());
+          return;
+        }
+
         window.location.reload();
       }
 
@@ -4547,6 +4611,16 @@ export function createAdminServer() {
       }
 
       if (req.method === "GET" && url.pathname === "/workflow-settings") {
+        const saveScopeType = url.searchParams.get("saveScopeType");
+        const saveSummary =
+          saveScopeType === "organization"
+            ? {
+                scopeType: "organization",
+                changedAreaCount: Number(url.searchParams.get("saveChangedAreaCount") || "0"),
+                affectedClubCount: Number(url.searchParams.get("saveAffectedClubCount") || "0"),
+                insulatedClubCount: Number(url.searchParams.get("saveInsulatedClubCount") || "0")
+              }
+            : null;
         const html = await renderWorkflowSettingsPage(url.searchParams.get("clubSlug"), {
           contentType: url.searchParams.get("simulationContentType"),
           visibilityTarget: url.searchParams.get("simulationVisibilityTarget"),
@@ -4556,7 +4630,7 @@ export function createAdminServer() {
         }, {
           scopeType: url.searchParams.get("previewScopeType"),
           payload: parsePreviewDraft(url.searchParams.get("previewDraftPolicy"))
-        }, url.searchParams.get("clubView"), url.searchParams.get("clubArea"));
+        }, url.searchParams.get("clubView"), url.searchParams.get("clubArea"), saveSummary);
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         res.end(html);
         return;
