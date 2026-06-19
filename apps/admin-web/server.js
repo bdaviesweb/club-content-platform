@@ -5092,7 +5092,8 @@ function renderOrganizationDirectory(
                           : "Organization default is fully holding here."
                       )}</p>
                       <p style="margin-top:8px;"><a class="quick-link" href="/workflow-settings?${buildDirectoryLinkParams(
-                        area.key
+                        area.key,
+                        area.overrideClubCount ? "overrides" : "inheriting"
                       )}">${
                         area.overrideClubCount
                           ? `Review ${escapeHtml(area.label.toLowerCase())} exceptions`

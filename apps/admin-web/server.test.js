@@ -1252,6 +1252,7 @@ test("GET /workflow-settings summarizes override hotspots by policy area", async
     assert.match(body, /Centralized/);
     assert.match(body, /No clubs are overriding this area right now\./);
     assert.match(body, /Review public approver alignment/);
+    assert.match(body, /clubView=inheriting[\s\S]*?clubArea=publicApproverRole[\s\S]*?Review public approver alignment/);
     assert.match(body, /Policy area hotspots/);
     assert.match(body, /Default approver/);
     assert.match(body, /2 clubs overriding this area/);
