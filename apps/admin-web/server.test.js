@@ -285,6 +285,8 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Preview rollback of latest org change/);
     assert.match(body, /Preview rollback of approval rule/);
     assert.match(body, /Preview rollback of notification rule/);
+    assert.match(body, /Preview rollback of latest club change/);
+    assert.match(body, /Preview rollback of routing rule/);
     assert.match(body, /clubArea=approvalRule/);
     assert.match(body, /clubView=inheriting/);
     assert.match(body, /Open this club policy stack/);
@@ -295,6 +297,7 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /previewDraftPolicy=/);
     assert.match(body, /Preview rollback of approval rule[\s\S]*?previewScopeType=organization[\s\S]*?previewDraftPolicy=/);
     assert.match(body, /Preview rollback of notification rule[\s\S]*?previewScopeType=organization[\s\S]*?previewDraftPolicy=/);
+    assert.match(body, /previewScopeType=club/);
     assert.match(body, /Open this club policy stack[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
     assert.match(body, /Before: Unset/);
     assert.match(body, /After: \{&quot;requireSecondApprovalForPublic&quot;:true\}/);
@@ -1897,8 +1900,27 @@ test("GET /workflow-settings renders a post-save club exception summary", async 
 
   try {
     const address = server.address();
+    const saveSimulationTrace = encodeURIComponent(
+      JSON.stringify({
+        scenario: {
+          contentType: "photo",
+          visibilityTarget: "internal",
+          riskScore: 0.19,
+          moderationFlagged: true,
+          agentSuggestedApproverRole: "club_admin"
+        },
+        changedRows: [
+          {
+            key: "publishedEmail",
+            label: "Published email",
+            before: "Disabled (Notification Policy Email Disabled)",
+            after: "Enabled"
+          }
+        ]
+      })
+    );
     const response = await originalFetch(
-      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&saveScopeType=club&saveChangedAreaCount=8&saveCurrentOverrideAreaCount=0&saveProjectedOverrideAreaCount=8&saveChangedAreaKeys=allowAgentRouting,autoApproveInternalLowRisk,autoApproveMaxRisk,autoApprovalRule,routingRule,approvalRule,publishingRule,notificationRule&saveAddedAreaKeys=allowAgentRouting,autoApproveInternalLowRisk,autoApproveMaxRisk,autoApprovalRule,routingRule,approvalRule,publishingRule,notificationRule&simulationContentType=photo&simulationVisibilityTarget=internal&simulationRiskScore=0.19&simulationModerationFlagged=true&simulationAgentSuggestedApproverRole=club_admin`
+      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&saveScopeType=club&saveChangedAreaCount=8&saveCurrentOverrideAreaCount=0&saveProjectedOverrideAreaCount=8&saveChangedAreaKeys=allowAgentRouting,autoApproveInternalLowRisk,autoApproveMaxRisk,autoApprovalRule,routingRule,approvalRule,publishingRule,notificationRule&saveAddedAreaKeys=allowAgentRouting,autoApproveInternalLowRisk,autoApproveMaxRisk,autoApprovalRule,routingRule,approvalRule,publishingRule,notificationRule&saveSimulationTrace=${saveSimulationTrace}&simulationContentType=photo&simulationVisibilityTarget=internal&simulationRiskScore=0.19&simulationModerationFlagged=true&simulationAgentSuggestedApproverRole=club_admin`
     );
     const body = await response.text();
 
@@ -1929,6 +1951,15 @@ test("GET /workflow-settings renders a post-save club exception summary", async 
     assert.match(body, /Review agent routing exceptions[\s\S]*?clubView=overrides[\s\S]*?clubArea=allowAgentRouting[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
     assert.match(body, /Latest recorded field changes/);
     assert.match(body, /These before-and-after values come from the latest recorded club policy update\./);
+    assert.match(body, /Simulated workflow trace for this save/);
+    assert.match(body, /This shows how the saved club exception change altered the simulated workflow path for the current scenario\./);
+    assert.match(body, /Scenario: content Photo/);
+    assert.match(body, /visibility Internal/);
+    assert.match(body, /risk 0\.19/);
+    assert.match(body, /moderation flagged yes/);
+    assert.match(body, /Hermes suggested Club Admin/);
+    assert.match(body, /Before: Disabled \(Notification Policy Email Disabled\)/);
+    assert.match(body, /After: Enabled/);
     assert.match(body, /Before: Unset/);
     assert.match(body, /After: Disabled|After: false/);
     assert.match(body, /After: \{&quot;email&quot;:false,&quot;push&quot;:true\}/);
@@ -3518,6 +3549,170 @@ test("POST /ui/workflow-policies/organizations/:slug/restore-area restores one o
                   label: "Published push",
                   before: "Disabled (Notification Policy Push Disabled)",
                   after: "Enabled"
+                }
+              ]
+            }
+          }
+        }
+      }
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await new Promise((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))
+    );
+  }
+});
+
+test("POST /ui/workflow-policies/clubs/:slug/restore-area restores one club area from history", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({
+      url: String(url),
+      method: init.method || "GET",
+      body: init.body ? JSON.parse(init.body) : null
+    });
+
+    if (String(url).endsWith("/workflow-policies/clubs/westside")) {
+      if ((init.method || "GET") === "POST") {
+        return {
+          ok: true,
+          async json() {
+            return {
+              club: { slug: "westside", name: "Westside" },
+              organization: { slug: "metro", name: "Metro Sports" },
+              clubPolicy: {
+                routingRule: {
+                  contentTypeApprovers: { video: "club_admin" }
+                }
+              }
+            };
+          }
+        };
+      }
+
+      return {
+        ok: true,
+        async json() {
+          return {
+            club: { slug: "westside", name: "Westside" },
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubPolicy: {
+              routingRule: {
+                contentTypeApprovers: { video: "team_manager" }
+              }
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/organizations/metro")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "metro", name: "Metro Sports" },
+            organizationPolicy: {
+              defaultApproverRole: "team_manager",
+              publicApproverRole: "club_comms",
+              mediumRiskApproverRole: "club_comms",
+              allowAgentRouting: true,
+              autoApproveInternalLowRisk: false,
+              autoApproveMaxRisk: 0.35,
+              autoApprovalRule: {},
+              routingRule: {
+                contentTypeApprovers: { video: "club_admin" }
+              },
+              approvalRule: {},
+              publishingRule: {},
+              notificationRule: {
+                email: true,
+                push: true
+              }
+            }
+          };
+        }
+      };
+    }
+
+    throw new Error(`Unexpected fetch: ${init.method || "GET"} ${url}`);
+  };
+
+  const server = createAdminServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const address = server.address();
+    const response = await originalFetch(
+      `http://127.0.0.1:${address.port}/ui/workflow-policies/clubs/westside/restore-area`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          actorEmail: "club-admin@example.test",
+          fieldKey: "routingRule",
+          restoreValue: {
+            contentTypeApprovers: { video: "club_admin" }
+          },
+          returnClubSlug: "westside",
+          simulationInput: {
+            contentType: "video",
+            visibilityTarget: "public",
+            riskScore: "0.72",
+            moderationFlagged: "false",
+            agentSuggestedApproverRole: "club_admin"
+          }
+        })
+      }
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.ok, true);
+    assert.match(body.redirectUrl, /saveScopeType=club/);
+    assert.match(body.redirectUrl, /clubSlug=westside/);
+    assert.match(body.redirectUrl, /saveChangedAreaKeys=routingRule/);
+    assert.match(body.redirectUrl, /saveAddedAreaKeys=/);
+    assert.match(body.redirectUrl, /saveRemovedAreaKeys=/);
+    assert.match(body.redirectUrl, /saveRetainedAreaKeys=/);
+    assert.match(body.redirectUrl, /saveSimulationTrace=/);
+    assert.deepEqual(calls, [
+      {
+        url: "http://app-api:4000/workflow-policies/clubs/westside",
+        method: "GET",
+        body: null
+      },
+      {
+        url: "http://app-api:4000/workflow-policies/organizations/metro",
+        method: "GET",
+        body: null
+      },
+      {
+        url: "http://app-api:4000/workflow-policies/clubs/westside",
+        method: "POST",
+        body: {
+          actorEmail: "club-admin@example.test",
+          routingRule: {
+            contentTypeApprovers: { video: "club_admin" }
+          },
+          historyContext: {
+            simulationTrace: {
+              scenario: {
+                contentType: "video",
+                visibilityTarget: "public",
+                riskScore: 0.72,
+                moderationFlagged: false,
+                agentSuggestedApproverRole: "club_admin"
+              },
+              changedRows: [
+                {
+                  key: "approver",
+                  label: "First approver",
+                  before: "Team Manager",
+                  after: "Club Admin"
                 }
               ]
             }
