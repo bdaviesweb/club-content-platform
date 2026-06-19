@@ -248,6 +248,7 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Fully inheriting organization defaults|2 override areas/);
     assert.match(body, /Default approver/);
     assert.match(body, /Agent routing/);
+    assert.match(body, /Open Westside policy stack/);
     assert.match(body, /Auto-approval rule/);
     assert.match(body, /Auto-approve only these content types/);
     assert.match(body, /Never auto-approve these content types/);
@@ -687,6 +688,7 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
     assert.match(body, /Westside/);
     assert.match(body, /2 impacted areas/);
     assert.match(body, /Inherited from this org draft: Public approver, Notification rule/);
+    assert.match(body, /Open Westside policy stack/);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise((resolve, reject) =>

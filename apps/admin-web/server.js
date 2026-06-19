@@ -3465,6 +3465,9 @@ function renderOrganizationDraftImpactSummary({
                     .join(", ")}`
                 : "This club already overrides every changed organization area."
             )}</p>
+            <p style="margin-top:8px;"><a class="quick-link" href="/workflow-settings?clubSlug=${encodeURIComponent(
+              club.slug || ""
+            )}">Open ${escapeHtml(club.name)} policy stack</a></p>
           </div>`;
         })
         .join("")
@@ -3565,6 +3568,9 @@ function renderOrganizationDirectory(directory) {
                   </div>`
                 : ""
             }
+            <p style="margin-top:8px;"><a class="quick-link" href="/workflow-settings?clubSlug=${encodeURIComponent(
+              club.slug || ""
+            )}">Open ${escapeHtml(club.name)} policy stack</a></p>
           </div>`
         )
         .join("")
