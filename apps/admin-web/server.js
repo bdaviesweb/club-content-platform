@@ -5699,10 +5699,13 @@ async function renderWorkflowSettingsPage(
           return;
         }
 
+        const simulatorForm = document.querySelector('form[action="/workflow-settings"]:not([data-scope-type])');
+        const simulatorData = simulatorForm ? new FormData(simulatorForm) : new FormData();
         status.textContent = 'Saved. Reloading effective policy...';
         if (scopeType === 'organization') {
           const params = new URLSearchParams();
           params.set('clubSlug', returnClubSlug || scopeSlug);
+          appendSimulatorParams(params, simulatorData);
           params.set('saveScopeType', 'organization');
           params.set('saveChangedAreaCount', String(previewChangedAreaCount));
           params.set('saveAffectedClubCount', String(previewAffectedClubCount));
@@ -5723,6 +5726,7 @@ async function renderWorkflowSettingsPage(
         if (scopeType === 'club') {
           const params = new URLSearchParams();
           params.set('clubSlug', returnClubSlug || scopeSlug);
+          appendSimulatorParams(params, simulatorData);
           params.set('saveScopeType', 'club');
           params.set('saveChangedAreaCount', String(previewChangedAreaCount));
           params.set('saveCurrentOverrideAreaCount', String(previewCurrentOverrideAreaCount));
@@ -5744,6 +5748,19 @@ async function renderWorkflowSettingsPage(
         }
 
         window.location.reload();
+      }
+
+      function appendSimulatorParams(params, simulatorData) {
+        params.set('simulationContentType', String(simulatorData.get('simulationContentType') || 'video'));
+        params.set('simulationVisibilityTarget', String(simulatorData.get('simulationVisibilityTarget') || 'public'));
+        params.set('simulationRiskScore', String(simulatorData.get('simulationRiskScore') || '0.42'));
+        params.set('simulationModerationFlagged', String(simulatorData.get('simulationModerationFlagged') || 'false'));
+        if (String(simulatorData.get('simulationAgentSuggestedApproverRole') || '').trim()) {
+          params.set(
+            'simulationAgentSuggestedApproverRole',
+            String(simulatorData.get('simulationAgentSuggestedApproverRole') || '').trim()
+          );
+        }
       }
 
       function previewPolicyDraft(form) {
@@ -5774,16 +5791,7 @@ async function renderWorkflowSettingsPage(
 
         const params = new URLSearchParams();
         params.set('clubSlug', String(simulatorData.get('clubSlug') || scopeSlug));
-        params.set('simulationContentType', String(simulatorData.get('simulationContentType') || 'video'));
-        params.set('simulationVisibilityTarget', String(simulatorData.get('simulationVisibilityTarget') || 'public'));
-        params.set('simulationRiskScore', String(simulatorData.get('simulationRiskScore') || '0.42'));
-        params.set('simulationModerationFlagged', String(simulatorData.get('simulationModerationFlagged') || 'false'));
-        if (String(simulatorData.get('simulationAgentSuggestedApproverRole') || '').trim()) {
-          params.set(
-            'simulationAgentSuggestedApproverRole',
-            String(simulatorData.get('simulationAgentSuggestedApproverRole') || '').trim()
-          );
-        }
+        appendSimulatorParams(params, simulatorData);
         params.set('previewScopeType', scopeType);
         params.set('previewDraftPolicy', JSON.stringify(payload));
         window.location.assign('/workflow-settings?' + params.toString());

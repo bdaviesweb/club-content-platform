@@ -698,7 +698,7 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     );
     const gainingClubs = encodeURIComponent(JSON.stringify([]));
     const response = await originalFetch(
-      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&saveScopeType=organization&saveChangedAreaCount=2&saveAffectedClubCount=1&saveInsulatedClubCount=1&saveCurrentOverrideClubCount=2&saveProjectedOverrideClubCount=1&saveCurrentOverrideAreaCount=9&saveProjectedOverrideAreaCount=7&saveReducingClubs=${reducingClubs}&saveGainingClubs=${gainingClubs}&saveChangedAreaKeys=publicApproverRole,notificationRule`
+      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&saveScopeType=organization&saveChangedAreaCount=2&saveAffectedClubCount=1&saveInsulatedClubCount=1&saveCurrentOverrideClubCount=2&saveProjectedOverrideClubCount=1&saveCurrentOverrideAreaCount=9&saveProjectedOverrideAreaCount=7&saveReducingClubs=${reducingClubs}&saveGainingClubs=${gainingClubs}&saveChangedAreaKeys=publicApproverRole,notificationRule&simulationContentType=photo&simulationVisibilityTarget=internal&simulationRiskScore=0.19&simulationModerationFlagged=true&simulationAgentSuggestedApproverRole=club_admin`
     );
     const body = await response.text();
 
@@ -730,6 +730,11 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /clubView=overrides/);
     assert.match(body, /clubArea=publicApproverRole/);
     assert.match(body, /clubArea=notificationRule/);
+    assert.match(body, /name="simulationContentType"[\s\S]*?<option value="photo" selected/);
+    assert.match(body, /name="simulationVisibilityTarget"[\s\S]*?<option value="internal" selected/);
+    assert.match(body, /name="simulationRiskScore" type="number" min="0" max="1" step="0.01" value="0.19"/);
+    assert.match(body, /name="simulationModerationFlagged"[\s\S]*?<option value="true" selected/);
+    assert.match(body, /name="simulationAgentSuggestedApproverRole"[\s\S]*?<option value="club_admin" selected/);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise((resolve, reject) =>
@@ -1242,7 +1247,7 @@ test("GET /workflow-settings renders a post-save club exception summary", async 
   try {
     const address = server.address();
     const response = await originalFetch(
-      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&saveScopeType=club&saveChangedAreaCount=8&saveCurrentOverrideAreaCount=0&saveProjectedOverrideAreaCount=8&saveChangedAreaKeys=allowAgentRouting,autoApproveInternalLowRisk,autoApproveMaxRisk,autoApprovalRule,routingRule,approvalRule,publishingRule,notificationRule&saveAddedAreaKeys=allowAgentRouting,autoApproveInternalLowRisk,autoApproveMaxRisk,autoApprovalRule,routingRule,approvalRule,publishingRule,notificationRule`
+      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&saveScopeType=club&saveChangedAreaCount=8&saveCurrentOverrideAreaCount=0&saveProjectedOverrideAreaCount=8&saveChangedAreaKeys=allowAgentRouting,autoApproveInternalLowRisk,autoApproveMaxRisk,autoApprovalRule,routingRule,approvalRule,publishingRule,notificationRule&saveAddedAreaKeys=allowAgentRouting,autoApproveInternalLowRisk,autoApproveMaxRisk,autoApprovalRule,routingRule,approvalRule,publishingRule,notificationRule&simulationContentType=photo&simulationVisibilityTarget=internal&simulationRiskScore=0.19&simulationModerationFlagged=true&simulationAgentSuggestedApproverRole=club_admin`
     );
     const body = await response.text();
 
@@ -1269,6 +1274,11 @@ test("GET /workflow-settings renders a post-save club exception summary", async 
     assert.match(body, /This save did not remove any existing club-specific exceptions\./);
     assert.match(body, /This save did not carry forward any existing club-specific exceptions\./);
     assert.match(body, /Run the simulator below against this saved policy/);
+    assert.match(body, /name="simulationContentType"[\s\S]*?<option value="photo" selected/);
+    assert.match(body, /name="simulationVisibilityTarget"[\s\S]*?<option value="internal" selected/);
+    assert.match(body, /name="simulationRiskScore" type="number" min="0" max="1" step="0.01" value="0.19"/);
+    assert.match(body, /name="simulationModerationFlagged"[\s\S]*?<option value="true" selected/);
+    assert.match(body, /name="simulationAgentSuggestedApproverRole"[\s\S]*?<option value="club_admin" selected/);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise((resolve, reject) =>
