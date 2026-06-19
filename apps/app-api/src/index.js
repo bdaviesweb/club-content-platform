@@ -573,38 +573,40 @@ function normalizeWorkflowPolicyHistoryContext(input) {
   const normalized = {};
   const cleanupSummary = input.cleanupSummary;
 
-  if (!cleanupSummary || typeof cleanupSummary !== "object" || Array.isArray(cleanupSummary)) {
-    return null;
-  }
+  if (
+    cleanupSummary &&
+    typeof cleanupSummary === "object" &&
+    !Array.isArray(cleanupSummary)
+  ) {
+    const areaKey = String(cleanupSummary.areaKey || "").trim();
+    const clubs = Array.isArray(cleanupSummary.clubs)
+      ? cleanupSummary.clubs
+          .map((club) => {
+            if (!club || typeof club !== "object" || Array.isArray(club)) {
+              return null;
+            }
 
-  const areaKey = String(cleanupSummary.areaKey || "").trim();
-  const clubs = Array.isArray(cleanupSummary.clubs)
-    ? cleanupSummary.clubs
-        .map((club) => {
-          if (!club || typeof club !== "object" || Array.isArray(club)) {
-            return null;
-          }
+            const slug = String(club.slug || "").trim();
+            const name = String(club.name || "").trim();
 
-          const slug = String(club.slug || "").trim();
-          const name = String(club.name || "").trim();
+            if (!slug) {
+              return null;
+            }
 
-          if (!slug) {
-            return null;
-          }
+            return {
+              slug,
+              name: name || slug
+            };
+          })
+          .filter(Boolean)
+      : [];
 
-          return {
-            slug,
-            name: name || slug
-          };
-        })
-        .filter(Boolean)
-    : [];
-
-  if (areaKey && clubs.length) {
-    normalized.cleanupSummary = {
-      areaKey,
-      clubs
-    };
+    if (areaKey && clubs.length) {
+      normalized.cleanupSummary = {
+        areaKey,
+        clubs
+      };
+    }
   }
 
   const simulationTrace = input.simulationTrace;
@@ -666,6 +668,50 @@ function normalizeWorkflowPolicyHistoryContext(input) {
       normalized.simulationTrace = {
         scenario,
         changedRows
+      };
+    }
+  }
+
+  const rolloutSnapshot = input.rolloutSnapshot;
+  if (
+    rolloutSnapshot &&
+    typeof rolloutSnapshot === "object" &&
+    !Array.isArray(rolloutSnapshot)
+  ) {
+    const normalizeRolloutClubs = (clubs) =>
+      Array.isArray(clubs)
+        ? clubs
+            .map((club) => {
+              if (!club || typeof club !== "object" || Array.isArray(club)) {
+                return null;
+              }
+
+              const slug = String(club.slug || "").trim();
+              const name = String(club.name || "").trim();
+              const areas = Array.isArray(club.areas)
+                ? club.areas.map((area) => String(area || "").trim()).filter(Boolean)
+                : [];
+
+              if (!slug || !areas.length) {
+                return null;
+              }
+
+              return {
+                slug,
+                name: name || slug,
+                areas
+              };
+            })
+            .filter(Boolean)
+        : [];
+
+    const inheritingClubs = normalizeRolloutClubs(rolloutSnapshot.inheritingClubs);
+    const insulatedClubs = normalizeRolloutClubs(rolloutSnapshot.insulatedClubs);
+
+    if (inheritingClubs.length || insulatedClubs.length) {
+      normalized.rolloutSnapshot = {
+        inheritingClubs,
+        insulatedClubs
       };
     }
   }

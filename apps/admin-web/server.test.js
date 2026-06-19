@@ -166,7 +166,23 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
                       previousValue: { email: true },
                       nextValue: { email: true, push: false }
                     }
-                  ]
+                  ],
+                  rolloutSnapshot: {
+                    inheritingClubs: [
+                      {
+                        slug: "westside",
+                        name: "Westside",
+                        areas: ["Approval Rule", "Notification Rule"]
+                      }
+                    ],
+                    insulatedClubs: [
+                      {
+                        slug: "eastside",
+                        name: "Eastside",
+                        areas: ["Approval Rule", "Notification Rule"]
+                      }
+                    ]
+                  }
                 }
               }
             ]
@@ -285,6 +301,12 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Preview rollback of latest org change/);
     assert.match(body, /Preview rollback of approval rule/);
     assert.match(body, /Preview rollback of notification rule/);
+    assert.match(body, /Saved rollout snapshot/);
+    assert.match(body, /This captures which clubs were inheriting the changed organization areas and which clubs were still insulated by overrides when this save was recorded\./);
+    assert.match(body, /Following the saved default/);
+    assert.match(body, /Inherited areas: Approval Rule, Notification Rule/);
+    assert.match(body, /Still insulated by overrides/);
+    assert.match(body, /Still insulated in: Approval Rule, Notification Rule/);
     assert.match(body, /Preview rollback of latest club change/);
     assert.match(body, /Preview rollback of routing rule/);
     assert.match(body, /This restores the earlier club-specific value recorded before this change\./);
@@ -3433,6 +3455,59 @@ test("POST /ui/workflow-policies/organizations/:slug proxies policy updates to t
       body: init.body ? JSON.parse(init.body) : null
     });
 
+    if (String(url).endsWith("/workflow-policies/organizations/metro") && (init.method || "GET") === "GET") {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "metro", name: "Metro Sports" },
+            organizationPolicy: {
+              defaultApproverRole: "team_manager",
+              publicApproverRole: "club_comms",
+              mediumRiskApproverRole: "club_comms",
+              allowAgentRouting: true,
+              autoApproveInternalLowRisk: false,
+              autoApproveMaxRisk: 0.35,
+              autoApprovalRule: {},
+              routingRule: {},
+              approvalRule: {},
+              publishingRule: {},
+              notificationRule: { email: true }
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/organizations/metro")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubs: [
+              {
+                slug: "westside",
+                name: "Westside",
+                overrideSummary: {
+                  overrideCount: 0,
+                  overriddenFields: []
+                }
+              },
+              {
+                slug: "eastside",
+                name: "Eastside",
+                overrideSummary: {
+                  overrideCount: 2,
+                  overriddenFields: ["Public approver", "Notification rule"]
+                }
+              }
+            ]
+          };
+        }
+      };
+    }
+
     return {
       ok: true,
       async json() {
@@ -3484,6 +3559,16 @@ test("POST /ui/workflow-policies/organizations/:slug proxies policy updates to t
     assert.deepEqual(calls, [
       {
         url: "http://app-api:4000/workflow-policies/organizations/metro",
+        method: "GET",
+        body: null
+      },
+      {
+        url: "http://app-api:4000/organizations/metro",
+        method: "GET",
+        body: null
+      },
+      {
+        url: "http://app-api:4000/workflow-policies/organizations/metro",
         method: "POST",
         body: {
           actorEmail: "org-admin@example.test",
@@ -3503,6 +3588,34 @@ test("POST /ui/workflow-policies/organizations/:slug proxies policy updates to t
                 email: false,
                 push: true
               }
+            }
+          },
+          historyContext: {
+            rolloutSnapshot: {
+              inheritingClubs: [
+                {
+                  slug: "westside",
+                  name: "Westside",
+                  areas: [
+                    "Default approver",
+                    "Public approver",
+                    "Approval rule",
+                    "Notification rule"
+                  ]
+                },
+                {
+                  slug: "eastside",
+                  name: "Eastside",
+                  areas: ["Default approver", "Approval rule"]
+                }
+              ],
+              insulatedClubs: [
+                {
+                  slug: "eastside",
+                  name: "Eastside",
+                  areas: ["Public approver", "Notification rule"]
+                }
+              ]
             }
           }
         }
@@ -3717,6 +3830,22 @@ test("POST /ui/workflow-policies/organizations/:slug/restore-area restores one o
                   label: "Published push",
                   before: "Disabled (Notification Policy Push Disabled)",
                   after: "Enabled"
+                }
+              ]
+            },
+            rolloutSnapshot: {
+              inheritingClubs: [
+                {
+                  slug: "westside",
+                  name: "Westside",
+                  areas: ["Notification rule"]
+                }
+              ],
+              insulatedClubs: [
+                {
+                  slug: "eastside",
+                  name: "Eastside",
+                  areas: ["Notification rule"]
                 }
               ]
             }
@@ -4189,6 +4318,16 @@ test("POST /ui/workflow-policies/organizations/:slug/save-with-cleanup saves org
       },
       {
         url: "http://app-api:4000/workflow-policies/organizations/metro",
+        method: "GET",
+        body: null
+      },
+      {
+        url: "http://app-api:4000/organizations/metro",
+        method: "GET",
+        body: null
+      },
+      {
+        url: "http://app-api:4000/workflow-policies/organizations/metro",
         method: "POST",
         body: {
           actorEmail: "org-admin@example.test",
@@ -4211,6 +4350,21 @@ test("POST /ui/workflow-policies/organizations/:slug/save-with-cleanup saves org
                   after: "Disabled (Policy Disabled)"
                 }
               ]
+            },
+            rolloutSnapshot: {
+              inheritingClubs: [
+                {
+                  slug: "eastside",
+                  name: "Eastside",
+                  areas: ["Default approver", "Public approver"]
+                },
+                {
+                  slug: "westside",
+                  name: "Westside",
+                  areas: ["Default approver", "Public approver"]
+                }
+              ],
+              insulatedClubs: []
             },
             cleanupSummary: {
               areaKey: "notificationRule",

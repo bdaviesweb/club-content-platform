@@ -4244,6 +4244,12 @@ function renderPolicyHistoryCard(
                 "This captures the saved simulator consequence recorded with this organization policy update."
             }
           );
+          const organizationRolloutSnapshotCard =
+            linkVariant === "organization"
+              ? renderOrganizationHistoryRolloutSnapshotCard(
+                  item.metadata?.rolloutSnapshot || null
+                )
+              : "";
           const rollbackPreviewLink =
             rollbackPreviewPolicy
               ? `<div class="badge-row" style="margin-top:10px; align-items:flex-start;">
@@ -4278,6 +4284,7 @@ function renderPolicyHistoryCard(
             ${changeDetailRows}
             ${rollbackPreviewLink}
             ${cleanupSummaryCard}
+            ${organizationRolloutSnapshotCard}
             ${simulationTraceCard}
             ${followUpLink}
           </div>`;
@@ -5388,6 +5395,94 @@ function buildLiveOrganizationRolloutSnapshot({
     inheritingClubs: Array.from(inheritingBySlug.values()),
     insulatedClubs: Array.from(insulatedBySlug.values())
   };
+}
+
+function buildOrganizationHistoryRolloutSnapshot({
+  organizationDirectory = null,
+  organizationPolicy = null,
+  previewOrganizationPolicy = null
+}) {
+  const changedAreas = listChangedPolicyAreas({
+    livePolicy: organizationPolicy || {},
+    previewPolicy: previewOrganizationPolicy || {}
+  });
+
+  if (!changedAreas.length) {
+    return null;
+  }
+
+  const snapshot = buildLiveOrganizationRolloutSnapshot({
+    organizationDirectory,
+    changedAreas
+  });
+
+  if (!snapshot.inheritingClubs.length && !snapshot.insulatedClubs.length) {
+    return null;
+  }
+
+  return snapshot;
+}
+
+function renderOrganizationHistoryRolloutSnapshotCard(rolloutSnapshot = null) {
+  if (!rolloutSnapshot || typeof rolloutSnapshot !== "object") {
+    return "";
+  }
+
+  const inheritingClubs = Array.isArray(rolloutSnapshot.inheritingClubs)
+    ? rolloutSnapshot.inheritingClubs
+    : [];
+  const insulatedClubs = Array.isArray(rolloutSnapshot.insulatedClubs)
+    ? rolloutSnapshot.insulatedClubs
+    : [];
+
+  if (!inheritingClubs.length && !insulatedClubs.length) {
+    return "";
+  }
+
+  return `<div class="summary-stack" style="margin-top:12px;">
+      <div class="summary-item">
+        <strong>Saved rollout snapshot</strong>
+        <p class="subtle" style="margin-top:6px;">This captures which clubs were inheriting the changed organization areas and which clubs were still insulated by overrides when this save was recorded.</p>
+      </div>
+      <div class="summary-item" style="background: rgba(220, 252, 231, 0.62); border:1px solid rgba(22, 101, 52, 0.18);">
+        <strong>Following the saved default</strong>
+        ${
+          inheritingClubs.length
+            ? `<div class="summary-stack" style="margin-top:12px;">
+                ${inheritingClubs
+                  .map(
+                    (club) => `<div class="summary-item">
+                      <strong>${escapeHtml(club.name || club.slug || "")}</strong>
+                      <p class="subtle" style="margin-top:6px;">${escapeHtml(
+                        `Inherited areas: ${(club.areas || []).join(", ")}`
+                      )}</p>
+                    </div>`
+                  )
+                  .join("")}
+              </div>`
+            : `<p class="subtle" style="margin-top:6px;">No clubs were following the changed organization areas when this save was recorded.</p>`
+        }
+      </div>
+      <div class="summary-item" style="background: rgba(255, 247, 237, 0.82); border:1px solid rgba(154, 52, 18, 0.16);">
+        <strong>Still insulated by overrides</strong>
+        ${
+          insulatedClubs.length
+            ? `<div class="summary-stack" style="margin-top:12px;">
+                ${insulatedClubs
+                  .map(
+                    (club) => `<div class="summary-item">
+                      <strong>${escapeHtml(club.name || club.slug || "")}</strong>
+                      <p class="subtle" style="margin-top:6px;">${escapeHtml(
+                        `Still insulated in: ${(club.areas || []).join(", ")}`
+                      )}</p>
+                    </div>`
+                  )
+                  .join("")}
+              </div>`
+            : `<p class="subtle" style="margin-top:6px;">No clubs were still insulating themselves from the changed organization areas when this save was recorded.</p>`
+        }
+      </div>
+    </div>`;
 }
 
 function renderCurrentOrganizationRolloutState({
@@ -7938,10 +8033,53 @@ export function createAdminServer() {
       ) {
         const [, , , resourceType, scopeSlug] = url.pathname.split("/");
         const body = await readJson(req);
+        const payloadBody =
+          resourceType === "organizations"
+            ? await (async () => {
+                const organizationPolicy = await fetchJson(
+                  `/workflow-policies/organizations/${encodeURIComponent(scopeSlug)}`
+                );
+                const organizationDirectory = await fetchJson(
+                  `/organizations/${encodeURIComponent(scopeSlug)}`
+                );
+                const nextOrganizationPolicy = {
+                  ...(organizationPolicy?.organizationPolicy || {})
+                };
+
+                trackedPolicyAreaFields.forEach((area) => {
+                  if (Object.hasOwn(body, area.key)) {
+                    nextOrganizationPolicy[area.key] = body[area.key] ?? null;
+                  }
+                });
+
+                const baseHistoryContext =
+                  body.historyContext &&
+                  typeof body.historyContext === "object" &&
+                  !Array.isArray(body.historyContext)
+                    ? body.historyContext
+                    : null;
+                const rolloutSnapshot = buildOrganizationHistoryRolloutSnapshot({
+                  organizationDirectory,
+                  organizationPolicy: organizationPolicy?.organizationPolicy || {},
+                  previewOrganizationPolicy: nextOrganizationPolicy
+                });
+
+                return {
+                  ...body,
+                  historyContext:
+                    baseHistoryContext || rolloutSnapshot
+                      ? {
+                          ...(baseHistoryContext || {}),
+                          ...(rolloutSnapshot ? { rolloutSnapshot } : {})
+                        }
+                      : undefined
+                };
+              })()
+            : body;
         const payload = await fetchJson(`/workflow-policies/${resourceType}/${scopeSlug}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify(body)
+          body: JSON.stringify(payloadBody)
         });
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify(payload));
@@ -8029,6 +8167,11 @@ export function createAdminServer() {
           affectedClubCount: organizationDraftImpact?.affectedClubs.length || 0,
           overrideBurdenSummary
         });
+        const rolloutSnapshot = buildOrganizationHistoryRolloutSnapshot({
+          organizationDirectory,
+          organizationPolicy: organizationPolicy?.organizationPolicy || {},
+          previewOrganizationPolicy
+        });
 
         await fetchJson(
           `/workflow-policies/organizations/${encodeURIComponent(organizationSlug)}`,
@@ -8040,9 +8183,12 @@ export function createAdminServer() {
               [fieldKey]: Object.hasOwn(body, "restoreValue") ? body.restoreValue ?? null : null,
               historyContext: simulationTrace
                 ? {
-                    simulationTrace
+                    simulationTrace,
+                    ...(rolloutSnapshot ? { rolloutSnapshot } : {})
                   }
-                : undefined
+                : rolloutSnapshot
+                  ? { rolloutSnapshot }
+                  : undefined
             })
           }
         );
@@ -8340,6 +8486,25 @@ export function createAdminServer() {
           !Array.isArray(policyPayload.historyContext)
             ? policyPayload.historyContext
             : null;
+        const organizationPolicy = await fetchJson(
+          `/workflow-policies/organizations/${encodeURIComponent(organizationSlug)}`
+        );
+        const organizationDirectory = await fetchJson(
+          `/organizations/${encodeURIComponent(organizationSlug)}`
+        );
+        const nextOrganizationPolicy = {
+          ...(organizationPolicy?.organizationPolicy || {})
+        };
+        trackedPolicyAreaFields.forEach((area) => {
+          if (Object.hasOwn(policyPayload, area.key)) {
+            nextOrganizationPolicy[area.key] = policyPayload[area.key] ?? null;
+          }
+        });
+        const rolloutSnapshot = buildOrganizationHistoryRolloutSnapshot({
+          organizationDirectory,
+          organizationPolicy: organizationPolicy?.organizationPolicy || {},
+          previewOrganizationPolicy: nextOrganizationPolicy
+        });
         const policyResult = await fetchJson(
           `/workflow-policies/organizations/${encodeURIComponent(organizationSlug)}`,
           {
@@ -8351,12 +8516,18 @@ export function createAdminServer() {
                 cleanupAreaKey && resolvedCleanupClubs.length
                   ? {
                       ...(baseHistoryContext || {}),
+                      ...(rolloutSnapshot ? { rolloutSnapshot } : {}),
                       cleanupSummary: {
                         areaKey: cleanupAreaKey,
                         clubs: resolvedCleanupClubs
                       }
                     }
-                  : baseHistoryContext || undefined
+                  : baseHistoryContext || rolloutSnapshot
+                    ? {
+                        ...(baseHistoryContext || {}),
+                        ...(rolloutSnapshot ? { rolloutSnapshot } : {})
+                      }
+                    : undefined
             })
           }
         );

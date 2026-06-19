@@ -707,6 +707,22 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
               { slug: "westside", name: "Westside" }
             ]
           },
+          rolloutSnapshot: {
+            inheritingClubs: [
+              {
+                slug: "westside",
+                name: "Westside",
+                areas: ["Default Approver", "Notification Rule"]
+              }
+            ],
+            insulatedClubs: [
+              {
+                slug: "eastside",
+                name: "Eastside",
+                areas: ["Notification Rule"]
+              }
+            ]
+          },
           simulationTrace: {
             scenario: {
               contentType: "photo",
@@ -831,6 +847,22 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
       clubs: [
         { slug: "eastside", name: "Eastside" },
         { slug: "westside", name: "Westside" }
+      ]
+    });
+    assert.deepEqual(organizationAuditMetadata.rolloutSnapshot, {
+      inheritingClubs: [
+        {
+          slug: "westside",
+          name: "Westside",
+          areas: ["Default Approver", "Notification Rule"]
+        }
+      ],
+      insulatedClubs: [
+        {
+          slug: "eastside",
+          name: "Eastside",
+          areas: ["Notification Rule"]
+        }
       ]
     });
     assert.deepEqual(organizationAuditMetadata.simulationTrace, {
