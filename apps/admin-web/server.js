@@ -3568,12 +3568,14 @@ function renderClubOverrideSummary({ clubPolicy = {}, organizationPolicy = {} })
   </section>`;
 }
 
-function renderOrganizationDirectory(directory) {
+function renderOrganizationDirectory(directory, clubView = "all") {
   if (!directory) {
     return "";
   }
 
   const clubs = Array.isArray(directory.clubs) ? [...directory.clubs] : [];
+  const normalizedClubView =
+    clubView === "overrides" || clubView === "inheriting" ? clubView : "all";
   const clubsWithOverrides = clubs
     .filter((club) => Number(club.overrideSummary?.overrideCount || 0) > 0)
     .sort(
@@ -3628,25 +3630,44 @@ function renderOrganizationDirectory(directory) {
           <strong>${escapeHtml(String(fullyInheritedClubs.length))}</strong>
           <span class="subtle">Clubs aligned to the organization default</span>
         </div>
+        <div class="metric-card">
+          <span class="metric-label">Current view</span>
+          <strong>${escapeHtml(
+            normalizedClubView === "overrides"
+              ? "Overrides only"
+              : normalizedClubView === "inheriting"
+                ? "Fully inheriting"
+                : "All clubs"
+          )}</strong>
+          <span class="subtle">Use the page filter to narrow exception cleanup.</span>
+        </div>
       </div>
       <div class="summary-stack" style="margin-top:12px;">
-        <div class="summary-item" style="background: rgba(255,255,255,0.68);">
-          <strong>Clubs needing exception review</strong>
-          <p class="subtle" style="margin-top:6px;">Most customized clubs appear first so you can clean up the biggest outliers quickly.</p>
-        </div>
         ${
-          clubsWithOverrides.length
-            ? clubsWithOverrides.map(renderClubDirectoryItem).join("")
-            : `<p class="subtle">No clubs in this organization are carrying custom workflow policy right now.</p>`
+          normalizedClubView !== "inheriting"
+            ? `<div class="summary-item" style="background: rgba(255,255,255,0.68);">
+                <strong>Clubs needing exception review</strong>
+                <p class="subtle" style="margin-top:6px;">Most customized clubs appear first so you can clean up the biggest outliers quickly.</p>
+              </div>
+              ${
+                clubsWithOverrides.length
+                  ? clubsWithOverrides.map(renderClubDirectoryItem).join("")
+                  : `<p class="subtle">No clubs in this organization are carrying custom workflow policy right now.</p>`
+              }`
+            : ""
         }
-        <div class="summary-item" style="background: rgba(255,255,255,0.68);">
-          <strong>Clubs fully inheriting organization defaults</strong>
-          <p class="subtle" style="margin-top:6px;">These clubs will follow organization-level rollout changes unless a new override is added.</p>
-        </div>
         ${
-          fullyInheritedClubs.length
-            ? fullyInheritedClubs.map(renderClubDirectoryItem).join("")
-            : `<p class="subtle">Every club in this organization currently has at least one custom override.</p>`
+          normalizedClubView !== "overrides"
+            ? `<div class="summary-item" style="background: rgba(255,255,255,0.68);">
+                <strong>Clubs fully inheriting organization defaults</strong>
+                <p class="subtle" style="margin-top:6px;">These clubs will follow organization-level rollout changes unless a new override is added.</p>
+              </div>
+              ${
+                fullyInheritedClubs.length
+                  ? fullyInheritedClubs.map(renderClubDirectoryItem).join("")
+                  : `<p class="subtle">Every club in this organization currently has at least one custom override.</p>`
+              }`
+            : ""
         }
       </div>
     `
@@ -3688,7 +3709,8 @@ function renderOrganizationDirectory(directory) {
 async function renderWorkflowSettingsPage(
   clubSlug,
   simulationInput = {},
-  previewDraft = null
+  previewDraft = null,
+  clubView = "all"
 ) {
   const readiness = await fetchJson("/app/readiness");
   const selectedClubSlug = clubSlug || readiness?.demo?.clubSlug || "demo-soccer-club";
@@ -3777,6 +3799,19 @@ async function renderWorkflowSettingsPage(
           helper: "Load the policy stack for one club at a time.",
           input: `<input name="clubSlug" value="${escapeHtml(selectedClubSlug)}" placeholder="demo-soccer-club" />`
         })}
+        ${renderPolicyField({
+          label: "Club view",
+          name: "clubView",
+          helper: "Filter the organization directory to all clubs, only clubs with overrides, or only fully inheriting clubs.",
+          input: `<select name="clubView">${renderPolicySelectOptions(
+            [
+              { value: "all", label: "All clubs" },
+              { value: "overrides", label: "Overrides only" },
+              { value: "inheriting", label: "Fully inheriting" }
+            ],
+            clubView || "all"
+          )}</select>`
+        })}
         <div class="policy-actions">
           <button type="submit" class="button-secondary">Load settings</button>
           <span class="subtle">Organization: ${escapeHtml(clubPolicy.organization?.name || "No organization linked")}</span>
@@ -3812,7 +3847,8 @@ async function renderWorkflowSettingsPage(
       clubPolicy: previewClubPolicy,
       organizationPolicy: previewOrganizationPolicy
     })}
-    ${renderOrganizationDirectory(organizationDirectory)}
+    ${renderOrganizationDirectory(organizationDirectory, clubView)}
+    
 
     <section class="workflow-settings-grid">
       ${renderWorkflowPolicyForm({
@@ -4264,7 +4300,7 @@ export function createAdminServer() {
         }, {
           scopeType: url.searchParams.get("previewScopeType"),
           payload: parsePreviewDraft(url.searchParams.get("previewDraftPolicy"))
-        });
+        }, url.searchParams.get("clubView"));
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         res.end(html);
         return;

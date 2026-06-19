@@ -234,6 +234,9 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.equal(response.status, 200);
     assert.match(body, /Workflow settings/);
     assert.match(body, /Set routing rules by club or by organization/);
+    assert.match(body, /Club view/);
+    assert.match(body, /Overrides only/);
+    assert.match(body, /Fully inheriting/);
     assert.match(body, /Westside/);
     assert.match(body, /Metro Sports/);
     assert.match(body, /Recent workflow policy changes/);
@@ -303,6 +306,172 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
       "http://app-api:4000/workflow-policies/organizations/metro/history",
       "http://app-api:4000/workflow-policies/clubs/westside/history"
     ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await new Promise((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))
+    );
+  }
+});
+
+test("GET /workflow-settings filters the organization directory to clubs with overrides", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith("/app/readiness")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            demo: {
+              clubSlug: "westside",
+              reviewerEmail: "comms@westside.test"
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/clubs/westside")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            club: { slug: "westside", name: "Westside" },
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubPolicy: {
+              defaultApproverRole: "club_admin",
+              allowAgentRouting: false,
+              autoApproveInternalLowRisk: true,
+              autoApproveMaxRisk: 0.15,
+              autoApprovalRule: { blockedContentTypes: ["video"] },
+              routingRule: { contentTypeApprovers: { video: "team_manager" } },
+              publishingRule: {},
+              notificationRule: { push: true }
+            },
+            effectivePolicy: {
+              defaultApproverRole: "club_admin",
+              publicApproverRole: "club_comms",
+              mediumRiskApproverRole: "club_comms",
+              allowAgentRouting: false,
+              autoApproveInternalLowRisk: true,
+              autoApproveMaxRisk: 0.15,
+              autoApprovalRule: { blockedContentTypes: ["video"] },
+              routingRule: { contentTypeApprovers: { video: "team_manager" } },
+              approvalRule: {
+                requireSecondApprovalForPublic: true,
+                secondApproverRole: "club_admin",
+                secondApprovalContentTypes: ["video"]
+              },
+              publishingRule: {
+                visibilityDestinations: {
+                  internal: ["internal_feed"],
+                  public: ["internal_feed"]
+                }
+              },
+              notificationRule: { push: true }
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/organizations/metro")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "metro", name: "Metro Sports" },
+            organizationPolicy: {
+              defaultApproverRole: "team_manager",
+              publicApproverRole: "club_comms",
+              mediumRiskApproverRole: "club_comms",
+              allowAgentRouting: true,
+              autoApproveInternalLowRisk: false,
+              autoApproveMaxRisk: 0.35,
+              autoApprovalRule: { allowedContentTypes: ["photo"] },
+              routingRule: { contentTypeApprovers: { video: "club_admin" } },
+              publishingRule: {
+                visibilityDestinations: {
+                  internal: ["internal_feed"],
+                  public: ["internal_feed"]
+                }
+              },
+              notificationRule: { email: true }
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/organizations/metro/history")) {
+      return {
+        ok: true,
+        async json() {
+          return { items: [] };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/clubs/westside/history")) {
+      return {
+        ok: true,
+        async json() {
+          return { items: [] };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/organizations/metro")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubs: [
+              {
+                slug: "westside",
+                name: "Westside",
+                overrideSummary: {
+                  overrideCount: 2,
+                  overriddenFields: ["Default approver", "Agent routing"]
+                }
+              },
+              {
+                slug: "eastside",
+                name: "Eastside",
+                overrideSummary: {
+                  overrideCount: 0,
+                  overriddenFields: []
+                }
+              }
+            ],
+            admins: []
+          };
+        }
+      };
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  };
+
+  const server = createAdminServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const address = server.address();
+    const response = await originalFetch(
+      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&clubView=overrides`
+    );
+    const body = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(body, /Current view/);
+    assert.match(body, /Overrides only/);
+    assert.match(body, /Clubs needing exception review/);
+    assert.doesNotMatch(body, /Clubs fully inheriting organization defaults/);
+    assert.match(body, /Open Westside policy stack/);
+    assert.doesNotMatch(body, /Open Eastside policy stack/);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise((resolve, reject) =>
