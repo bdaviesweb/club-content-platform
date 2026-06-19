@@ -2128,9 +2128,18 @@ function renderPolicyField({
   name,
   input,
   helper = "",
-  actionHtml = ""
+  actionHtml = "",
+  areaKey = "",
+  emphasized = false
 }) {
-  return `<label class="form-field">
+  const anchorId = areaKey ? `policy-area-${areaKey}` : "";
+  const style = emphasized
+    ? ' style="scroll-margin-top:24px; border:1px solid rgba(59,130,246,0.24); box-shadow:0 0 0 3px rgba(191,219,254,0.55);"'
+    : anchorId
+      ? ' style="scroll-margin-top:24px;"'
+      : "";
+
+  return `<label class="form-field"${anchorId ? ` id="${escapeHtml(anchorId)}"` : ""}${style}>
     <span class="badge-row" style="justify-content:space-between; align-items:flex-start;">
       <span>${escapeHtml(label)}</span>
       ${actionHtml}
@@ -2148,6 +2157,10 @@ function renderPolicyAreaResetButton({ areaLabel, fieldNames = [], allowInherita
   return `<button type="button" class="quick-link" data-reset-area-fields="${escapeHtml(
     JSON.stringify(fieldNames)
   )}" data-reset-area-label="${escapeHtml(areaLabel)}">Inherit this area</button>`;
+}
+
+function buildPolicyAreaAnchor(areaKey = "") {
+  return areaKey ? `#policy-area-${areaKey}` : "";
 }
 
 function renderPolicyRulePreview(label, value) {
@@ -3132,7 +3145,9 @@ function renderContentTypeRoleFields({
   roleOptions,
   allowInheritance,
   values = {},
-  actionHtml = ""
+  actionHtml = "",
+  areaKey = "",
+  emphasized = false
 }) {
   const contentTypes = [
     { key: "photo", label: "Photo" },
@@ -3153,7 +3168,14 @@ function renderContentTypeRoleFields({
     )
     .join("");
 
-  return `<div class="form-field">
+  const anchorId = areaKey ? `policy-area-${areaKey}` : "";
+  const style = emphasized
+    ? ' style="scroll-margin-top:24px; border:1px solid rgba(59,130,246,0.24); box-shadow:0 0 0 3px rgba(191,219,254,0.55);"'
+    : anchorId
+      ? ' style="scroll-margin-top:24px;"'
+      : "";
+
+  return `<div class="form-field"${anchorId ? ` id="${escapeHtml(anchorId)}"` : ""}${style}>
     <span class="badge-row" style="justify-content:space-between; align-items:flex-start;">
       <span>${escapeHtml(label)}</span>
       ${actionHtml}
@@ -3190,7 +3212,8 @@ function renderWorkflowPolicyForm({
   previewReducingClubs = [],
   previewGainingClubs = [],
   previewGuardrailWarnings = [],
-  simulationInput = null
+  simulationInput = null,
+  focusedInheritanceAreaKey = null
 }) {
   const roleOptions = [
     { value: "team_manager", label: "Team manager" },
@@ -3285,6 +3308,32 @@ function renderWorkflowPolicyForm({
             previewScopeType === scopeType ? JSON.stringify(policy || {}) : null
         })
       : "";
+  const focusedInheritanceArea =
+    allowInheritance && previewScopeType === "club" && focusedInheritanceAreaKey
+      ? trackedPolicyAreaFields.find((area) => area.key === focusedInheritanceAreaKey) || null
+      : null;
+  const focusedInheritanceCard = focusedInheritanceArea
+    ? `<div class="signal-card" style="margin-bottom:16px; border:1px solid rgba(37, 99, 235, 0.18); background: rgba(239, 246, 255, 0.92);">
+        <div class="badge-row" style="margin-bottom:10px;">
+          <strong>Review ${escapeHtml(
+            focusedInheritanceArea.label.toLowerCase()
+          )} inheritance</strong>
+          ${renderStatusBadge("Ready to save", "info")}
+        </div>
+        <p class="subtle">This preview cleared the club-specific ${escapeHtml(
+          focusedInheritanceArea.label.toLowerCase()
+        )} override so the area now follows the organization default unless you change it again before saving.</p>
+        <div class="badge-row" style="margin-top:10px;">
+          <a class="quick-link" href="${escapeHtml(
+            buildPolicyAreaAnchor(focusedInheritanceArea.key)
+          )}">Jump to this area</a>
+          <a class="quick-link" href="${buildWorkflowSettingsLink({
+            clubSlug: returnClubSlug || scopeSlug,
+            simulationInput
+          })}">Reset to live policy</a>
+        </div>
+      </div>`
+    : "";
 
   return `<section class="panel workflow-form-panel">
     <div class="section-header">
@@ -3296,6 +3345,7 @@ function renderWorkflowPolicyForm({
       <span class="badge badge-neutral">${escapeHtml(scopeSlug || "n/a")}</span>
     </div>
     ${guardrailCard}
+    ${focusedInheritanceCard}
     <form class="workflow-policy-form" data-scope-type="${escapeHtml(scopeType)}" data-scope-slug="${escapeHtml(scopeSlug || "")}" data-return-club-slug="${escapeHtml(returnClubSlug || "")}" data-preview-warning-count="${escapeHtml(String(previewWarningCount))}" data-preview-affected-club-count="${escapeHtml(String(previewAffectedClubCount))}" data-preview-changed-area-count="${escapeHtml(String(previewChangedAreaCount))}" data-preview-insulated-club-count="${escapeHtml(String(previewInsulatedClubCount))}" data-preview-changed-area-keys="${escapeHtml((previewChangedAreaKeys || []).join(","))}" data-preview-current-override-club-count="${escapeHtml(String(previewCurrentOverrideClubCount))}" data-preview-projected-override-club-count="${escapeHtml(String(previewProjectedOverrideClubCount))}" data-preview-current-override-area-count="${escapeHtml(String(previewCurrentOverrideAreaCount))}" data-preview-projected-override-area-count="${escapeHtml(String(previewProjectedOverrideAreaCount))}" data-preview-added-area-keys="${escapeHtml((previewAddedAreaKeys || []).join(","))}" data-preview-removed-area-keys="${escapeHtml((previewRemovedAreaKeys || []).join(","))}" data-preview-retained-area-keys="${escapeHtml((previewRetainedAreaKeys || []).join(","))}" data-preview-reducing-clubs="${escapeHtml(JSON.stringify(previewReducingClubs || []))}" data-preview-gaining-clubs="${escapeHtml(JSON.stringify(previewGainingClubs || []))}" data-preview-guardrail-warnings="${escapeHtml(JSON.stringify(previewGuardrailWarnings || []))}">
       ${renderPolicyField({
         label: "Actor email",
@@ -3306,6 +3356,8 @@ function renderWorkflowPolicyForm({
       ${renderPolicyField({
         label: "Default approver",
         name: "defaultApproverRole",
+        areaKey: "defaultApproverRole",
+        emphasized: focusedInheritanceAreaKey === "defaultApproverRole",
         helper: allowInheritance ? "Leave blank to inherit the organization default." : "Used for normal internal submissions.",
         actionHtml: renderPolicyAreaResetButton({
           areaLabel: "Default approver",
@@ -3320,6 +3372,8 @@ function renderWorkflowPolicyForm({
       ${renderPolicyField({
         label: "Public post approver",
         name: "publicApproverRole",
+        areaKey: "publicApproverRole",
+        emphasized: focusedInheritanceAreaKey === "publicApproverRole",
         helper: allowInheritance ? "Used when a club override is needed for public visibility." : "Used when a submission targets public visibility.",
         actionHtml: renderPolicyAreaResetButton({
           areaLabel: "Public approver",
@@ -3334,6 +3388,8 @@ function renderWorkflowPolicyForm({
       ${renderPolicyField({
         label: "Medium-risk approver",
         name: "mediumRiskApproverRole",
+        areaKey: "mediumRiskApproverRole",
+        emphasized: focusedInheritanceAreaKey === "mediumRiskApproverRole",
         helper: allowInheritance ? "Used when a club-specific medium-risk reviewer is needed." : "Used once the review score crosses the medium-risk threshold.",
         actionHtml: renderPolicyAreaResetButton({
           areaLabel: "Medium-risk approver",
@@ -3348,6 +3404,8 @@ function renderWorkflowPolicyForm({
       ${renderPolicyField({
         label: "Agent routing",
         name: "allowAgentRouting",
+        areaKey: "allowAgentRouting",
+        emphasized: focusedInheritanceAreaKey === "allowAgentRouting",
         helper: allowInheritance ? "Choose inherit to follow the organization setting." : "Allows Hermes to override the local fallback approver role.",
         actionHtml: renderPolicyAreaResetButton({
           areaLabel: "Agent routing",
@@ -3362,6 +3420,8 @@ function renderWorkflowPolicyForm({
       ${renderPolicyField({
         label: "Low-risk internal auto-approval",
         name: "autoApproveInternalLowRisk",
+        areaKey: "autoApproveInternalLowRisk",
+        emphasized: focusedInheritanceAreaKey === "autoApproveInternalLowRisk",
         helper: allowInheritance ? "Choose inherit to fall back to the organization rule." : "Allows low-risk internal posts to skip human review.",
         actionHtml: renderPolicyAreaResetButton({
           areaLabel: "Low-risk internal auto-approval",
@@ -3376,6 +3436,8 @@ function renderWorkflowPolicyForm({
       ${renderPolicyField({
         label: "Auto-approve max risk",
         name: "autoApproveMaxRisk",
+        areaKey: "autoApproveMaxRisk",
+        emphasized: focusedInheritanceAreaKey === "autoApproveMaxRisk",
         helper: allowInheritance ? "Leave blank to inherit the organization threshold." : "Set the maximum risk score allowed for auto-approval.",
         actionHtml: renderPolicyAreaResetButton({
           areaLabel: "Auto-approve max risk",
@@ -3387,6 +3449,8 @@ function renderWorkflowPolicyForm({
       ${renderPolicyField({
         label: "Auto-approve only these content types",
         name: "autoApprovalAllowedContentTypes",
+        areaKey: "autoApprovalRule",
+        emphasized: focusedInheritanceAreaKey === "autoApprovalRule",
         helper: "Comma-separated content types. Leave blank to allow any content type that passes the risk threshold.",
         actionHtml: renderPolicyAreaResetButton({
           areaLabel: "Auto-approval rule",
@@ -3412,6 +3476,8 @@ function renderWorkflowPolicyForm({
         roleOptions,
         allowInheritance,
         values: routingContentTypeApprovers,
+        areaKey: "routingRule",
+        emphasized: focusedInheritanceAreaKey === "routingRule",
         actionHtml: renderPolicyAreaResetButton({
           areaLabel: "Routing rule",
           fieldNames: [
@@ -3427,6 +3493,8 @@ function renderWorkflowPolicyForm({
       ${renderPolicyField({
         label: "Second approval for public posts",
         name: "approvalRuleRequireSecondApproval",
+        areaKey: "approvalRule",
+        emphasized: focusedInheritanceAreaKey === "approvalRule",
         helper: allowInheritance ? "Leave blank to inherit the organization approval chain." : "Require a second reviewer before public content is published.",
         actionHtml: renderPolicyAreaResetButton({
           areaLabel: "Approval rule",
@@ -3461,6 +3529,8 @@ function renderWorkflowPolicyForm({
       ${renderPolicyField({
         label: "Default publishing destinations",
         name: "publishingRuleDestinations",
+        areaKey: "publishingRule",
+        emphasized: focusedInheritanceAreaKey === "publishingRule",
         helper: "Comma-separated destination types used when no visibility-specific rule matches.",
         actionHtml: renderPolicyAreaResetButton({
           areaLabel: "Publishing rule",
@@ -3489,6 +3559,8 @@ function renderWorkflowPolicyForm({
       ${renderPolicyField({
         label: "Notification email channel",
         name: "notificationRuleEmail",
+        areaKey: "notificationRule",
+        emphasized: focusedInheritanceAreaKey === "notificationRule",
         helper: allowInheritance ? "Leave blank to inherit the organization default notification channel." : "Turns submission email updates on or off overall.",
         actionHtml: renderPolicyAreaResetButton({
           areaLabel: "Notification rule",
@@ -4179,7 +4251,7 @@ function renderExceptionCleanupSummary({
                         clubSlug: item.club.slug || "",
                         previewResetArea: area.key,
                         simulationInput
-                      })}">Preview inheriting ${escapeHtml(
+                      })}${buildPolicyAreaAnchor(area.key)}">Preview inheriting ${escapeHtml(
                         area.label.toLowerCase()
                       )}</a>`
                     )
@@ -5839,7 +5911,9 @@ async function renderWorkflowSettingsPage(
         previewWarningCount: previewScopeType === "club" ? previewWarningCount : 0,
         previewGuardrailWarnings:
           previewScopeType === "club" ? previewPolicyGuardrails : [],
-        simulationInput: normalizedSimulationInput
+        simulationInput: normalizedSimulationInput,
+        focusedInheritanceAreaKey:
+          previewScopeType === "club" ? validPreviewResetArea : null
       })}
     </section>
 

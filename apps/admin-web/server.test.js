@@ -766,6 +766,8 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /Still overriding changed areas: Public approver, Notification rule/);
     assert.match(body, /Preview inheriting public approver/);
     assert.match(body, /Preview inheriting notification rule/);
+    assert.match(body, /previewResetArea=notificationRule/);
+    assert.match(body, /#policy-area-notificationRule/);
     assert.match(body, /clubSlug=eastside[\s\S]*?previewResetArea=notificationRule[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin[\s\S]*?Preview inheriting notification rule/);
     assert.match(body, /Review changed areas/);
     assert.match(body, /Review public approver exceptions/);
@@ -952,6 +954,10 @@ test("GET /workflow-settings previews inheriting a single club area from the org
     assert.match(body, /Notification rule/);
     assert.match(body, /2 -&gt; 1|2 -> 1/);
     assert.match(body, /Review notification rule inheritance/);
+    assert.match(body, /Ready to save/);
+    assert.match(body, /Jump to this area/);
+    assert.match(body, /href="#policy-area-notificationRule"/);
+    assert.match(body, /id="policy-area-notificationRule"/);
     assert.match(body, /Reset to live policy[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
   } finally {
     globalThis.fetch = originalFetch;
