@@ -570,6 +570,7 @@ function normalizeWorkflowPolicyHistoryContext(input) {
     return null;
   }
 
+  const normalized = {};
   const cleanupSummary = input.cleanupSummary;
 
   if (!cleanupSummary || typeof cleanupSummary !== "object" || Array.isArray(cleanupSummary)) {
@@ -599,16 +600,77 @@ function normalizeWorkflowPolicyHistoryContext(input) {
         .filter(Boolean)
     : [];
 
-  if (!areaKey || !clubs.length) {
-    return null;
-  }
-
-  return {
-    cleanupSummary: {
+  if (areaKey && clubs.length) {
+    normalized.cleanupSummary = {
       areaKey,
       clubs
+    };
+  }
+
+  const simulationTrace = input.simulationTrace;
+  if (
+    simulationTrace &&
+    typeof simulationTrace === "object" &&
+    !Array.isArray(simulationTrace)
+  ) {
+    const scenario =
+      simulationTrace.scenario &&
+      typeof simulationTrace.scenario === "object" &&
+      !Array.isArray(simulationTrace.scenario)
+        ? {
+            contentType: String(simulationTrace.scenario.contentType || "").trim(),
+            visibilityTarget: String(
+              simulationTrace.scenario.visibilityTarget || ""
+            ).trim(),
+            riskScore:
+              simulationTrace.scenario.riskScore === null ||
+              simulationTrace.scenario.riskScore === undefined
+                ? null
+                : Number(simulationTrace.scenario.riskScore),
+            moderationFlagged: Boolean(simulationTrace.scenario.moderationFlagged),
+            agentSuggestedApproverRole: String(
+              simulationTrace.scenario.agentSuggestedApproverRole || ""
+            ).trim() || null
+          }
+        : null;
+    const changedRows = Array.isArray(simulationTrace.changedRows)
+      ? simulationTrace.changedRows
+          .map((row) => {
+            if (!row || typeof row !== "object" || Array.isArray(row)) {
+              return null;
+            }
+
+            const label = String(row.label || "").trim();
+            const before = String(row.before || "").trim();
+            const after = String(row.after || "").trim();
+
+            if (!label || !before || !after) {
+              return null;
+            }
+
+            return {
+              key: String(row.key || "").trim() || null,
+              label,
+              before,
+              after
+            };
+          })
+          .filter(Boolean)
+      : [];
+
+    if (
+      scenario?.contentType &&
+      scenario?.visibilityTarget &&
+      changedRows.length
+    ) {
+      normalized.simulationTrace = {
+        scenario,
+        changedRows
+      };
     }
-  };
+  }
+
+  return Object.keys(normalized).length ? normalized : null;
 }
 
 async function handleUpdateWorkflowPolicy(

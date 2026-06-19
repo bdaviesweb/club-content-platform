@@ -668,6 +668,23 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
                       { slug: "eastside", name: "Eastside" },
                       { slug: "westside", name: "Westside" }
                     ]
+                  },
+                  simulationTrace: {
+                    scenario: {
+                      contentType: "photo",
+                      visibilityTarget: "internal",
+                      riskScore: 0.19,
+                      moderationFlagged: true,
+                      agentSuggestedApproverRole: "club_admin"
+                    },
+                    changedRows: [
+                      {
+                        key: "publishedEmail",
+                        label: "Published email",
+                        before: "Enabled",
+                        after: "Disabled (Policy Disabled)"
+                      }
+                    ]
                   }
                 }
               }
@@ -743,8 +760,33 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
         }
       ])
     );
+    const saveSimulationTrace = encodeURIComponent(
+      JSON.stringify({
+        scenario: {
+          contentType: "photo",
+          visibilityTarget: "internal",
+          riskScore: 0.19,
+          moderationFlagged: true,
+          agentSuggestedApproverRole: "club_admin"
+        },
+        changedRows: [
+          {
+            key: "publishedEmail",
+            label: "Published email",
+            before: "Enabled",
+            after: "Disabled (Policy Disabled)"
+          },
+          {
+            key: "routing",
+            label: "Routing source",
+            before: "Local Rules",
+            after: "Hermes Agent"
+          }
+        ]
+      })
+    );
     const response = await originalFetch(
-      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&saveScopeType=organization&saveChangedAreaCount=2&saveAffectedClubCount=1&saveInsulatedClubCount=1&saveCurrentOverrideClubCount=2&saveProjectedOverrideClubCount=1&saveCurrentOverrideAreaCount=9&saveProjectedOverrideAreaCount=7&saveReducingClubs=${reducingClubs}&saveGainingClubs=${gainingClubs}&saveGuardrailWarnings=${saveGuardrailWarnings}&saveChangedAreaKeys=publicApproverRole,notificationRule&simulationContentType=photo&simulationVisibilityTarget=internal&simulationRiskScore=0.19&simulationModerationFlagged=true&simulationAgentSuggestedApproverRole=club_admin`
+      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&saveScopeType=organization&saveChangedAreaCount=2&saveAffectedClubCount=1&saveInsulatedClubCount=1&saveCurrentOverrideClubCount=2&saveProjectedOverrideClubCount=1&saveCurrentOverrideAreaCount=9&saveProjectedOverrideAreaCount=7&saveReducingClubs=${reducingClubs}&saveGainingClubs=${gainingClubs}&saveGuardrailWarnings=${saveGuardrailWarnings}&saveSimulationTrace=${saveSimulationTrace}&saveChangedAreaKeys=publicApproverRole,notificationRule&simulationContentType=photo&simulationVisibilityTarget=internal&simulationRiskScore=0.19&simulationModerationFlagged=true&simulationAgentSuggestedApproverRole=club_admin`
     );
     const body = await response.text();
 
@@ -801,6 +843,17 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /clubView=inheriting[\s\S]*?clubArea=notificationRule[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin[\s\S]*?Review notification rule inheriting clubs/);
     assert.match(body, /Latest recorded field changes/);
     assert.match(body, /These before-and-after values come from the latest recorded organization policy update\./);
+    assert.match(body, /Simulated workflow trace for this save/);
+    assert.match(body, /This shows how the saved organization change altered the simulated workflow path for the current scenario\./);
+    assert.match(body, /Scenario: content Photo/);
+    assert.match(body, /visibility Internal/);
+    assert.match(body, /risk 0\.19/);
+    assert.match(body, /moderation flagged yes/);
+    assert.match(body, /Hermes suggested Club Admin/);
+    assert.match(body, /Before: Enabled/);
+    assert.match(body, /After: Disabled \(Policy Disabled\)/);
+    assert.match(body, /Before: Local Rules/);
+    assert.match(body, /After: Hermes Agent/);
     assert.match(body, /Before: Club Comms|Before: club_comms/);
     assert.match(body, /After: Club Admin|After: club_admin/);
     assert.match(body, /Before: \{&quot;email&quot;:true,&quot;push&quot;:true\}/);
@@ -809,6 +862,7 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /Notification rule exceptions were cleared for 2 clubs as part of this organization update\./);
     assert.match(body, /Review remaining notification rule exceptions/);
     assert.match(body, /Review inheriting notification rule clubs/);
+    assert.match(body, /This captures the saved simulator consequence recorded with this organization policy update\./);
     assert.match(body, /Current rollout state by changed area/);
     assert.match(body, /Use this live view to confirm which clubs are now inheriting each saved organization area and which clubs are still insulating themselves with overrides\./);
     assert.match(body, /1 inheriting \/ 1 insulated/);
@@ -3512,6 +3566,25 @@ test("POST /ui/workflow-policies/organizations/:slug/save-with-cleanup saves org
           actorEmail: "org-admin@example.test",
           defaultApproverRole: "club_comms",
           publicApproverRole: "club_admin",
+          historyContext: {
+            simulationTrace: {
+              scenario: {
+                contentType: "photo",
+                visibilityTarget: "internal",
+                riskScore: 0.19,
+                moderationFlagged: true,
+                agentSuggestedApproverRole: "club_admin"
+              },
+              changedRows: [
+                {
+                  key: "publishedEmail",
+                  label: "Published email",
+                  before: "Enabled",
+                  after: "Disabled (Policy Disabled)"
+                }
+              ]
+            }
+          },
           cleanupAreaKey: "notificationRule",
           cleanupClubSlugs: ["eastside", "westside"]
         })
@@ -3535,6 +3608,23 @@ test("POST /ui/workflow-policies/organizations/:slug/save-with-cleanup saves org
           defaultApproverRole: "club_comms",
           publicApproverRole: "club_admin",
           historyContext: {
+            simulationTrace: {
+              scenario: {
+                contentType: "photo",
+                visibilityTarget: "internal",
+                riskScore: 0.19,
+                moderationFlagged: true,
+                agentSuggestedApproverRole: "club_admin"
+              },
+              changedRows: [
+                {
+                  key: "publishedEmail",
+                  label: "Published email",
+                  before: "Enabled",
+                  after: "Disabled (Policy Disabled)"
+                }
+              ]
+            },
             cleanupSummary: {
               areaKey: "notificationRule",
               clubs: [

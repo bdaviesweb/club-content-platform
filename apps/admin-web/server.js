@@ -2303,6 +2303,58 @@ function parseSavedClubDeltaList(rawValue) {
   }
 }
 
+function parseSimulationTrace(rawValue) {
+  if (!rawValue) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+
+    const scenario =
+      parsed.scenario && typeof parsed.scenario === "object" && !Array.isArray(parsed.scenario)
+        ? {
+            contentType: String(parsed.scenario.contentType || "").trim() || null,
+            visibilityTarget: String(parsed.scenario.visibilityTarget || "").trim() || null,
+            riskScore:
+              parsed.scenario.riskScore === null || parsed.scenario.riskScore === undefined
+                ? null
+                : Number(parsed.scenario.riskScore),
+            moderationFlagged: Boolean(parsed.scenario.moderationFlagged),
+            agentSuggestedApproverRole: String(
+              parsed.scenario.agentSuggestedApproverRole || ""
+            ).trim() || null
+          }
+        : null;
+
+    const changedRows = Array.isArray(parsed.changedRows)
+      ? parsed.changedRows
+          .filter((row) => row && typeof row === "object" && !Array.isArray(row))
+          .map((row) => ({
+            key: String(row.key || "").trim() || null,
+            label: String(row.label || "").trim(),
+            before: String(row.before || "").trim(),
+            after: String(row.after || "").trim()
+          }))
+          .filter((row) => row.label && row.before && row.after)
+      : [];
+
+    if (!scenario || !changedRows.length) {
+      return null;
+    }
+
+    return {
+      scenario,
+      changedRows
+    };
+  } catch {
+    return null;
+  }
+}
+
 function summarizeContentTypeApprovers(rule = {}) {
   const approvers = rule?.contentTypeApprovers;
   if (!approvers || typeof approvers !== "object" || Array.isArray(approvers)) {
@@ -2558,6 +2610,75 @@ function summarizeOutcomeForDiff(outcome) {
   };
 }
 
+function buildSimulationTraceSummary({ liveOutcome, previewOutcome }) {
+  if (!liveOutcome || !previewOutcome) {
+    return null;
+  }
+
+  const liveSummary = summarizeOutcomeForDiff(liveOutcome);
+  const previewSummary = summarizeOutcomeForDiff(previewOutcome);
+  const rows = [
+    {
+      key: "approver",
+      label: "First approver",
+      before: liveSummary.approver,
+      after: previewSummary.approver
+    },
+    {
+      key: "routing",
+      label: "Routing source",
+      before: liveSummary.routing,
+      after: previewSummary.routing
+    },
+    {
+      key: "path",
+      label: "Approval path",
+      before: liveSummary.path,
+      after: previewSummary.path
+    },
+    {
+      key: "publishDestinations",
+      label: "Publish destination",
+      before: liveSummary.publishDestinations,
+      after: previewSummary.publishDestinations
+    },
+    {
+      key: "publishedEmail",
+      label: "Published email",
+      before: liveSummary.publishedEmail,
+      after: previewSummary.publishedEmail
+    },
+    {
+      key: "publishedPush",
+      label: "Published push",
+      before: liveSummary.publishedPush,
+      after: previewSummary.publishedPush
+    }
+  ].filter((row) => row.before !== row.after);
+
+  if (!rows.length) {
+    return null;
+  }
+
+  const simulation = previewOutcome.simulation || {};
+
+  return {
+    scenario: {
+      contentType: String(simulation.contentType || "").trim(),
+      visibilityTarget: String(simulation.visibilityTarget || "").trim(),
+      riskScore:
+        simulation.riskScore === null || simulation.riskScore === undefined
+          ? null
+          : Number(simulation.riskScore),
+      moderationFlagged: Boolean(simulation.moderationFlagged),
+      agentSuggestedApproverRole: simulation.agentSuggestedApproverRole
+        ? String(simulation.agentSuggestedApproverRole).trim()
+        : null
+    },
+    changedRows: rows
+  };
+}
+
 function renderOutcomeDiffRow(label, liveValue, draftValue) {
   const changed = liveValue !== draftValue;
   return `<div class="signal-card">
@@ -2600,6 +2721,69 @@ function renderOutcomeDiffCard({ liveOutcome, previewOutcome, previewScopeType }
       ${renderOutcomeDiffRow("Published email", liveSummary.publishedEmail, previewSummary.publishedEmail)}
       ${renderOutcomeDiffRow("Published push", liveSummary.publishedPush, previewSummary.publishedPush)}
     </div>
+  </div>`;
+}
+
+function renderSimulationTraceCard(
+  trace,
+  {
+    title = "Simulated workflow trace",
+    subtitle = "This captures the simulated workflow consequence of the saved policy change."
+  } = {}
+) {
+  const scenario =
+    trace && typeof trace === "object" && !Array.isArray(trace) ? trace.scenario || null : null;
+  const changedRows =
+    trace && typeof trace === "object" && !Array.isArray(trace) && Array.isArray(trace.changedRows)
+      ? trace.changedRows.filter(
+          (row) =>
+            row &&
+            typeof row === "object" &&
+            String(row.label || "").trim() &&
+            String(row.before || "").trim() &&
+            String(row.after || "").trim()
+        )
+      : [];
+
+  if (!scenario || !changedRows.length) {
+    return "";
+  }
+
+  const scenarioParts = [
+    scenario.contentType ? `content ${formatLabel(scenario.contentType)}` : null,
+    scenario.visibilityTarget
+      ? `visibility ${formatLabel(scenario.visibilityTarget)}`
+      : null,
+    Number.isFinite(Number(scenario.riskScore))
+      ? `risk ${Number(scenario.riskScore).toFixed(2)}`
+      : null,
+    `moderation flagged ${scenario.moderationFlagged ? "yes" : "no"}`,
+    scenario.agentSuggestedApproverRole
+      ? `Hermes suggested ${formatLabel(scenario.agentSuggestedApproverRole)}`
+      : null
+  ].filter(Boolean);
+
+  return `<div class="summary-stack" style="margin-top:16px;">
+    <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+      <strong>${escapeHtml(title)}</strong>
+      <p class="subtle" style="margin-top:6px;">${escapeHtml(subtitle)}</p>
+      <p class="subtle" style="margin-top:8px;">Scenario: ${escapeHtml(
+        scenarioParts.join(" • ")
+      )}</p>
+    </div>
+    ${changedRows
+      .map(
+        (row) => `<div class="summary-item" style="background: rgba(255,255,255,0.68);">
+          <strong>${escapeHtml(String(row.label || ""))}</strong>
+          <p class="subtle" style="margin-top:6px;">Before: ${escapeHtml(
+            String(row.before || "")
+          )}</p>
+          <p class="subtle" style="margin-top:6px;">After: ${escapeHtml(
+            String(row.after || "")
+          )}</p>
+        </div>`
+      )
+      .join("")}
   </div>`;
 }
 
@@ -3212,6 +3396,7 @@ function renderWorkflowPolicyForm({
   previewReducingClubs = [],
   previewGainingClubs = [],
   previewGuardrailWarnings = [],
+  previewSimulationTrace = null,
   simulationInput = null,
   focusedInheritanceAreaKey = null,
   stagedCleanupAreaKey = null,
@@ -3348,7 +3533,7 @@ function renderWorkflowPolicyForm({
     </div>
     ${guardrailCard}
     ${focusedInheritanceCard}
-    <form class="workflow-policy-form" data-scope-type="${escapeHtml(scopeType)}" data-scope-slug="${escapeHtml(scopeSlug || "")}" data-return-club-slug="${escapeHtml(returnClubSlug || "")}" data-preview-warning-count="${escapeHtml(String(previewWarningCount))}" data-preview-affected-club-count="${escapeHtml(String(previewAffectedClubCount))}" data-preview-changed-area-count="${escapeHtml(String(previewChangedAreaCount))}" data-preview-insulated-club-count="${escapeHtml(String(previewInsulatedClubCount))}" data-preview-changed-area-keys="${escapeHtml((previewChangedAreaKeys || []).join(","))}" data-preview-current-override-club-count="${escapeHtml(String(previewCurrentOverrideClubCount))}" data-preview-projected-override-club-count="${escapeHtml(String(previewProjectedOverrideClubCount))}" data-preview-current-override-area-count="${escapeHtml(String(previewCurrentOverrideAreaCount))}" data-preview-projected-override-area-count="${escapeHtml(String(previewProjectedOverrideAreaCount))}" data-preview-added-area-keys="${escapeHtml((previewAddedAreaKeys || []).join(","))}" data-preview-removed-area-keys="${escapeHtml((previewRemovedAreaKeys || []).join(","))}" data-preview-retained-area-keys="${escapeHtml((previewRetainedAreaKeys || []).join(","))}" data-preview-reducing-clubs="${escapeHtml(JSON.stringify(previewReducingClubs || []))}" data-preview-gaining-clubs="${escapeHtml(JSON.stringify(previewGainingClubs || []))}" data-preview-guardrail-warnings="${escapeHtml(JSON.stringify(previewGuardrailWarnings || []))}" data-preview-cleanup-area-key="${escapeHtml(stagedCleanupAreaKey || "")}" data-preview-cleanup-club-slugs="${escapeHtml((stagedCleanupClubSlugs || []).join(","))}">
+    <form class="workflow-policy-form" data-scope-type="${escapeHtml(scopeType)}" data-scope-slug="${escapeHtml(scopeSlug || "")}" data-return-club-slug="${escapeHtml(returnClubSlug || "")}" data-preview-warning-count="${escapeHtml(String(previewWarningCount))}" data-preview-affected-club-count="${escapeHtml(String(previewAffectedClubCount))}" data-preview-changed-area-count="${escapeHtml(String(previewChangedAreaCount))}" data-preview-insulated-club-count="${escapeHtml(String(previewInsulatedClubCount))}" data-preview-changed-area-keys="${escapeHtml((previewChangedAreaKeys || []).join(","))}" data-preview-current-override-club-count="${escapeHtml(String(previewCurrentOverrideClubCount))}" data-preview-projected-override-club-count="${escapeHtml(String(previewProjectedOverrideClubCount))}" data-preview-current-override-area-count="${escapeHtml(String(previewCurrentOverrideAreaCount))}" data-preview-projected-override-area-count="${escapeHtml(String(previewProjectedOverrideAreaCount))}" data-preview-added-area-keys="${escapeHtml((previewAddedAreaKeys || []).join(","))}" data-preview-removed-area-keys="${escapeHtml((previewRemovedAreaKeys || []).join(","))}" data-preview-retained-area-keys="${escapeHtml((previewRetainedAreaKeys || []).join(","))}" data-preview-reducing-clubs="${escapeHtml(JSON.stringify(previewReducingClubs || []))}" data-preview-gaining-clubs="${escapeHtml(JSON.stringify(previewGainingClubs || []))}" data-preview-guardrail-warnings="${escapeHtml(JSON.stringify(previewGuardrailWarnings || []))}" data-preview-simulation-trace="${escapeHtml(JSON.stringify(previewSimulationTrace || null))}" data-preview-cleanup-area-key="${escapeHtml(stagedCleanupAreaKey || "")}" data-preview-cleanup-club-slugs="${escapeHtml((stagedCleanupClubSlugs || []).join(","))}">
       ${renderPolicyField({
         label: "Actor email",
         name: "actorEmail",
@@ -3932,6 +4117,14 @@ function renderPolicyHistoryCard(
                   </div>
                 </div>`
               : "";
+          const simulationTraceCard = renderSimulationTraceCard(
+            item.metadata?.simulationTrace || null,
+            {
+              title: "Simulated workflow trace",
+              subtitle:
+                "This captures the saved simulator consequence recorded with this organization policy update."
+            }
+          );
 
           return `<div class="summary-item">
             <div class="badge-row" style="justify-content:space-between; margin-bottom:6px;">
@@ -3951,6 +4144,7 @@ function renderPolicyHistoryCard(
             ${organizationFollowUpLinks}
             ${changeDetailRows}
             ${cleanupSummaryCard}
+            ${simulationTraceCard}
             ${followUpLink}
           </div>`;
         })
@@ -5381,6 +5575,7 @@ function renderWorkflowSaveSummary(
     organizationHistory,
     saveSummary.changedAreaKeys || []
   );
+  const simulationTrace = saveSummary.simulationTrace || null;
   const burdenDeltaRows = [
     {
       title: "Clubs that got simpler",
@@ -5492,6 +5687,11 @@ function renderWorkflowSaveSummary(
       latestOrganizationChangeDetails,
       "These before-and-after values come from the latest recorded organization policy update."
     )}
+    ${renderSimulationTraceCard(simulationTrace, {
+      title: "Simulated workflow trace for this save",
+      subtitle:
+        "This shows how the saved organization change altered the simulated workflow path for the current scenario."
+    })}
     ${
       cleanupArea && cleanedClubs.length
         ? `<div class="summary-stack" style="margin-top:16px;">
@@ -6286,9 +6486,16 @@ async function renderWorkflowSettingsPage(
             scopeType: "club",
             livePolicy: liveEffectivePolicy,
             previewPolicy: effectivePolicy
-          })
+        })
         : [];
   const previewWarningCount = previewRiskWarningCount + previewPolicyGuardrails.length;
+  const previewSimulationTrace =
+    previewScopeType === "organization"
+      ? buildSimulationTraceSummary({
+          liveOutcome: livePreviewOutcome,
+          previewOutcome
+        })
+      : null;
 
   return layout(`
     <section class="hero">
@@ -6479,6 +6686,8 @@ async function renderWorkflowSettingsPage(
         previewWarningCount: previewScopeType === "organization" ? previewWarningCount : 0,
         previewGuardrailWarnings:
           previewScopeType === "organization" ? previewPolicyGuardrails : [],
+        previewSimulationTrace:
+          previewScopeType === "organization" ? previewSimulationTrace : null,
         stagedCleanupAreaKey:
           previewScopeType === "organization" ? validPreviewCleanupArea : null,
         stagedCleanupClubSlugs:
@@ -6787,6 +6996,9 @@ async function renderWorkflowSettingsPage(
         const previewGuardrailWarnings = parsePreviewGuardrailWarnings(
           form.dataset.previewGuardrailWarnings
         );
+        const previewSimulationTrace = parseSimulationTrace(
+          form.dataset.previewSimulationTrace
+        );
         const previewCleanupAreaKey = String(form.dataset.previewCleanupAreaKey || '').trim();
         const previewCleanupClubSlugs = String(form.dataset.previewCleanupClubSlugs || '')
           .split(',')
@@ -6835,13 +7047,25 @@ async function renderWorkflowSettingsPage(
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(
-            scopeType === 'organization' && previewCleanupAreaKey && previewCleanupClubSlugs.length
-              ? {
-                  ...payload,
-                  cleanupAreaKey: previewCleanupAreaKey,
-                  cleanupClubSlugs: previewCleanupClubSlugs
-                }
-              : payload
+            (() => {
+              const basePayload =
+                scopeType === 'organization' && previewSimulationTrace
+                  ? {
+                      ...payload,
+                      historyContext: {
+                        simulationTrace: previewSimulationTrace
+                      }
+                    }
+                  : payload;
+
+              return scopeType === 'organization' && previewCleanupAreaKey && previewCleanupClubSlugs.length
+                ? {
+                    ...basePayload,
+                    cleanupAreaKey: previewCleanupAreaKey,
+                    cleanupClubSlugs: previewCleanupClubSlugs
+                  }
+                : basePayload;
+            })()
           )
         });
         const result = await response.json();
@@ -6869,6 +7093,9 @@ async function renderWorkflowSettingsPage(
           params.set('saveReducingClubs', JSON.stringify(previewReducingClubs));
           params.set('saveGainingClubs', JSON.stringify(previewGainingClubs));
           params.set('saveGuardrailWarnings', JSON.stringify(previewGuardrailWarnings));
+          if (previewSimulationTrace) {
+            params.set('saveSimulationTrace', JSON.stringify(previewSimulationTrace));
+          }
           if (previewCleanupAreaKey && previewCleanupClubSlugs.length) {
             params.set('saveCleanupAreaKey', previewCleanupAreaKey);
             params.set(
@@ -7232,6 +7459,9 @@ export function createAdminServer() {
                 guardrailWarnings: parseGuardrailWarningList(
                   url.searchParams.get("saveGuardrailWarnings")
                 ),
+                simulationTrace: parseSimulationTrace(
+                  url.searchParams.get("saveSimulationTrace")
+                ),
                 cleanupAreaKey: url.searchParams.get("saveCleanupAreaKey") || "",
                 cleanedClubs: parseSavedClubDeltaList(
                   url.searchParams.get("saveCleanedClubs")
@@ -7400,6 +7630,12 @@ export function createAdminServer() {
             : Promise.resolve([]);
         const resolvedCleanupClubs = await cleanupClubs;
         const { cleanupAreaKey: _cleanupAreaKey, cleanupClubSlugs: _cleanupClubSlugs, ...policyPayload } = body;
+        const baseHistoryContext =
+          policyPayload.historyContext &&
+          typeof policyPayload.historyContext === "object" &&
+          !Array.isArray(policyPayload.historyContext)
+            ? policyPayload.historyContext
+            : null;
         const policyResult = await fetchJson(
           `/workflow-policies/organizations/${encodeURIComponent(organizationSlug)}`,
           {
@@ -7410,12 +7646,13 @@ export function createAdminServer() {
               historyContext:
                 cleanupAreaKey && resolvedCleanupClubs.length
                   ? {
+                      ...(baseHistoryContext || {}),
                       cleanupSummary: {
                         areaKey: cleanupAreaKey,
                         clubs: resolvedCleanupClubs
                       }
                     }
-                  : undefined
+                  : baseHistoryContext || undefined
             })
           }
         );

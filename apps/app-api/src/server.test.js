@@ -706,6 +706,23 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
               { slug: "eastside", name: "Eastside" },
               { slug: "westside", name: "Westside" }
             ]
+          },
+          simulationTrace: {
+            scenario: {
+              contentType: "photo",
+              visibilityTarget: "internal",
+              riskScore: 0.19,
+              moderationFlagged: true,
+              agentSuggestedApproverRole: "club_admin"
+            },
+            changedRows: [
+              {
+                key: "publishedEmail",
+                label: "Published email",
+                before: "Enabled",
+                after: "Disabled (Policy Disabled)"
+              }
+            ]
           }
         }
       })
@@ -814,6 +831,23 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
       clubs: [
         { slug: "eastside", name: "Eastside" },
         { slug: "westside", name: "Westside" }
+      ]
+    });
+    assert.deepEqual(organizationAuditMetadata.simulationTrace, {
+      scenario: {
+        contentType: "photo",
+        visibilityTarget: "internal",
+        riskScore: 0.19,
+        moderationFlagged: true,
+        agentSuggestedApproverRole: "club_admin"
+      },
+      changedRows: [
+        {
+          key: "publishedEmail",
+          label: "Published email",
+          before: "Enabled",
+          after: "Disabled (Policy Disabled)"
+        }
       ]
     });
   } finally {
