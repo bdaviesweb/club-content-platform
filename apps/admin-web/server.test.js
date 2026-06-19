@@ -1982,7 +1982,19 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
       return {
         ok: true,
         async json() {
-          return { items: [] };
+          return {
+            items: [
+              {
+                action: "workflow_policy.updated",
+                actorEmail: "org-admin@westside.test",
+                actorFullName: "Org Admin",
+                createdAt: "2026-06-19T15:20:00.000Z",
+                metadata: {
+                  changedFields: ["approvalRule"]
+                }
+              }
+            ]
+          };
         }
       };
     }
@@ -2118,6 +2130,7 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
     assert.match(body, /Review notification rule across clubs/);
     assert.match(body, /Review public approver rollout[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
     assert.match(body, /Open Westside policy stack[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
+    assert.match(body, /Review approval rule exceptions[\s\S]*?previewScopeType=organization[\s\S]*?previewDraftPolicy=[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
     assert.match(body, /Reset to live policy[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
   } finally {
     globalThis.fetch = originalFetch;

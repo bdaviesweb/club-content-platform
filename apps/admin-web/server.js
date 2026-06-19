@@ -3639,7 +3639,13 @@ function renderPolicyHistoryCard(
   title,
   history,
   emptyLabel,
-  { clubSlug = "", linkVariant = "stack", simulationInput = null } = {}
+  {
+    clubSlug = "",
+    linkVariant = "stack",
+    simulationInput = null,
+    previewScopeType = null,
+    previewDraftPolicy = null
+  } = {}
 ) {
   const items = history?.items || [];
   const content = items.length
@@ -3665,11 +3671,15 @@ function renderPolicyHistoryCard(
                             clubSlug,
                             clubView: "overrides",
                             clubArea: field,
-                            simulationInput
+                            simulationInput,
+                            previewScopeType,
+                            previewDraftPolicy
                           })
                         : buildWorkflowSettingsLink({
                             clubSlug,
-                            simulationInput
+                            simulationInput,
+                            previewScopeType,
+                            previewDraftPolicy
                           });
 
                     return `<a class="badge badge-info" href="${href}">${escapeHtml(
@@ -3691,11 +3701,15 @@ function renderPolicyHistoryCard(
                       clubSlug,
                       clubView: "overrides",
                       clubArea: changedFields[0],
-                      simulationInput
+                      simulationInput,
+                      previewScopeType,
+                      previewDraftPolicy
                     })
                   : buildWorkflowSettingsLink({
                       clubSlug,
-                      simulationInput
+                      simulationInput,
+                      previewScopeType,
+                      previewDraftPolicy
                     })
               )}">${escapeHtml(
                 linkVariant === "organization"
@@ -3753,7 +3767,9 @@ function renderPolicyHistorySection({
   organizationHistory,
   clubHistory,
   selectedClubSlug = "",
-  simulationInput = null
+  simulationInput = null,
+  previewScopeType = null,
+  previewDraftPolicy = null
 }) {
   if (!organizationHistory && !clubHistory) {
     return "";
@@ -3775,14 +3791,22 @@ function renderPolicyHistorySection({
         {
           clubSlug: selectedClubSlug,
           linkVariant: "organization",
-          simulationInput
+          simulationInput,
+          previewScopeType,
+          previewDraftPolicy
         }
       )}
       ${renderPolicyHistoryCard(
         "Club changes",
         clubHistory,
         "No club-specific policy changes recorded yet.",
-        { clubSlug: selectedClubSlug, linkVariant: "club", simulationInput }
+        {
+          clubSlug: selectedClubSlug,
+          linkVariant: "club",
+          simulationInput,
+          previewScopeType,
+          previewDraftPolicy
+        }
       )}
     </div>
   </section>`;
@@ -4068,7 +4092,9 @@ function renderExceptionCleanupSummary({
           </div>
           <p style="margin-top:10px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
             clubSlug: item.club.slug || "",
-            simulationInput
+            simulationInput,
+            previewScopeType,
+            previewDraftPolicy
           })}">Open ${escapeHtml(item.club.name)} policy stack</a></p>
           ${
             firstArea
@@ -4263,7 +4289,9 @@ function renderOrganizationDraftImpactSummary({
             ${insulatedAreaLinks}
             <p style="margin-top:8px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
               clubSlug: club.slug || "",
-              simulationInput
+              simulationInput,
+              previewScopeType: "organization",
+              previewDraftPolicy: JSON.stringify(previewOrganizationPolicy || {})
             })}">Open ${escapeHtml(club.name)} policy stack</a></p>
           </div>`;
         })
@@ -4892,7 +4920,9 @@ function renderOrganizationDirectory(
   clubView = "all",
   clubArea = "all",
   selectedClubSlug = "",
-  simulationInput = null
+  simulationInput = null,
+  previewScopeType = null,
+  previewDraftPolicy = null
 ) {
   if (!directory) {
     return "";
@@ -4935,7 +4965,9 @@ function renderOrganizationDirectory(
       clubSlug: selectedClubSlug,
       clubView: nextClubView,
       clubArea: nextClubArea !== "all" ? nextClubArea : null,
-      simulationInput
+      simulationInput,
+      previewScopeType,
+      previewDraftPolicy
     }).replace("/workflow-settings?", "");
   }
 
@@ -4962,7 +4994,9 @@ function renderOrganizationDirectory(
       }
       <p style="margin-top:8px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
         clubSlug: club.slug || "",
-        simulationInput
+        simulationInput,
+        previewScopeType,
+        previewDraftPolicy
       })}">Open ${escapeHtml(club.name)} policy stack</a></p>
     </div>`;
   }
@@ -5189,6 +5223,8 @@ async function renderWorkflowSettingsPage(
     previewDraft?.payload && typeof previewDraft.payload === "object" && !Array.isArray(previewDraft.payload)
       ? previewDraft.payload
       : null;
+  const previewDraftPolicyParam =
+    previewScopeType && previewPayload ? JSON.stringify(previewPayload) : null;
   const previewOrganizationPolicy =
     previewScopeType === "organization" && previewPayload
       ? previewPayload
@@ -5358,7 +5394,9 @@ async function renderWorkflowSettingsPage(
       organizationHistory,
       clubHistory,
       selectedClubSlug,
-      simulationInput: normalizedSimulationInput
+      simulationInput: normalizedSimulationInput,
+      previewScopeType,
+      previewDraftPolicy: previewDraftPolicyParam
     })}
     ${renderOrganizationDraftImpactSummary({
       previewScopeType,
@@ -5384,7 +5422,9 @@ async function renderWorkflowSettingsPage(
       clubView,
       clubArea,
       selectedClubSlug,
-      normalizedSimulationInput
+      normalizedSimulationInput,
+      previewScopeType,
+      previewDraftPolicyParam
     )}
     
 
