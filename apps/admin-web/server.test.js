@@ -2016,3 +2016,97 @@ test("POST /ui/workflow-policies/clubs/:slug proxies policy updates to the API",
     );
   }
 });
+
+test("POST /ui/workflow-policies/organizations/:slug proxies policy updates to the API", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({
+      url: String(url),
+      method: init.method || "GET",
+      body: init.body ? JSON.parse(init.body) : null
+    });
+
+    return {
+      ok: true,
+      async json() {
+        return {
+          organization: { slug: "metro" },
+          organizationPolicy: { defaultApproverRole: "club_comms" }
+        };
+      }
+    };
+  };
+
+  const server = createAdminServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const address = server.address();
+    const response = await originalFetch(
+      `http://127.0.0.1:${address.port}/ui/workflow-policies/organizations/metro`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          actorEmail: "org-admin@example.test",
+          defaultApproverRole: "club_comms",
+          publicApproverRole: "club_admin",
+          allowAgentRouting: true,
+          autoApproveInternalLowRisk: false,
+          autoApproveMaxRisk: 0.35,
+          approvalRule: {
+            requireSecondApprovalForPublic: true,
+            secondApproverRole: "club_admin"
+          },
+          notificationRule: {
+            email: true,
+            eventChannels: {
+              submission_published: {
+                email: false,
+                push: true
+              }
+            }
+          }
+        })
+      }
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.organization.slug, "metro");
+    assert.deepEqual(calls, [
+      {
+        url: "http://app-api:4000/workflow-policies/organizations/metro",
+        method: "POST",
+        body: {
+          actorEmail: "org-admin@example.test",
+          defaultApproverRole: "club_comms",
+          publicApproverRole: "club_admin",
+          allowAgentRouting: true,
+          autoApproveInternalLowRisk: false,
+          autoApproveMaxRisk: 0.35,
+          approvalRule: {
+            requireSecondApprovalForPublic: true,
+            secondApproverRole: "club_admin"
+          },
+          notificationRule: {
+            email: true,
+            eventChannels: {
+              submission_published: {
+                email: false,
+                push: true
+              }
+            }
+          }
+        }
+      }
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await new Promise((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))
+    );
+  }
+});
