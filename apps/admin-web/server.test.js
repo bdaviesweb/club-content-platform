@@ -182,6 +182,13 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
                         name: "Eastside",
                         areas: ["Approval Rule", "Notification Rule"]
                       }
+                    ],
+                    inheritanceCleanupClubs: [
+                      {
+                        slug: "northside",
+                        name: "Northside",
+                        areas: ["Notification Rule"]
+                      }
                     ]
                   }
                 }
@@ -220,7 +227,8 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
                     changedAreas: ["Routing Rule"],
                     addedAreas: ["Routing Rule"],
                     removedAreas: [],
-                    retainedAreas: []
+                    retainedAreas: [],
+                    inheritanceCleanupAreas: ["Public approver"]
                   }
                 }
               }
@@ -327,6 +335,7 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /2 changed areas/);
     assert.match(body, /1 clubs inheriting/);
     assert.match(body, /1 clubs insulated/);
+    assert.match(body, /1 cleanup opportunity/);
     assert.match(body, /Clubs inheriting/);
     assert.match(body, /Clubs insulating/);
     assert.match(body, /historyView=organization/);
@@ -340,6 +349,8 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Inherited areas: Approval Rule, Notification Rule/);
     assert.match(body, /Still insulated by overrides/);
     assert.match(body, /Still insulated in: Approval Rule, Notification Rule/);
+    assert.match(body, /Saved inheritance cleanup opportunities/);
+    assert.match(body, /Matching saved defaults: Notification Rule/);
     assert.match(body, /Preview rollback of latest club change/);
     assert.match(body, /Preview rollback of routing rule/);
     assert.match(body, /This restores the earlier club-specific value recorded before this change\./);
@@ -350,6 +361,8 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /This captures how customized this club was compared with the organization default when the save was recorded\./);
     assert.match(body, /0 -&gt; 1 override areas|0 -> 1 override areas/);
     assert.match(body, /This save made the club more customized than before\./);
+    assert.match(body, /Saved inheritance cleanup opportunities/);
+    assert.match(body, /These saved club-specific values matched the organization default at save time: Public approver/);
     assert.match(body, /Changed areas/);
     assert.match(body, /Routing Rule/);
     assert.match(body, /New exceptions/);
@@ -3830,7 +3843,8 @@ test("POST /ui/workflow-policies/clubs/:slug proxies policy updates to the API",
                 "Notification rule"
               ],
               removedAreas: [],
-              retainedAreas: []
+              retainedAreas: [],
+              inheritanceCleanupAreas: []
             }
           }
         }
@@ -3968,6 +3982,16 @@ test("POST /ui/workflow-policies/organizations/:slug proxies policy updates to t
         body: null
       },
       {
+        url: "http://app-api:4000/workflow-policies/clubs/westside",
+        method: "GET",
+        body: null
+      },
+      {
+        url: "http://app-api:4000/workflow-policies/clubs/eastside",
+        method: "GET",
+        body: null
+      },
+      {
         url: "http://app-api:4000/workflow-policies/organizations/metro",
         method: "POST",
         body: {
@@ -4006,16 +4030,16 @@ test("POST /ui/workflow-policies/organizations/:slug proxies policy updates to t
                 {
                   slug: "eastside",
                   name: "Eastside",
-                  areas: ["Default approver", "Approval rule"]
+                  areas: [
+                    "Default approver",
+                    "Public approver",
+                    "Approval rule",
+                    "Notification rule"
+                  ]
                 }
               ],
-              insulatedClubs: [
-                {
-                  slug: "eastside",
-                  name: "Eastside",
-                  areas: ["Public approver", "Notification rule"]
-                }
-              ]
+              insulatedClubs: [],
+              inheritanceCleanupClubs: []
             }
           }
         }
@@ -4247,7 +4271,8 @@ test("POST /ui/workflow-policies/organizations/:slug/restore-area restores one o
                   name: "Eastside",
                   areas: ["Notification rule"]
                 }
-              ]
+              ],
+              inheritanceCleanupClubs: []
             }
           }
         }
@@ -4419,7 +4444,8 @@ test("POST /ui/workflow-policies/clubs/:slug/restore-area restores one club area
               changedAreas: ["Routing rule"],
               addedAreas: [],
               removedAreas: ["Routing rule"],
-              retainedAreas: []
+              retainedAreas: [],
+              inheritanceCleanupAreas: ["Routing rule"]
             }
           }
         }
@@ -4735,6 +4761,16 @@ test("POST /ui/workflow-policies/organizations/:slug/save-with-cleanup saves org
         body: null
       },
       {
+        url: "http://app-api:4000/workflow-policies/clubs/eastside",
+        method: "GET",
+        body: null
+      },
+      {
+        url: "http://app-api:4000/workflow-policies/clubs/westside",
+        method: "GET",
+        body: null
+      },
+      {
         url: "http://app-api:4000/workflow-policies/organizations/metro",
         method: "POST",
         body: {
@@ -4772,7 +4808,8 @@ test("POST /ui/workflow-policies/organizations/:slug/save-with-cleanup saves org
                   areas: ["Default approver", "Public approver"]
                 }
               ],
-              insulatedClubs: []
+              insulatedClubs: [],
+              inheritanceCleanupClubs: []
             },
             cleanupSummary: {
               areaKey: "notificationRule",

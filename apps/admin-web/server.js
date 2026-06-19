@@ -4363,6 +4363,16 @@ function renderHistoryCompareSummary(item, linkVariant) {
       : 0;
     compareBits.push(`${inheritingCount} clubs inheriting`);
     compareBits.push(`${insulatedCount} clubs insulated`);
+    const inheritanceCleanupCount = Array.isArray(rolloutSnapshot.inheritanceCleanupClubs)
+      ? rolloutSnapshot.inheritanceCleanupClubs.length
+      : 0;
+    if (inheritanceCleanupCount) {
+      compareBits.push(
+        `${inheritanceCleanupCount} cleanup opportunit${
+          inheritanceCleanupCount === 1 ? "y" : "ies"
+        }`
+      );
+    }
   }
 
   if (overrideSnapshot && typeof overrideSnapshot === "object") {
@@ -4381,6 +4391,16 @@ function renderHistoryCompareSummary(item, linkVariant) {
     compareBits.push(
       `${removedCount} removed exception${removedCount === 1 ? "" : "s"}`
     );
+    const inheritanceCleanupCount = Array.isArray(overrideSnapshot.inheritanceCleanupAreas)
+      ? overrideSnapshot.inheritanceCleanupAreas.length
+      : 0;
+    if (inheritanceCleanupCount) {
+      compareBits.push(
+        `${inheritanceCleanupCount} cleanup opportunit${
+          inheritanceCleanupCount === 1 ? "y" : "ies"
+        }`
+      );
+    }
   }
 
   if (
@@ -5624,7 +5644,8 @@ function buildLiveOrganizationRolloutSnapshot({
 function buildOrganizationHistoryRolloutSnapshot({
   organizationDirectory = null,
   organizationPolicy = null,
-  previewOrganizationPolicy = null
+  previewOrganizationPolicy = null,
+  clubPolicyMap = null
 }) {
   const changedAreas = listChangedPolicyAreas({
     livePolicy: organizationPolicy || {},
@@ -5635,16 +5656,41 @@ function buildOrganizationHistoryRolloutSnapshot({
     return null;
   }
 
+  const snapshotDirectory =
+    organizationDirectory && clubPolicyMap
+      ? buildOrganizationDirectoryPreview({
+          organizationDirectory,
+          organizationPolicy: previewOrganizationPolicy || {},
+          clubPolicyMap
+        })
+      : organizationDirectory;
   const snapshot = buildLiveOrganizationRolloutSnapshot({
-    organizationDirectory,
+    organizationDirectory: snapshotDirectory,
     changedAreas
   });
+  const inheritanceCleanupClubs = buildOrganizationInheritanceCleanupItems({
+    clubs: snapshotDirectory?.clubs || [],
+    changedAreas,
+    clubPolicyMap,
+    organizationPolicy: previewOrganizationPolicy || {}
+  }).map((item) => ({
+    slug: item.club.slug || "",
+    name: item.club.name || item.club.slug || "",
+    areas: item.matchingAreas.map((area) => area.label)
+  }));
 
-  if (!snapshot.inheritingClubs.length && !snapshot.insulatedClubs.length) {
+  if (
+    !snapshot.inheritingClubs.length &&
+    !snapshot.insulatedClubs.length &&
+    !inheritanceCleanupClubs.length
+  ) {
     return null;
   }
 
-  return snapshot;
+  return {
+    ...snapshot,
+    inheritanceCleanupClubs
+  };
 }
 
 function buildClubHistoryOverrideSnapshot({
@@ -5672,7 +5718,11 @@ function buildClubHistoryOverrideSnapshot({
     changedAreas: changedAreas.map((area) => area.label),
     addedAreas: (impact.added || []).map((area) => area.label),
     removedAreas: (impact.removed || []).map((area) => area.label),
-    retainedAreas: (impact.retained || []).map((area) => area.label)
+    retainedAreas: (impact.retained || []).map((area) => area.label),
+    inheritanceCleanupAreas: buildClubInheritanceOpportunitySummary({
+      clubPolicy: previewClubPolicy || {},
+      organizationPolicy: organizationPolicy || {}
+    }).matchingExplicit.map((area) => area.label)
   };
 }
 
@@ -5692,6 +5742,9 @@ function renderClubHistoryOverrideSnapshotCard(overrideSnapshot = null) {
     : [];
   const retainedAreas = Array.isArray(overrideSnapshot.retainedAreas)
     ? overrideSnapshot.retainedAreas
+    : [];
+  const inheritanceCleanupAreas = Array.isArray(overrideSnapshot.inheritanceCleanupAreas)
+    ? overrideSnapshot.inheritanceCleanupAreas
     : [];
 
   if (!changedAreas.length) {
@@ -5748,6 +5801,14 @@ function renderClubHistoryOverrideSnapshotCard(overrideSnapshot = null) {
             : "No club-specific exceptions were carried forward in this save."
         )}</p>
       </div>
+      <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+        <strong>Saved inheritance cleanup opportunities</strong>
+        <p class="subtle" style="margin-top:6px;">${escapeHtml(
+          inheritanceCleanupAreas.length
+            ? `These saved club-specific values matched the organization default at save time: ${inheritanceCleanupAreas.join(", ")}`
+            : "No saved club-specific values matched the organization default when this change was recorded."
+        )}</p>
+      </div>
     </div>`;
 }
 
@@ -5762,8 +5823,11 @@ function renderOrganizationHistoryRolloutSnapshotCard(rolloutSnapshot = null) {
   const insulatedClubs = Array.isArray(rolloutSnapshot.insulatedClubs)
     ? rolloutSnapshot.insulatedClubs
     : [];
+  const inheritanceCleanupClubs = Array.isArray(rolloutSnapshot.inheritanceCleanupClubs)
+    ? rolloutSnapshot.inheritanceCleanupClubs
+    : [];
 
-  if (!inheritingClubs.length && !insulatedClubs.length) {
+  if (!inheritingClubs.length && !insulatedClubs.length && !inheritanceCleanupClubs.length) {
     return "";
   }
 
@@ -5808,6 +5872,25 @@ function renderOrganizationHistoryRolloutSnapshotCard(rolloutSnapshot = null) {
                   .join("")}
               </div>`
             : `<p class="subtle" style="margin-top:6px;">No clubs were still insulating themselves from the changed organization areas when this save was recorded.</p>`
+        }
+      </div>
+      <div class="summary-item" style="background: rgba(239, 246, 255, 0.92); border:1px solid rgba(37, 99, 235, 0.18);">
+        <strong>Saved inheritance cleanup opportunities</strong>
+        ${
+          inheritanceCleanupClubs.length
+            ? `<div class="summary-stack" style="margin-top:12px;">
+                ${inheritanceCleanupClubs
+                  .map(
+                    (club) => `<div class="summary-item">
+                      <strong>${escapeHtml(club.name || club.slug || "")}</strong>
+                      <p class="subtle" style="margin-top:6px;">${escapeHtml(
+                        `Matching saved defaults: ${(club.areas || []).join(", ")}`
+                      )}</p>
+                    </div>`
+                  )
+                  .join("")}
+              </div>`
+            : `<p class="subtle" style="margin-top:6px;">No clubs had redundant explicit values in the changed organization areas when this save was recorded.</p>`
         }
       </div>
     </div>`;
@@ -8783,10 +8866,16 @@ export function createAdminServer() {
                   !Array.isArray(body.historyContext)
                     ? body.historyContext
                     : null;
+                const organizationClubPolicyMap = await fetchOrganizationClubPolicyMap({
+                  organizationDirectory,
+                  selectedClubSlug: "",
+                  selectedClubPolicy: null
+                });
                 const rolloutSnapshot = buildOrganizationHistoryRolloutSnapshot({
                   organizationDirectory,
                   organizationPolicy: organizationPolicy?.organizationPolicy || {},
-                  previewOrganizationPolicy: nextOrganizationPolicy
+                  previewOrganizationPolicy: nextOrganizationPolicy,
+                  clubPolicyMap: organizationClubPolicyMap
                 });
 
                 return {
@@ -8939,7 +9028,8 @@ export function createAdminServer() {
         const rolloutSnapshot = buildOrganizationHistoryRolloutSnapshot({
           organizationDirectory,
           organizationPolicy: organizationPolicy?.organizationPolicy || {},
-          previewOrganizationPolicy
+          previewOrganizationPolicy,
+          clubPolicyMap: organizationClubPolicyMap
         });
 
         await fetchJson(
@@ -9277,10 +9367,16 @@ export function createAdminServer() {
             nextOrganizationPolicy[area.key] = policyPayload[area.key] ?? null;
           }
         });
+        const organizationClubPolicyMap = await fetchOrganizationClubPolicyMap({
+          organizationDirectory,
+          selectedClubSlug: "",
+          selectedClubPolicy: null
+        });
         const rolloutSnapshot = buildOrganizationHistoryRolloutSnapshot({
           organizationDirectory,
           organizationPolicy: organizationPolicy?.organizationPolicy || {},
-          previewOrganizationPolicy: nextOrganizationPolicy
+          previewOrganizationPolicy: nextOrganizationPolicy,
+          clubPolicyMap: organizationClubPolicyMap
         });
         const policyResult = await fetchJson(
           `/workflow-policies/organizations/${encodeURIComponent(organizationSlug)}`,
