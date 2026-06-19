@@ -4532,7 +4532,11 @@ function renderWorkflowSaveSummary(
   saveSummary,
   organizationDirectory = null,
   selectedClubName = "",
-  simulationInput = null
+  simulationInput = null,
+  {
+    organizationHistory = null,
+    clubHistory = null
+  } = {}
 ) {
   if (!saveSummary) {
     return "";
@@ -4554,6 +4558,10 @@ function renderWorkflowSaveSummary(
     const retainedAreas = (saveSummary.retainedAreaKeys || [])
       .map((key) => trackedPolicyAreaFields.find((area) => area.key === key) || null)
       .filter(Boolean);
+    const latestClubChangeDetails = extractSaveChangeDetails(
+      clubHistory,
+      saveSummary.changedAreaKeys || []
+    );
     const sections = [
       {
         title: "New exceptions",
@@ -4617,6 +4625,10 @@ function renderWorkflowSaveSummary(
           <span class="subtle">Use the summary below to keep this club-specific layer intentional.</span>
         </div>
       </div>
+      ${renderSaveChangeDetailsCard(
+        latestClubChangeDetails,
+        "These before-and-after values come from the latest recorded club policy update."
+      )}
       <div class="summary-stack" style="margin-top:16px;">
         <div class="summary-item" style="background: rgba(255,255,255,0.68);">
           <strong>Changed policy areas</strong>
@@ -4729,6 +4741,10 @@ function renderWorkflowSaveSummary(
   const reducingClubs = saveSummary.reducingClubs || [];
   const gainingClubs = saveSummary.gainingClubs || [];
   const guardrailWarnings = saveSummary.guardrailWarnings || [];
+  const latestOrganizationChangeDetails = extractSaveChangeDetails(
+    organizationHistory,
+    saveSummary.changedAreaKeys || []
+  );
   const burdenDeltaRows = [
     {
       title: "Clubs that got simpler",
@@ -4836,6 +4852,10 @@ function renderWorkflowSaveSummary(
       selectedClubSlug: saveSummary.clubSlug || "",
       simulationInput
     })}
+    ${renderSaveChangeDetailsCard(
+      latestOrganizationChangeDetails,
+      "These before-and-after values come from the latest recorded organization policy update."
+    )}
     <div class="summary-stack" style="margin-top:16px;">${burdenDeltaRows}</div>
     ${renderExceptionCleanupSummary({
       title: "Remaining exception cleanup",
@@ -4903,6 +4923,48 @@ function parseGuardrailWarningList(value) {
   } catch {
     return [];
   }
+}
+
+function extractSaveChangeDetails(history, changedAreaKeys = []) {
+  const items = Array.isArray(history?.items) ? history.items : [];
+  const latestItem = items[0];
+  const details = Array.isArray(latestItem?.metadata?.changedFieldDetails)
+    ? latestItem.metadata.changedFieldDetails
+    : [];
+  const changedKeySet = new Set(
+    Array.isArray(changedAreaKeys) ? changedAreaKeys.filter(Boolean) : []
+  );
+
+  return details.filter((detail) => {
+    const field = String(detail?.field || "").trim();
+    return field && (!changedKeySet.size || changedKeySet.has(field));
+  });
+}
+
+function renderSaveChangeDetailsCard(changeDetails, subtitle) {
+  if (!changeDetails.length) {
+    return "";
+  }
+
+  return `<div class="summary-stack" style="margin-top:16px;">
+    <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+      <strong>Latest recorded field changes</strong>
+      <p class="subtle" style="margin-top:6px;">${escapeHtml(subtitle)}</p>
+    </div>
+    ${changeDetails
+      .map(
+        (detail) => `<div class="summary-item" style="background: rgba(255,255,255,0.68);">
+          <strong>${escapeHtml(formatPolicyFieldLabel(detail.field))}</strong>
+          <p class="subtle" style="margin-top:6px;">Before: ${escapeHtml(
+            summarizePolicyHistoryValue(detail.previousValue)
+          )}</p>
+          <p class="subtle" style="margin-top:6px;">After: ${escapeHtml(
+            summarizePolicyHistoryValue(detail.nextValue)
+          )}</p>
+        </div>`
+      )
+      .join("")}
+  </div>`;
 }
 
 function buildClubDraftOverrideImpact({
@@ -5525,7 +5587,11 @@ async function renderWorkflowSettingsPage(
       saveSummary,
       organizationDirectory,
       clubPolicy.club?.name || selectedClubSlug,
-      normalizedSimulationInput
+      normalizedSimulationInput,
+      {
+        organizationHistory,
+        clubHistory
+      }
     )}
 
     <section class="panel" style="margin-bottom:18px;">

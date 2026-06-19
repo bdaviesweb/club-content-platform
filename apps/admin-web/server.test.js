@@ -641,7 +641,31 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
       return {
         ok: true,
         async json() {
-          return { items: [] };
+          return {
+            items: [
+              {
+                action: "workflow_policy.updated",
+                createdAt: "2026-06-19T16:25:00.000Z",
+                actorEmail: "org-admin@westside.test",
+                actorFullName: "Org Admin",
+                metadata: {
+                  changedFields: ["publicApproverRole", "notificationRule"],
+                  changedFieldDetails: [
+                    {
+                      field: "publicApproverRole",
+                      previousValue: "club_comms",
+                      nextValue: "club_admin"
+                    },
+                    {
+                      field: "notificationRule",
+                      previousValue: { email: true, push: true },
+                      nextValue: { email: false, push: true }
+                    }
+                  ]
+                }
+              }
+            ]
+          };
         }
       };
     }
@@ -761,6 +785,12 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /Published email disabled/);
     assert.match(body, /Published email coverage drops for 1 affected club that inherit this draft\./);
     assert.match(body, /clubView=inheriting[\s\S]*?clubArea=notificationRule[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin[\s\S]*?Review notification rule inheriting clubs/);
+    assert.match(body, /Latest recorded field changes/);
+    assert.match(body, /These before-and-after values come from the latest recorded organization policy update\./);
+    assert.match(body, /Before: Club Comms|Before: club_comms/);
+    assert.match(body, /After: Club Admin|After: club_admin/);
+    assert.match(body, /Before: \{&quot;email&quot;:true,&quot;push&quot;:true\}/);
+    assert.match(body, /After: \{&quot;email&quot;:false,&quot;push&quot;:true\}/);
     assert.match(body, /clubSlug=westside[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin[\s\S]*?Open Westside policy stack/);
   } finally {
     globalThis.fetch = originalFetch;
@@ -1400,7 +1430,31 @@ test("GET /workflow-settings renders a post-save club exception summary", async 
       return {
         ok: true,
         async json() {
-          return { items: [] };
+          return {
+            items: [
+              {
+                action: "workflow_policy.updated",
+                createdAt: "2026-06-19T16:40:00.000Z",
+                actorEmail: "club-admin@westside.test",
+                actorFullName: "Club Admin",
+                metadata: {
+                  changedFields: ["allowAgentRouting", "notificationRule"],
+                  changedFieldDetails: [
+                    {
+                      field: "allowAgentRouting",
+                      previousValue: null,
+                      nextValue: false
+                    },
+                    {
+                      field: "notificationRule",
+                      previousValue: null,
+                      nextValue: { email: false, push: true }
+                    }
+                  ]
+                }
+              }
+            ]
+          };
         }
       };
     }
@@ -1474,6 +1528,11 @@ test("GET /workflow-settings renders a post-save club exception summary", async 
     assert.match(body, /Review agent routing exceptions/);
     assert.match(body, /Review notification rule exceptions/);
     assert.match(body, /Review agent routing exceptions[\s\S]*?clubView=overrides[\s\S]*?clubArea=allowAgentRouting[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
+    assert.match(body, /Latest recorded field changes/);
+    assert.match(body, /These before-and-after values come from the latest recorded club policy update\./);
+    assert.match(body, /Before: Unset/);
+    assert.match(body, /After: Disabled|After: false/);
+    assert.match(body, /After: \{&quot;email&quot;:false,&quot;push&quot;:true\}/);
     assert.match(body, /Run the simulator below against this saved policy/);
     assert.match(body, /name="simulationContentType"[\s\S]*?<option value="photo" selected/);
     assert.match(body, /name="simulationVisibilityTarget"[\s\S]*?<option value="internal" selected/);
