@@ -2897,7 +2897,9 @@ function renderWorkflowPolicyForm({
   actorEmail = "",
   allowInheritance = false,
   previewScopeType = null,
-  previewWarningCount = 0
+  previewWarningCount = 0,
+  previewAffectedClubCount = 0,
+  previewChangedAreaCount = 0
 }) {
   const roleOptions = [
     { value: "team_manager", label: "Team manager" },
@@ -2991,7 +2993,7 @@ function renderWorkflowPolicyForm({
       </div>
       <span class="badge badge-neutral">${escapeHtml(scopeSlug || "n/a")}</span>
     </div>
-    <form class="workflow-policy-form" data-scope-type="${escapeHtml(scopeType)}" data-scope-slug="${escapeHtml(scopeSlug || "")}" data-preview-warning-count="${escapeHtml(String(previewWarningCount))}">
+    <form class="workflow-policy-form" data-scope-type="${escapeHtml(scopeType)}" data-scope-slug="${escapeHtml(scopeSlug || "")}" data-preview-warning-count="${escapeHtml(String(previewWarningCount))}" data-preview-affected-club-count="${escapeHtml(String(previewAffectedClubCount))}" data-preview-changed-area-count="${escapeHtml(String(previewChangedAreaCount))}">
       ${renderPolicyField({
         label: "Actor email",
         name: "actorEmail",
@@ -3176,6 +3178,11 @@ function renderWorkflowPolicyForm({
         ${
           allowInheritance
             ? `<button type="button" class="button-secondary" data-reset-inheritance>Clear club overrides</button>`
+            : ""
+        }
+        ${
+          !allowInheritance && previewScopeType === "organization" && previewAffectedClubCount > 0
+            ? `<span class="badge badge-review">Affects ${escapeHtml(String(previewAffectedClubCount))} club${previewAffectedClubCount === 1 ? "" : "s"}</span>`
             : ""
         }
         <span class="subtle policy-status" data-policy-status>Ready</span>
@@ -3397,32 +3404,15 @@ function listChangedPolicyAreas({ livePolicy = {}, previewPolicy = {} }) {
   });
 }
 
-function renderOrganizationDraftImpactSummary({
-  previewScopeType,
+function buildOrganizationDraftImpact({
   organizationPolicy,
   previewOrganizationPolicy,
   organizationDirectory
 }) {
-  if (previewScopeType !== "organization") {
-    return "";
-  }
-
   const changedAreas = listChangedPolicyAreas({
     livePolicy: organizationPolicy?.organizationPolicy || {},
     previewPolicy: previewOrganizationPolicy || {}
   });
-
-  if (!changedAreas.length) {
-    return `<section class="panel">
-      <div class="section-header">
-        <div>
-          <div class="eyebrow">Organization rollout impact</div>
-          <h2>No club rollout impact detected yet</h2>
-          <p class="subtle" style="margin-top:8px;">This organization draft does not currently change any top-level policy area from the live organization default.</p>
-        </div>
-      </div>
-    </section>`;
-  }
 
   const clubImpacts = (organizationDirectory?.clubs || []).map((club) => {
     const overriddenFields = Array.isArray(club.overrideSummary?.overriddenFields)
@@ -3439,8 +3429,46 @@ function renderOrganizationDraftImpactSummary({
     };
   });
 
-  const affectedClubs = clubImpacts.filter((club) => club.impactedAreas.length);
-  const insulatedClubs = clubImpacts.filter((club) => !club.impactedAreas.length);
+  return {
+    changedAreas,
+    clubImpacts,
+    affectedClubs: clubImpacts.filter((club) => club.impactedAreas.length),
+    insulatedClubs: clubImpacts.filter((club) => !club.impactedAreas.length)
+  };
+}
+
+function renderOrganizationDraftImpactSummary({
+  previewScopeType,
+  organizationPolicy,
+  previewOrganizationPolicy,
+  organizationDirectory
+}) {
+  if (previewScopeType !== "organization") {
+    return "";
+  }
+
+  const {
+    changedAreas,
+    clubImpacts,
+    affectedClubs,
+    insulatedClubs
+  } = buildOrganizationDraftImpact({
+    organizationPolicy,
+    previewOrganizationPolicy,
+    organizationDirectory
+  });
+
+  if (!changedAreas.length) {
+    return `<section class="panel">
+      <div class="section-header">
+        <div>
+          <div class="eyebrow">Organization rollout impact</div>
+          <h2>No club rollout impact detected yet</h2>
+          <p class="subtle" style="margin-top:8px;">This organization draft does not currently change any top-level policy area from the live organization default.</p>
+        </div>
+      </div>
+    </section>`;
+  }
 
   const clubRows = clubImpacts.length
     ? clubImpacts
@@ -3720,6 +3748,14 @@ async function renderWorkflowSettingsPage(
         previewOutcome
       }).length
     : 0;
+  const organizationDraftImpact =
+    previewScopeType === "organization"
+      ? buildOrganizationDraftImpact({
+          organizationPolicy,
+          previewOrganizationPolicy,
+          organizationDirectory
+        })
+      : null;
 
   return layout(`
     <section class="hero">
@@ -3790,6 +3826,14 @@ async function renderWorkflowSettingsPage(
         actorEmail: reviewerEmail,
         allowInheritance: false,
         previewScopeType,
+        previewAffectedClubCount:
+          previewScopeType === "organization"
+            ? organizationDraftImpact?.affectedClubs.length || 0
+            : 0,
+        previewChangedAreaCount:
+          previewScopeType === "organization"
+            ? organizationDraftImpact?.changedAreas.length || 0
+            : 0,
         previewWarningCount:
           previewScopeType === "organization" ? previewRiskWarningCount : 0
       })}
@@ -4004,6 +4048,26 @@ async function renderWorkflowSettingsPage(
         if (!payload.actorEmail) {
           status.textContent = 'Actor email is required.';
           return;
+        }
+
+        const previewAffectedClubCount = Number(form.dataset.previewAffectedClubCount || '0');
+        const previewChangedAreaCount = Number(form.dataset.previewChangedAreaCount || '0');
+        if (scopeType === 'organization' && previewAffectedClubCount > 0) {
+          const confirmed = window.confirm(
+            'This organization draft changes ' +
+              previewChangedAreaCount +
+              ' policy area' +
+              (previewChangedAreaCount === 1 ? '' : 's') +
+              ' across ' +
+              previewAffectedClubCount +
+              ' club' +
+              (previewAffectedClubCount === 1 ? '' : 's') +
+              '. Save anyway?'
+          );
+          if (!confirmed) {
+            status.textContent = 'Save cancelled. Review the organization rollout impact above.';
+            return;
+          }
         }
 
         const previewWarningCount = Number(form.dataset.previewWarningCount || '0');
