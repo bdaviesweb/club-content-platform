@@ -703,8 +703,17 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
       ])
     );
     const gainingClubs = encodeURIComponent(JSON.stringify([]));
+    const saveGuardrailWarnings = encodeURIComponent(
+      JSON.stringify([
+        {
+          title: "Published email disabled",
+          areaKey: "notificationRule",
+          message: "Published email coverage drops for 1 affected club that inherit this draft."
+        }
+      ])
+    );
     const response = await originalFetch(
-      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&saveScopeType=organization&saveChangedAreaCount=2&saveAffectedClubCount=1&saveInsulatedClubCount=1&saveCurrentOverrideClubCount=2&saveProjectedOverrideClubCount=1&saveCurrentOverrideAreaCount=9&saveProjectedOverrideAreaCount=7&saveReducingClubs=${reducingClubs}&saveGainingClubs=${gainingClubs}&saveChangedAreaKeys=publicApproverRole,notificationRule&simulationContentType=photo&simulationVisibilityTarget=internal&simulationRiskScore=0.19&simulationModerationFlagged=true&simulationAgentSuggestedApproverRole=club_admin`
+      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&saveScopeType=organization&saveChangedAreaCount=2&saveAffectedClubCount=1&saveInsulatedClubCount=1&saveCurrentOverrideClubCount=2&saveProjectedOverrideClubCount=1&saveCurrentOverrideAreaCount=9&saveProjectedOverrideAreaCount=7&saveReducingClubs=${reducingClubs}&saveGainingClubs=${gainingClubs}&saveGuardrailWarnings=${saveGuardrailWarnings}&saveChangedAreaKeys=publicApproverRole,notificationRule&simulationContentType=photo&simulationVisibilityTarget=internal&simulationRiskScore=0.19&simulationModerationFlagged=true&simulationAgentSuggestedApproverRole=club_admin`
     );
     const body = await response.text();
 
@@ -747,6 +756,11 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /name="simulationAgentSuggestedApproverRole"[\s\S]*?<option value="club_admin" selected/);
     assert.match(body, /Review public approver exceptions[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
     assert.match(body, /Review public approver inheriting clubs[\s\S]*?clubView=inheriting[\s\S]*?clubArea=publicApproverRole[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
+    assert.match(body, /Policy guardrails/);
+    assert.match(body, /1 flagged/);
+    assert.match(body, /Published email disabled/);
+    assert.match(body, /Published email coverage drops for 1 affected club that inherit this draft\./);
+    assert.match(body, /clubView=inheriting[\s\S]*?clubArea=notificationRule[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin[\s\S]*?Review notification rule inheriting clubs/);
     assert.match(body, /clubSlug=westside[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin[\s\S]*?Open Westside policy stack/);
   } finally {
     globalThis.fetch = originalFetch;
@@ -2279,6 +2293,9 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
     assert.match(body, /1 flagged/);
     assert.match(body, /Published email disabled/);
     assert.match(body, /Published email coverage drops for 1 affected club that inherit this draft\./);
+    assert.match(body, /Review notification rule exceptions/);
+    assert.match(body, /Review notification rule inheriting clubs/);
+    assert.match(body, /clubView=inheriting[\s\S]*?clubArea=notificationRule[\s\S]*?previewScopeType=organization[\s\S]*?previewDraftPolicy=[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin[\s\S]*?Review notification rule inheriting clubs/);
     assert.match(body, /Clubs reducing override burden/);
     assert.match(body, /Eastside reduces 2 override areas under this draft\./);
     assert.match(body, /2 -&gt; 0 override areas|2 -> 0 override areas/);

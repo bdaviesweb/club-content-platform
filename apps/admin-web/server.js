@@ -2658,6 +2658,7 @@ function buildPolicyGuardrailWarnings({
   if (liveSecondApproval && !previewSecondApproval) {
     warnings.push({
       title: "Public second approval removed",
+      areaKey: "approvalRule",
       message:
         scopeType === "organization"
           ? `Public posts no longer require a second human approval for ${scopeTarget} that inherit this draft.`
@@ -2671,6 +2672,7 @@ function buildPolicyGuardrailWarnings({
   if (!liveAutoApprove && previewAutoApprove) {
     warnings.push({
       title: "Internal auto-approval enabled",
+      areaKey: "autoApproveInternalLowRisk",
       message:
         scopeType === "organization"
           ? `Low-risk internal submissions can now auto-approve for ${scopeTarget} that inherit this draft.`
@@ -2695,6 +2697,7 @@ function buildPolicyGuardrailWarnings({
   ) {
     warnings.push({
       title: "Auto-approve threshold widened",
+      areaKey: "autoApproveMaxRisk",
       message:
         scopeType === "organization"
           ? `The auto-approve max risk rises from ${liveAutoApproveMaxRisk.toFixed(
@@ -2722,6 +2725,7 @@ function buildPolicyGuardrailWarnings({
   if (livePublishedEmail.enabled && !previewPublishedEmail.enabled) {
     warnings.push({
       title: "Published email disabled",
+      areaKey: "notificationRule",
       message:
         scopeType === "organization"
           ? `Published email coverage drops for ${scopeTarget} that inherit this draft.`
@@ -2743,6 +2747,7 @@ function buildPolicyGuardrailWarnings({
   if (livePublishedPush.enabled && !previewPublishedPush.enabled) {
     warnings.push({
       title: "Published push disabled",
+      areaKey: "notificationRule",
       message:
         scopeType === "organization"
           ? `Published push coverage drops for ${scopeTarget} that inherit this draft.`
@@ -2762,6 +2767,7 @@ function buildPolicyGuardrailWarnings({
     const expandingClubs = (overrideBurdenSummary.clubsGainingOverrides || []).length;
     warnings.push({
       title: "Override sprawl expands",
+      areaKey: null,
       message: `This draft adds ${additionalOverrideAreas} override area${
         additionalOverrideAreas === 1 ? "" : "s"
       } across ${expandingClubs} club${expandingClubs === 1 ? "" : "s"}, increasing exception cleanup work.`
@@ -2795,7 +2801,16 @@ function renderOutcomeRiskWarningsCard(warnings) {
     </div>`;
 }
 
-function renderPolicyGuardrailsCard(warnings) {
+function renderPolicyGuardrailsCard(
+  warnings,
+  {
+    scopeType = null,
+    selectedClubSlug = "",
+    simulationInput = null,
+    previewScopeType = null,
+    previewDraftPolicy = null
+  } = {}
+) {
   if (!warnings.length) {
     return "";
   }
@@ -2812,6 +2827,32 @@ function renderPolicyGuardrailsCard(warnings) {
           (warning) => `<div class="summary-item">
             <strong>${escapeHtml(warning.title)}</strong>
             <p style="margin-top:6px;">${escapeHtml(warning.message)}</p>
+            ${
+              scopeType === "organization" && warning.areaKey
+                ? `<div class="badge-row" style="margin-top:10px;">
+                    <a class="quick-link" href="${buildWorkflowSettingsLink({
+                      clubSlug: selectedClubSlug,
+                      clubView: "overrides",
+                      clubArea: warning.areaKey,
+                      simulationInput,
+                      previewScopeType,
+                      previewDraftPolicy
+                    })}">Review ${escapeHtml(
+                      formatPolicyFieldLabel(warning.areaKey).toLowerCase()
+                    )} exceptions</a>
+                    <a class="quick-link" href="${buildWorkflowSettingsLink({
+                      clubSlug: selectedClubSlug,
+                      clubView: "inheriting",
+                      clubArea: warning.areaKey,
+                      simulationInput,
+                      previewScopeType,
+                      previewDraftPolicy
+                    })}">Review ${escapeHtml(
+                      formatPolicyFieldLabel(warning.areaKey).toLowerCase()
+                    )} inheriting clubs</a>
+                  </div>`
+                : ""
+            }
           </div>`
         )
         .join("")}
@@ -3148,7 +3189,8 @@ function renderWorkflowPolicyForm({
   previewRetainedAreaKeys = [],
   previewReducingClubs = [],
   previewGainingClubs = [],
-  previewGuardrailWarnings = []
+  previewGuardrailWarnings = [],
+  simulationInput = null
 }) {
   const roleOptions = [
     { value: "team_manager", label: "Team manager" },
@@ -3234,7 +3276,14 @@ function renderWorkflowPolicyForm({
       : String(Boolean(notificationRule.eventChannels.submission_published.push));
   const guardrailCard =
     previewScopeType === scopeType
-      ? renderPolicyGuardrailsCard(previewGuardrailWarnings)
+      ? renderPolicyGuardrailsCard(previewGuardrailWarnings, {
+          scopeType,
+          selectedClubSlug: returnClubSlug || scopeSlug,
+          previewScopeType,
+          simulationInput,
+          previewDraftPolicy:
+            previewScopeType === scopeType ? JSON.stringify(policy || {}) : null
+        })
       : "";
 
   return `<section class="panel workflow-form-panel">
@@ -3247,7 +3296,7 @@ function renderWorkflowPolicyForm({
       <span class="badge badge-neutral">${escapeHtml(scopeSlug || "n/a")}</span>
     </div>
     ${guardrailCard}
-    <form class="workflow-policy-form" data-scope-type="${escapeHtml(scopeType)}" data-scope-slug="${escapeHtml(scopeSlug || "")}" data-return-club-slug="${escapeHtml(returnClubSlug || "")}" data-preview-warning-count="${escapeHtml(String(previewWarningCount))}" data-preview-affected-club-count="${escapeHtml(String(previewAffectedClubCount))}" data-preview-changed-area-count="${escapeHtml(String(previewChangedAreaCount))}" data-preview-insulated-club-count="${escapeHtml(String(previewInsulatedClubCount))}" data-preview-changed-area-keys="${escapeHtml((previewChangedAreaKeys || []).join(","))}" data-preview-current-override-club-count="${escapeHtml(String(previewCurrentOverrideClubCount))}" data-preview-projected-override-club-count="${escapeHtml(String(previewProjectedOverrideClubCount))}" data-preview-current-override-area-count="${escapeHtml(String(previewCurrentOverrideAreaCount))}" data-preview-projected-override-area-count="${escapeHtml(String(previewProjectedOverrideAreaCount))}" data-preview-added-area-keys="${escapeHtml((previewAddedAreaKeys || []).join(","))}" data-preview-removed-area-keys="${escapeHtml((previewRemovedAreaKeys || []).join(","))}" data-preview-retained-area-keys="${escapeHtml((previewRetainedAreaKeys || []).join(","))}" data-preview-reducing-clubs="${escapeHtml(JSON.stringify(previewReducingClubs || []))}" data-preview-gaining-clubs="${escapeHtml(JSON.stringify(previewGainingClubs || []))}">
+    <form class="workflow-policy-form" data-scope-type="${escapeHtml(scopeType)}" data-scope-slug="${escapeHtml(scopeSlug || "")}" data-return-club-slug="${escapeHtml(returnClubSlug || "")}" data-preview-warning-count="${escapeHtml(String(previewWarningCount))}" data-preview-affected-club-count="${escapeHtml(String(previewAffectedClubCount))}" data-preview-changed-area-count="${escapeHtml(String(previewChangedAreaCount))}" data-preview-insulated-club-count="${escapeHtml(String(previewInsulatedClubCount))}" data-preview-changed-area-keys="${escapeHtml((previewChangedAreaKeys || []).join(","))}" data-preview-current-override-club-count="${escapeHtml(String(previewCurrentOverrideClubCount))}" data-preview-projected-override-club-count="${escapeHtml(String(previewProjectedOverrideClubCount))}" data-preview-current-override-area-count="${escapeHtml(String(previewCurrentOverrideAreaCount))}" data-preview-projected-override-area-count="${escapeHtml(String(previewProjectedOverrideAreaCount))}" data-preview-added-area-keys="${escapeHtml((previewAddedAreaKeys || []).join(","))}" data-preview-removed-area-keys="${escapeHtml((previewRemovedAreaKeys || []).join(","))}" data-preview-retained-area-keys="${escapeHtml((previewRetainedAreaKeys || []).join(","))}" data-preview-reducing-clubs="${escapeHtml(JSON.stringify(previewReducingClubs || []))}" data-preview-gaining-clubs="${escapeHtml(JSON.stringify(previewGainingClubs || []))}" data-preview-guardrail-warnings="${escapeHtml(JSON.stringify(previewGuardrailWarnings || []))}">
       ${renderPolicyField({
         label: "Actor email",
         name: "actorEmail",
@@ -4679,6 +4728,7 @@ function renderWorkflowSaveSummary(
     : "";
   const reducingClubs = saveSummary.reducingClubs || [];
   const gainingClubs = saveSummary.gainingClubs || [];
+  const guardrailWarnings = saveSummary.guardrailWarnings || [];
   const burdenDeltaRows = [
     {
       title: "Clubs that got simpler",
@@ -4781,6 +4831,11 @@ function renderWorkflowSaveSummary(
         <span class="subtle">Measured from the preview comparison captured at save time</span>
       </div>
     </div>
+    ${renderPolicyGuardrailsCard(guardrailWarnings, {
+      scopeType: "organization",
+      selectedClubSlug: saveSummary.clubSlug || "",
+      simulationInput
+    })}
     <div class="summary-stack" style="margin-top:16px;">${burdenDeltaRows}</div>
     ${renderExceptionCleanupSummary({
       title: "Remaining exception cleanup",
@@ -4828,6 +4883,26 @@ function renderClubOverrideSummary({ clubPolicy = {}, organizationPolicy = {} })
       ${overrideList}
     </div>
   </section>`;
+}
+
+function parseGuardrailWarningList(value) {
+  try {
+    const parsed = JSON.parse(value || "[]");
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .filter((item) => item && typeof item === "object")
+      .map((item) => ({
+        title: String(item.title || "").trim(),
+        message: String(item.message || "").trim(),
+        areaKey: String(item.areaKey || "").trim() || null
+      }))
+      .filter((item) => item.title && item.message);
+  } catch {
+    return [];
+  }
 }
 
 function buildClubDraftOverrideImpact({
@@ -5615,7 +5690,8 @@ async function renderWorkflowSettingsPage(
             : [],
         previewWarningCount: previewScopeType === "organization" ? previewWarningCount : 0,
         previewGuardrailWarnings:
-          previewScopeType === "organization" ? previewPolicyGuardrails : []
+          previewScopeType === "organization" ? previewPolicyGuardrails : [],
+        simulationInput: normalizedSimulationInput
       })}
       ${renderWorkflowPolicyForm({
         scopeType: "club",
@@ -5655,7 +5731,8 @@ async function renderWorkflowSettingsPage(
             : [],
         previewWarningCount: previewScopeType === "club" ? previewWarningCount : 0,
         previewGuardrailWarnings:
-          previewScopeType === "club" ? previewPolicyGuardrails : []
+          previewScopeType === "club" ? previewPolicyGuardrails : [],
+        simulationInput: normalizedSimulationInput
       })}
     </section>
 
@@ -5680,6 +5757,26 @@ async function renderWorkflowSettingsPage(
               previewOverrideCount: Number(item.previewOverrideCount || 0)
             }))
             .filter((item) => item.name);
+        } catch {
+          return [];
+        }
+      }
+
+      function parsePreviewGuardrailWarnings(value) {
+        try {
+          const parsed = JSON.parse(value || '[]');
+          if (!Array.isArray(parsed)) {
+            return [];
+          }
+
+          return parsed
+            .filter((item) => item && typeof item === 'object')
+            .map((item) => ({
+              title: String(item.title || '').trim(),
+              message: String(item.message || '').trim(),
+              areaKey: String(item.areaKey || '').trim() || null
+            }))
+            .filter((item) => item.title && item.message);
         } catch {
           return [];
         }
@@ -5893,6 +5990,9 @@ async function renderWorkflowSettingsPage(
         const previewRetainedAreaKeys = String(form.dataset.previewRetainedAreaKeys || '').trim();
         const previewReducingClubs = parsePreviewClubDeltaList(form.dataset.previewReducingClubs);
         const previewGainingClubs = parsePreviewClubDeltaList(form.dataset.previewGainingClubs);
+        const previewGuardrailWarnings = parsePreviewGuardrailWarnings(
+          form.dataset.previewGuardrailWarnings
+        );
         const returnClubSlug = String(form.dataset.returnClubSlug || scopeSlug || '').trim();
         if (scopeType === 'organization' && previewAffectedClubCount > 0) {
           const confirmed = window.confirm(
@@ -5957,6 +6057,7 @@ async function renderWorkflowSettingsPage(
           params.set('saveProjectedOverrideAreaCount', String(previewProjectedOverrideAreaCount));
           params.set('saveReducingClubs', JSON.stringify(previewReducingClubs));
           params.set('saveGainingClubs', JSON.stringify(previewGainingClubs));
+          params.set('saveGuardrailWarnings', JSON.stringify(previewGuardrailWarnings));
           if (previewChangedAreaKeys) {
             params.set('saveChangedAreaKeys', previewChangedAreaKeys);
           }
@@ -6222,6 +6323,9 @@ export function createAdminServer() {
                 ),
                 gainingClubs: parseSavedClubDeltaList(
                   url.searchParams.get("saveGainingClubs")
+                ),
+                guardrailWarnings: parseGuardrailWarningList(
+                  url.searchParams.get("saveGuardrailWarnings")
                 ),
                 changedAreaKeys: String(url.searchParams.get("saveChangedAreaKeys") || "")
                   .split(",")
