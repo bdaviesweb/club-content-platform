@@ -3943,6 +3943,37 @@ function renderEffectivePolicySummary({
   </section>`;
 }
 
+function buildPolicyPreviewFromHistoryDetails(
+  basePolicy = {},
+  changedFieldDetails = [],
+  valueKey = "previousValue"
+) {
+  if (!basePolicy || typeof basePolicy !== "object" || Array.isArray(basePolicy)) {
+    return null;
+  }
+
+  if (!Array.isArray(changedFieldDetails) || !changedFieldDetails.length) {
+    return null;
+  }
+
+  const nextPolicy = { ...basePolicy };
+  let changed = false;
+
+  changedFieldDetails.forEach((detail) => {
+    const field = String(detail?.field || "").trim();
+
+    if (!field) {
+      return;
+    }
+
+    nextPolicy[field] =
+      detail && Object.hasOwn(detail, valueKey) ? detail[valueKey] ?? null : null;
+    changed = true;
+  });
+
+  return changed ? nextPolicy : null;
+}
+
 function renderPolicyHistoryCard(
   title,
   history,
@@ -3952,13 +3983,14 @@ function renderPolicyHistoryCard(
     linkVariant = "stack",
     simulationInput = null,
     previewScopeType = null,
-    previewDraftPolicy = null
+    previewDraftPolicy = null,
+    currentPolicy = null
   } = {}
 ) {
   const items = history?.items || [];
   const content = items.length
     ? items
-        .map((item) => {
+        .map((item, index) => {
           const changedFields = Array.isArray(item.metadata?.changedFields)
             ? item.metadata.changedFields
             : [];
@@ -3985,6 +4017,19 @@ function renderPolicyHistoryCard(
           const changedFieldDetails = Array.isArray(item.metadata?.changedFieldDetails)
             ? item.metadata.changedFieldDetails
             : [];
+          const rollbackPreviewPolicy =
+            linkVariant === "organization" && index === 0
+              ? buildPolicyPreviewFromHistoryDetails(
+                  currentPolicy ||
+                    (item.metadata?.nextPolicy &&
+                    typeof item.metadata.nextPolicy === "object" &&
+                    !Array.isArray(item.metadata.nextPolicy)
+                      ? item.metadata.nextPolicy
+                      : {}),
+                  changedFieldDetails,
+                  "previousValue"
+                )
+              : null;
           const changedAreaBadges = changedFields.length
             ? `<div class="badge-row" style="margin-top:10px;">
                 ${changedFields
@@ -4125,6 +4170,17 @@ function renderPolicyHistoryCard(
                 "This captures the saved simulator consequence recorded with this organization policy update."
             }
           );
+          const rollbackPreviewLink =
+            rollbackPreviewPolicy && linkVariant === "organization"
+              ? `<div class="badge-row" style="margin-top:10px; align-items:flex-start;">
+                  <a class="quick-link" href="${buildWorkflowSettingsLink({
+                    clubSlug,
+                    previewScopeType: "organization",
+                    previewDraftPolicy: JSON.stringify(rollbackPreviewPolicy),
+                    simulationInput
+                  })}">Preview rollback of latest org change</a>
+                </div>`
+              : "";
 
           return `<div class="summary-item">
             <div class="badge-row" style="justify-content:space-between; margin-bottom:6px;">
@@ -4143,6 +4199,7 @@ function renderPolicyHistoryCard(
             ${changedAreaBadges}
             ${organizationFollowUpLinks}
             ${changeDetailRows}
+            ${rollbackPreviewLink}
             ${cleanupSummaryCard}
             ${simulationTraceCard}
             ${followUpLink}
@@ -4161,6 +4218,7 @@ function renderPolicyHistorySection({
   organizationHistory,
   clubHistory,
   selectedClubSlug = "",
+  currentOrganizationPolicy = null,
   simulationInput = null,
   previewScopeType = null,
   previewDraftPolicy = null
@@ -4185,6 +4243,7 @@ function renderPolicyHistorySection({
         {
           clubSlug: selectedClubSlug,
           linkVariant: "organization",
+          currentPolicy: currentOrganizationPolicy,
           simulationInput,
           previewScopeType,
           previewDraftPolicy
@@ -6581,6 +6640,7 @@ async function renderWorkflowSettingsPage(
       organizationHistory,
       clubHistory,
       selectedClubSlug,
+      currentOrganizationPolicy: organizationPolicy?.organizationPolicy || null,
       simulationInput: normalizedSimulationInput,
       previewScopeType,
       previewDraftPolicy: previewDraftPolicyParam
