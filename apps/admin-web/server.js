@@ -109,6 +109,34 @@ function formatPolicyFieldLabel(value) {
     .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
+function summarizePolicyHistoryValue(value) {
+  if (value === null || value === undefined) {
+    return "Unset";
+  }
+
+  if (typeof value === "boolean") {
+    return value ? "Enabled" : "Disabled";
+  }
+
+  if (typeof value === "number") {
+    return String(value);
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.length ? value.join(", ") : "[]";
+  }
+
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
+}
+
 function renderPolicySelectOptions(options, selectedValue, { allowEmpty = false, emptyLabel = "Inherit organization default" } = {}) {
   const rows = [];
 
@@ -3618,6 +3646,9 @@ function renderPolicyHistoryCard(
           const actorLabel = item.actorFullName || item.actorEmail || "Unknown actor";
           const actorEmailSuffix =
             item.actorFullName && item.actorEmail ? ` • ${item.actorEmail}` : "";
+          const changedFieldDetails = Array.isArray(item.metadata?.changedFieldDetails)
+            ? item.metadata.changedFieldDetails
+            : [];
           const changedAreaBadges = changedFields.length
             ? `<div class="badge-row" style="margin-top:10px;">
                 ${changedFields
@@ -3663,6 +3694,23 @@ function renderPolicyHistoryCard(
                   : "Open this club policy stack"
               )}</a></p>`
             : "";
+          const changeDetailRows = changedFieldDetails.length
+            ? `<div class="summary-stack" style="margin-top:12px;">
+                ${changedFieldDetails
+                  .map(
+                    (detail) => `<div class="summary-item">
+                      <strong>${escapeHtml(formatPolicyFieldLabel(detail.field))}</strong>
+                      <p class="subtle" style="margin-top:6px;">Before: ${escapeHtml(
+                        summarizePolicyHistoryValue(detail.previousValue)
+                      )}</p>
+                      <p class="subtle" style="margin-top:6px;">After: ${escapeHtml(
+                        summarizePolicyHistoryValue(detail.nextValue)
+                      )}</p>
+                    </div>`
+                  )
+                  .join("")}
+              </div>`
+            : "";
 
           return `<div class="summary-item">
             <div class="badge-row" style="justify-content:space-between; margin-bottom:6px;">
@@ -3679,6 +3727,7 @@ function renderPolicyHistoryCard(
             )}</p>
             <p class="subtle" style="margin-top:8px;">${escapeHtml(followUpCopy)}</p>
             ${changedAreaBadges}
+            ${changeDetailRows}
             ${followUpLink}
           </div>`;
         })

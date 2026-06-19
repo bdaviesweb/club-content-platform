@@ -376,7 +376,11 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
     const upsert = calls.find(({ query }) =>
       String(query).includes("INSERT INTO club_workflow_policies")
     );
+    const auditInsert = calls.find(({ query }) =>
+      String(query).includes("INSERT INTO audit_logs")
+    );
     assert.ok(upsert);
+    assert.ok(auditInsert);
     assert.equal(upsert.params[1], "club_admin");
     assert.equal(upsert.params[4], false);
     assert.equal(upsert.params[5], true);
@@ -389,6 +393,53 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
       upsert.params[8],
       JSON.stringify({ contentTypeApprovers: { video: "team_manager" } })
     );
+    const clubAuditMetadata = JSON.parse(auditInsert.params[2]);
+    assert.deepEqual(clubAuditMetadata.changedFields, [
+      "defaultApproverRole",
+      "allowAgentRouting",
+      "autoApproveInternalLowRisk",
+      "autoApproveMaxRisk",
+      "autoApprovalRule",
+      "routingRule",
+      "notificationRule"
+    ]);
+    assert.deepEqual(clubAuditMetadata.changedFieldDetails, [
+      {
+        field: "defaultApproverRole",
+        previousValue: null,
+        nextValue: "club_admin"
+      },
+      {
+        field: "allowAgentRouting",
+        previousValue: null,
+        nextValue: false
+      },
+      {
+        field: "autoApproveInternalLowRisk",
+        previousValue: null,
+        nextValue: true
+      },
+      {
+        field: "autoApproveMaxRisk",
+        previousValue: null,
+        nextValue: 0.15
+      },
+      {
+        field: "autoApprovalRule",
+        previousValue: null,
+        nextValue: { blockedContentTypes: ["video"] }
+      },
+      {
+        field: "routingRule",
+        previousValue: null,
+        nextValue: { contentTypeApprovers: { video: "team_manager" } }
+      },
+      {
+        field: "notificationRule",
+        previousValue: null,
+        nextValue: { push: true }
+      }
+    ]);
   } finally {
     server.close();
     await once(server, "close");
@@ -671,7 +722,11 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
     const upsert = calls.find(({ query }) =>
       String(query).includes("INSERT INTO organization_workflow_policies")
     );
+    const auditInsert = calls.find(({ query }) =>
+      String(query).includes("INSERT INTO audit_logs")
+    );
     assert.ok(upsert);
+    assert.ok(auditInsert);
     assert.equal(upsert.params[1], "club_admin");
     assert.equal(upsert.params[4], false);
     assert.equal(upsert.params[5], true);
@@ -693,6 +748,58 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
         }
       })
     );
+    const organizationAuditMetadata = JSON.parse(auditInsert.params[2]);
+    assert.deepEqual(organizationAuditMetadata.changedFields, [
+      "defaultApproverRole",
+      "allowAgentRouting",
+      "autoApproveInternalLowRisk",
+      "autoApproveMaxRisk",
+      "autoApprovalRule",
+      "publishingRule",
+      "notificationRule"
+    ]);
+    assert.deepEqual(organizationAuditMetadata.changedFieldDetails, [
+      {
+        field: "defaultApproverRole",
+        previousValue: "team_manager",
+        nextValue: "club_admin"
+      },
+      {
+        field: "allowAgentRouting",
+        previousValue: true,
+        nextValue: false
+      },
+      {
+        field: "autoApproveInternalLowRisk",
+        previousValue: false,
+        nextValue: true
+      },
+      {
+        field: "autoApproveMaxRisk",
+        previousValue: 0.35,
+        nextValue: 0.2
+      },
+      {
+        field: "autoApprovalRule",
+        previousValue: {},
+        nextValue: { allowedContentTypes: ["photo"] }
+      },
+      {
+        field: "publishingRule",
+        previousValue: { destinations: ["internal_feed"] },
+        nextValue: {
+          visibilityDestinations: {
+            internal: ["internal_feed"],
+            public: ["internal_feed"]
+          }
+        }
+      },
+      {
+        field: "notificationRule",
+        previousValue: { email: true },
+        nextValue: { email: true, push: false }
+      }
+    ]);
   } finally {
     server.close();
     await once(server, "close");

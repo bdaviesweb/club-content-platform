@@ -988,6 +988,14 @@ function listChangedPolicyFields(previousPolicy, nextPolicy) {
   return changedFields;
 }
 
+function buildChangedPolicyFieldDetails(previousPolicy, nextPolicy, changedFields = []) {
+  return changedFields.map((field) => ({
+    field,
+    previousValue: previousPolicy?.[field] ?? null,
+    nextValue: nextPolicy?.[field] ?? null
+  }));
+}
+
 export async function updateWorkflowPolicyScope(
   client,
   { scopeType, scopeSlug, actorEmail, patch }
@@ -1068,6 +1076,11 @@ export async function updateWorkflowPolicyScope(
       )
     };
     const changedFields = listChangedPolicyFields(currentClubPolicy, nextPolicy);
+    const changedFieldDetails = buildChangedPolicyFieldDetails(
+      currentClubPolicy,
+      nextPolicy,
+      changedFields
+    );
 
     await client.query(
       `
@@ -1131,6 +1144,7 @@ export async function updateWorkflowPolicyScope(
           actorRole: authorization.actorRole,
           organizationSlug: current.organization?.slug || null,
           changedFields,
+          changedFieldDetails,
           previousPolicy: currentClubPolicy,
           nextPolicy
         })
@@ -1196,6 +1210,11 @@ export async function updateWorkflowPolicyScope(
       )
     };
     const changedFields = listChangedPolicyFields(currentOrganizationPolicy, nextPolicy);
+    const changedFieldDetails = buildChangedPolicyFieldDetails(
+      currentOrganizationPolicy,
+      nextPolicy,
+      changedFields
+    );
 
     await client.query(
       `
@@ -1258,6 +1277,7 @@ export async function updateWorkflowPolicyScope(
           scopeSlug,
           actorRole: authorization.actorRole,
           changedFields,
+          changedFieldDetails,
           previousPolicy: currentOrganizationPolicy,
           nextPolicy
         })

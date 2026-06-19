@@ -152,7 +152,21 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
                 actorEmail: "org-admin@westside.test",
                 actorFullName: "Org Admin",
                 metadata: {
-                  changedFields: ["approvalRule", "notificationRule"]
+                  changedFields: ["approvalRule", "notificationRule"],
+                  changedFieldDetails: [
+                    {
+                      field: "approvalRule",
+                      previousValue: null,
+                      nextValue: {
+                        requireSecondApprovalForPublic: true
+                      }
+                    },
+                    {
+                      field: "notificationRule",
+                      previousValue: { email: true },
+                      nextValue: { email: true, push: false }
+                    }
+                  ]
                 }
               }
             ]
@@ -173,7 +187,16 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
                 actorEmail: "club-admin@westside.test",
                 actorFullName: "Club Admin",
                 metadata: {
-                  changedFields: ["routingRule"]
+                  changedFields: ["routingRule"],
+                  changedFieldDetails: [
+                    {
+                      field: "routingRule",
+                      previousValue: {},
+                      nextValue: {
+                        contentTypeApprovers: { video: "team_manager" }
+                      }
+                    }
+                  ]
                 }
               }
             ]
@@ -260,6 +283,11 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Review approval rule exceptions/);
     assert.match(body, /clubArea=approvalRule/);
     assert.match(body, /Open this club policy stack/);
+    assert.match(body, /Before: Unset/);
+    assert.match(body, /After: \{&quot;requireSecondApprovalForPublic&quot;:true\}/);
+    assert.match(body, /Before: \{&quot;email&quot;:true\}/);
+    assert.match(body, /After: \{&quot;email&quot;:true,&quot;push&quot;:false\}/);
+    assert.match(body, /After: \{&quot;contentTypeApprovers&quot;:\{&quot;video&quot;:&quot;team_manager&quot;\}\}/);
     assert.match(body, /Organization directory/);
     assert.match(body, /Clubs with overrides/);
     assert.match(body, /Fully inheriting/);
