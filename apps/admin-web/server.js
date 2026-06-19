@@ -4564,6 +4564,129 @@ function renderClubOverrideSummary({ clubPolicy = {}, organizationPolicy = {} })
   </section>`;
 }
 
+function buildClubDraftOverrideImpact({
+  organizationPolicy = {},
+  liveClubPolicy = {},
+  previewClubPolicy = {}
+}) {
+  const liveSummary = buildClubOverrideSummary({
+    clubPolicy: liveClubPolicy,
+    organizationPolicy
+  });
+  const previewSummary = buildClubOverrideSummary({
+    clubPolicy: previewClubPolicy,
+    organizationPolicy
+  });
+  const liveMap = new Map(liveSummary.overridden.map((field) => [field.key, field]));
+  const previewMap = new Map(
+    previewSummary.overridden.map((field) => [field.key, field])
+  );
+
+  return {
+    liveOverrideCount: liveSummary.overridden.length,
+    previewOverrideCount: previewSummary.overridden.length,
+    added: previewSummary.overridden.filter((field) => !liveMap.has(field.key)),
+    removed: liveSummary.overridden.filter((field) => !previewMap.has(field.key)),
+    retained: previewSummary.overridden.filter((field) => liveMap.has(field.key))
+  };
+}
+
+function renderClubDraftOverrideImpactSummary({
+  previewScopeType,
+  organizationPolicy,
+  liveClubPolicy,
+  previewClubPolicy
+}) {
+  if (previewScopeType !== "club") {
+    return "";
+  }
+
+  const impact = buildClubDraftOverrideImpact({
+    organizationPolicy,
+    liveClubPolicy,
+    previewClubPolicy
+  });
+  const sections = [
+    {
+      title: "New club exceptions",
+      items: impact.added,
+      empty: "This draft does not add any new club-specific exceptions."
+    },
+    {
+      title: "Exceptions removed",
+      items: impact.removed,
+      empty: "This draft does not remove any existing club-specific exceptions."
+    },
+    {
+      title: "Exceptions retained",
+      items: impact.retained,
+      empty: "No existing exceptions are being carried forward in this draft."
+    }
+  ];
+
+  return `<section class="panel">
+    <div class="section-header">
+      <div>
+        <div class="eyebrow">Club exception impact</div>
+        <h2>What this club draft changes about local exceptions</h2>
+        <p class="subtle" style="margin-top:8px;">Compare the current club override layer against the unsaved draft before you introduce new divergence from the organization default.</p>
+      </div>
+    </div>
+    <div class="topline">
+      <div class="metric-card">
+        <span class="metric-label">Override areas</span>
+        <strong>${escapeHtml(
+          `${impact.liveOverrideCount} -> ${impact.previewOverrideCount}`
+        )}</strong>
+        <span class="subtle">Top-level club exceptions before versus after this draft</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">New exceptions</span>
+        <strong>${escapeHtml(String(impact.added.length))}</strong>
+        <span class="subtle">Areas this draft starts overriding locally</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Exceptions removed</span>
+        <strong>${escapeHtml(String(impact.removed.length))}</strong>
+        <span class="subtle">Areas this draft returns to the organization default</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Override burden</span>
+        <strong>${escapeHtml(
+          impact.previewOverrideCount < impact.liveOverrideCount
+            ? "Reduced"
+            : impact.previewOverrideCount > impact.liveOverrideCount
+              ? "Increased"
+              : "Unchanged"
+        )}</strong>
+        <span class="subtle">Use this to keep club-specific policy intentional.</span>
+      </div>
+    </div>
+    <div class="summary-stack" style="margin-top:16px;">
+      ${sections
+        .map(
+          (section) => `<div class="summary-item" style="background: rgba(255,255,255,0.68);">
+            <strong>${escapeHtml(section.title)}</strong>
+            <div class="badge-row" style="margin-top:10px; align-items:flex-start;">
+              ${
+                section.items.length
+                  ? section.items
+                      .map(
+                        (field) => `<span class="badge badge-info">${escapeHtml(
+                          field.label
+                        )}</span>`
+                      )
+                      .join("")
+                  : `<span class="subtle">${escapeHtml(section.empty)}</span>`
+              }
+            </div>
+          </div>`
+        )
+        .join("")}
+    </div>
+  </section>`;
+}
+
 function renderOrganizationDirectory(
   directory,
   clubView = "all",
@@ -5024,6 +5147,12 @@ async function renderWorkflowSettingsPage(
     ${renderClubOverrideSummary({
       clubPolicy: previewClubPolicy,
       organizationPolicy: previewOrganizationPolicy
+    })}
+    ${renderClubDraftOverrideImpactSummary({
+      previewScopeType,
+      organizationPolicy: previewOrganizationPolicy,
+      liveClubPolicy: clubPolicy.clubPolicy || {},
+      previewClubPolicy
     })}
     ${renderOrganizationDirectory(
       organizationDirectory,

@@ -1263,6 +1263,26 @@ test("GET /workflow-settings previews unsaved club draft values in the simulator
 
     assert.equal(response.status, 200);
     assert.match(body, /Previewing unsaved club draft/);
+    assert.match(body, /Club exception impact/);
+    assert.match(body, /What this club draft changes about local exceptions/);
+    assert.match(body, /Override areas/);
+    assert.match(body, /0 -&gt; 8|0 -> 8/);
+    assert.match(body, /New exceptions/);
+    assert.match(body, /8/);
+    assert.match(body, /Exceptions removed/);
+    assert.match(body, /0/);
+    assert.match(body, /Override burden/);
+    assert.match(body, /Increased/);
+    assert.match(body, /New club exceptions/);
+    assert.match(body, /Agent routing/);
+    assert.match(body, /Low-risk internal auto-approval/);
+    assert.match(body, /Auto-approve max risk/);
+    assert.match(body, /Auto-approval rule/);
+    assert.match(body, /Routing rule/);
+    assert.match(body, /Approval rule/);
+    assert.match(body, /Publishing rule/);
+    assert.match(body, /Notification rule/);
+    assert.match(body, /Exceptions removed[\s\S]*does not remove any existing club-specific exceptions/);
     assert.match(body, /Policy guardrails/);
     assert.match(body, /3 flagged/);
     assert.match(body, /Public second approval removed/);
