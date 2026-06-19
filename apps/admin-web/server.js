@@ -6645,6 +6645,7 @@ function renderOrganizationDirectory(
   clubView = "all",
   clubArea = "all",
   selectedClubSlug = "",
+  historyView = "all",
   simulationInput = null,
   previewScopeType = null,
   previewDraftPolicy = null,
@@ -6708,6 +6709,7 @@ function renderOrganizationDirectory(
   function buildDirectoryLinkParams(nextClubArea, nextClubView = "overrides") {
     return buildWorkflowSettingsLink({
       clubSlug: selectedClubSlug,
+      historyView: historyView !== "all" ? historyView : null,
       clubView: nextClubView,
       clubArea: nextClubArea !== "all" ? nextClubArea : null,
       simulationInput,
@@ -6757,6 +6759,7 @@ function renderOrganizationDirectory(
                       .map(
                         (area) => `<a class="quick-link" href="${buildWorkflowSettingsLink({
                           clubSlug: selectedClubSlug,
+                          historyView: historyView !== "all" ? historyView : null,
                           clubView: "overrides",
                           clubArea: area.key,
                           previewScopeType: "organization",
@@ -6772,6 +6775,7 @@ function renderOrganizationDirectory(
                         .map(
                           (area) => `<a class="quick-link" href="${buildWorkflowSettingsLink({
                             clubSlug: selectedClubSlug,
+                            historyView: historyView !== "all" ? historyView : null,
                             clubView: "overrides",
                             clubArea: area.key,
                             previewScopeType: "organization",
@@ -6808,6 +6812,7 @@ function renderOrganizationDirectory(
       }
       <p style="margin-top:8px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
         clubSlug: club.slug || "",
+        historyView: historyView !== "all" ? historyView : null,
         simulationInput,
         previewScopeType,
         previewDraftPolicy
@@ -7395,6 +7400,7 @@ async function renderWorkflowSettingsPage(
       clubView,
       clubArea,
       selectedClubSlug,
+      historyView,
       normalizedSimulationInput,
       previewScopeType,
       previewDraftPolicyParam,

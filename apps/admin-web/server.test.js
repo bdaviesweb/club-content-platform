@@ -824,6 +824,7 @@ test("GET /workflow-settings can focus history on organization changes only", as
     assert.match(body, /Show 1 older change/);
     assert.match(body, /historyView=organization[\s\S]*?Preview rollback of latest org change/);
     assert.match(body, /historyView=organization[\s\S]*?Preview rollback of approval rule/);
+    assert.match(body, /historyView=organization[\s\S]*?Open Westside policy stack/);
     assert.match(body, /clubSlug=westside[\s\S]*?All history/);
     assert.match(body, /historyView=club[\s\S]*?Club only/);
   } finally {
