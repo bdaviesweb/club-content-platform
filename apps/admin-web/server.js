@@ -4179,6 +4179,58 @@ function buildRemainingExceptionCleanupItems({ clubs = [], changedAreas = [] }) 
     );
 }
 
+function buildExceptionCleanupAreaItems(items = []) {
+  const areaMap = new Map();
+
+  for (const item of items) {
+    for (const area of item.remainingAreas || []) {
+      if (!areaMap.has(area.key)) {
+        areaMap.set(area.key, {
+          area,
+          clubs: []
+        });
+      }
+
+      areaMap.get(area.key).clubs.push(item.club);
+    }
+  }
+
+  return Array.from(areaMap.values()).sort(
+    (left, right) =>
+      right.clubs.length - left.clubs.length ||
+      String(left.area?.label || "").localeCompare(String(right.area?.label || ""))
+  );
+}
+
+function buildOrganizationOverrideBurdenSummaryFromClubPolicyMap({
+  organizationDirectory,
+  organizationPolicy = {},
+  clubPolicyMap = {}
+}) {
+  const clubs = organizationDirectory?.clubs || [];
+  const comparisons = clubs.map((club) => {
+    const clubPolicy = clubPolicyMap?.[club.slug]?.clubPolicy || {};
+    const summary = buildClubOverrideSummary({
+      clubPolicy,
+      organizationPolicy
+    });
+
+    return {
+      club,
+      overrideCount: summary.overridden.length
+    };
+  });
+
+  return {
+    currentOverrideClubCount: comparisons.filter((item) => item.overrideCount > 0).length,
+    currentOverrideAreaCount: comparisons.reduce(
+      (sum, item) => sum + item.overrideCount,
+      0
+    ),
+    comparisons
+  };
+}
+
 function buildInheritedClubPolicyPreview(policy = {}, areaKey = "") {
   if (!areaKey) {
     return policy || {};
@@ -4195,20 +4247,79 @@ function renderExceptionCleanupSummary({
   subtitle,
   items = [],
   selectedClubSlug = "",
+  organizationSlug = "",
   previewScopeType = null,
   previewDraftPolicy = null,
   simulationInput = null,
-  includePreviewInheritanceLinks = false
+  includePreviewInheritanceLinks = false,
+  includeBulkCleanupControls = false
 }) {
   if (!items.length) {
     return "";
   }
+
+  const cleanupAreaItems = includeBulkCleanupControls
+    ? buildExceptionCleanupAreaItems(items)
+    : [];
 
   return `<div class="summary-stack" style="margin-top:16px;">
     <div class="summary-item" style="background: rgba(255,255,255,0.68);">
       <strong>${escapeHtml(title)}</strong>
       <p class="subtle" style="margin-top:6px;">${escapeHtml(subtitle)}</p>
     </div>
+    ${
+      cleanupAreaItems.length
+        ? `<div class="summary-item" style="background: rgba(255,255,255,0.68);">
+            <strong>Bulk cleanup by area</strong>
+            <p class="subtle" style="margin-top:6px;">Choose the clubs that should stop overriding one changed organization area, then apply the inherited default in one save flow.</p>
+            <div class="summary-stack" style="margin-top:12px;">
+              ${cleanupAreaItems
+                .map(
+                  (item) => `<form class="workflow-bulk-inherit-form summary-item" data-organization-slug="${escapeHtml(
+                    organizationSlug
+                  )}" style="background: rgba(255,255,255,0.72);">
+                    <input type="hidden" name="areaKey" value="${escapeHtml(
+                      item.area.key
+                    )}" />
+                    <input type="hidden" name="returnClubSlug" value="${escapeHtml(
+                      selectedClubSlug
+                    )}" />
+                    <div class="badge-row" style="justify-content:space-between; margin-bottom:6px;">
+                      <strong>${escapeHtml(item.area.label)}</strong>
+                      ${renderStatusBadge(
+                        `${item.clubs.length} selected by default`,
+                        "review"
+                      )}
+                    </div>
+                    <p class="subtle">Apply the organization ${escapeHtml(
+                      item.area.label.toLowerCase()
+                    )} default to:</p>
+                    <div class="summary-stack" style="margin-top:10px;">
+                      ${item.clubs
+                        .map(
+                          (club) => `<label class="badge-row" style="justify-content:flex-start; gap:8px;">
+                            <input type="checkbox" name="clubSlugs" value="${escapeHtml(
+                              club.slug || ""
+                            )}" checked />
+                            <span>${escapeHtml(club.name)}</span>
+                            <span class="subtle">${escapeHtml(club.slug || "")}</span>
+                          </label>`
+                        )
+                        .join("")}
+                    </div>
+                    <div class="policy-actions" style="margin-top:12px;">
+                      <button type="submit" class="button-secondary">Apply org ${escapeHtml(
+                        item.area.label.toLowerCase()
+                      )} to selected clubs</button>
+                      <span class="subtle" data-bulk-status>Ready</span>
+                    </div>
+                  </form>`
+                )
+                .join("")}
+            </div>
+          </div>`
+        : ""
+    }
     ${items
       .map((item) => {
         const firstArea = item.remainingAreas[0] || null;
@@ -4647,6 +4758,85 @@ function renderWorkflowSaveSummary(
     return "";
   }
 
+  if (saveSummary.scopeType === "organization_cleanup") {
+    const cleanupArea = trackedPolicyAreaFields.find(
+      (area) => area.key === saveSummary.cleanupAreaKey
+    );
+    const cleanupAreaLabel = cleanupArea?.label || formatPolicyFieldLabel(saveSummary.cleanupAreaKey);
+    const cleanedClubs = saveSummary.cleanedClubs || [];
+
+    return `<section class="panel" style="border-color: rgba(23, 103, 68, 0.26); background: linear-gradient(180deg, rgba(235, 248, 240, 0.96), rgba(255, 255, 255, 0.96));">
+      <div class="section-header">
+        <div>
+          <div class="eyebrow">Bulk exception cleanup saved</div>
+          <h2>${escapeHtml(cleanupAreaLabel)} returned to the organization default</h2>
+          <p class="subtle" style="margin-top:8px;">This cleanup removed the selected club-level ${escapeHtml(
+            cleanupAreaLabel.toLowerCase()
+          )} exception${cleanedClubs.length === 1 ? "" : "s"}.</p>
+        </div>
+        <span class="badge badge-good">Saved</span>
+      </div>
+      <div class="topline" style="margin-top:16px;">
+        <div class="metric-card">
+          <span class="metric-label">Clubs cleaned</span>
+          <strong>${escapeHtml(String(cleanedClubs.length))}</strong>
+          <span class="subtle">Selected clubs now inheriting this organization area</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Override clubs</span>
+          <strong>${escapeHtml(
+            `${saveSummary.currentOverrideClubCount} -> ${saveSummary.projectedOverrideClubCount}`
+          )}</strong>
+          <span class="subtle">Clubs carrying at least one custom override before versus after cleanup</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Override areas</span>
+          <strong>${escapeHtml(
+            `${saveSummary.currentOverrideAreaCount} -> ${saveSummary.projectedOverrideAreaCount}`
+          )}</strong>
+          <span class="subtle">Total overridden policy areas across the organization before versus after cleanup</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Area cleaned</span>
+          <strong>${escapeHtml(cleanupAreaLabel)}</strong>
+          <span class="subtle">Use the follow-up links to review what still differs</span>
+        </div>
+      </div>
+      ${
+        cleanedClubs.length
+          ? `<div class="summary-stack" style="margin-top:16px;">
+              <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+                <strong>Clubs updated</strong>
+                <div class="badge-row" style="margin-top:10px; align-items:flex-start;">
+                  ${cleanedClubs
+                    .map(
+                      (club) => `<span class="badge badge-good">${escapeHtml(
+                        club.name || club.slug || ""
+                      )}</span>`
+                    )
+                    .join("")}
+                </div>
+              </div>
+            </div>`
+          : ""
+      }
+      <div class="badge-row" style="margin-top:16px;">
+        <a class="quick-link" href="${buildWorkflowSettingsLink({
+          clubSlug: saveSummary.clubSlug || "",
+          clubView: "overrides",
+          clubArea: saveSummary.cleanupAreaKey,
+          simulationInput
+        })}">Review remaining ${escapeHtml(cleanupAreaLabel.toLowerCase())} exceptions</a>
+        <a class="quick-link" href="${buildWorkflowSettingsLink({
+          clubSlug: saveSummary.clubSlug || "",
+          clubView: "inheriting",
+          clubArea: saveSummary.cleanupAreaKey,
+          simulationInput
+        })}">Review inheriting ${escapeHtml(cleanupAreaLabel.toLowerCase())} clubs</a>
+      </div>
+    </section>`;
+  }
+
   if (saveSummary.scopeType === "club") {
     const changedAreaCount = Number(saveSummary.changedAreaCount || 0);
     const currentOverrideAreaCount = Number(saveSummary.currentOverrideAreaCount || 0);
@@ -4968,8 +5158,10 @@ function renderWorkflowSaveSummary(
         "These clubs still override one or more organization areas you just changed. Review them next if you want the saved default to propagate more consistently.",
       items: cleanupItems,
       selectedClubSlug: saveSummary.clubSlug || "",
+      organizationSlug: organizationDirectory?.organization?.slug || "",
       simulationInput,
-      includePreviewInheritanceLinks: true
+      includePreviewInheritanceLinks: true,
+      includeBulkCleanupControls: true
     })}
     ${changedAreaLinks}
   </section>`;
@@ -6420,6 +6612,86 @@ async function renderWorkflowSettingsPage(
           });
         });
       });
+
+      document.querySelectorAll('.workflow-bulk-inherit-form').forEach((form) => {
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const status = form.querySelector('[data-bulk-status]');
+          const areaKey = String(form.querySelector('[name="areaKey"]')?.value || '').trim();
+          const organizationSlug = String(form.dataset.organizationSlug || '').trim();
+          const returnClubSlug = String(form.querySelector('[name="returnClubSlug"]')?.value || '').trim();
+          const actorEmail = String(
+            document.querySelector('.workflow-policy-form[data-scope-type="organization"] [name="actorEmail"]')?.value || ''
+          ).trim();
+          const clubSlugs = Array.from(form.querySelectorAll('input[name="clubSlugs"]:checked'))
+            .map((input) => String(input.value || '').trim())
+            .filter(Boolean);
+          const simulatorForm = document.querySelector('form[action="/workflow-settings"]:not([data-scope-type])');
+          const simulatorData = simulatorForm ? new FormData(simulatorForm) : new FormData();
+
+          if (!organizationSlug || !areaKey) {
+            if (status) status.textContent = 'This cleanup action is not available right now.';
+            return;
+          }
+
+          if (!actorEmail) {
+            if (status) status.textContent = 'Enter the organization actor email before running bulk cleanup.';
+            document
+              .querySelector('.workflow-policy-form[data-scope-type="organization"] [name="actorEmail"]')
+              ?.focus();
+            return;
+          }
+
+          if (!clubSlugs.length) {
+            if (status) status.textContent = 'Select at least one club for bulk cleanup.';
+            return;
+          }
+
+          const confirmed = window.confirm(
+            'Apply the organization default for this area to ' +
+              clubSlugs.length +
+              ' club' +
+              (clubSlugs.length === 1 ? '' : 's') +
+              '?'
+          );
+          if (!confirmed) {
+            if (status) status.textContent = 'Bulk cleanup cancelled.';
+            return;
+          }
+
+          if (status) status.textContent = 'Applying organization default...';
+          const response = await fetch(
+            '/ui/workflow-policies/organizations/' + encodeURIComponent(organizationSlug) + '/bulk-inherit-area',
+            {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                actorEmail,
+                areaKey,
+                clubSlugs,
+                returnClubSlug,
+                simulationInput: {
+                  contentType: String(simulatorData.get('simulationContentType') || ''),
+                  visibilityTarget: String(simulatorData.get('simulationVisibilityTarget') || ''),
+                  riskScore: String(simulatorData.get('simulationRiskScore') || ''),
+                  moderationFlagged: String(simulatorData.get('simulationModerationFlagged') || ''),
+                  agentSuggestedApproverRole: String(
+                    simulatorData.get('simulationAgentSuggestedApproverRole') || ''
+                  ).trim()
+                }
+              })
+            }
+          );
+          const result = await response.json();
+          if (!response.ok) {
+            if (status) status.textContent = result.error || 'Bulk cleanup failed';
+            return;
+          }
+
+          if (status) status.textContent = 'Saved. Reloading cleanup summary...';
+          window.location.assign(result.redirectUrl || '/workflow-settings');
+        });
+      });
     </script>
   `, "Club Content Workflow Settings");
 }
@@ -6513,6 +6785,27 @@ export function createAdminServer() {
                   .map((value) => value.trim())
                   .filter(Boolean)
               }
+            : saveScopeType === "organization_cleanup"
+              ? {
+                  scopeType: "organization_cleanup",
+                  clubSlug: url.searchParams.get("clubSlug") || "",
+                  cleanupAreaKey: url.searchParams.get("saveCleanupAreaKey") || "",
+                  currentOverrideClubCount: Number(
+                    url.searchParams.get("saveCurrentOverrideClubCount") || "0"
+                  ),
+                  projectedOverrideClubCount: Number(
+                    url.searchParams.get("saveProjectedOverrideClubCount") || "0"
+                  ),
+                  currentOverrideAreaCount: Number(
+                    url.searchParams.get("saveCurrentOverrideAreaCount") || "0"
+                  ),
+                  projectedOverrideAreaCount: Number(
+                    url.searchParams.get("saveProjectedOverrideAreaCount") || "0"
+                  ),
+                  cleanedClubs: parseSavedClubDeltaList(
+                    url.searchParams.get("saveCleanedClubs")
+                  )
+                }
             : saveScopeType === "club"
               ? {
                   scopeType: "club",
@@ -6606,6 +6899,194 @@ export function createAdminServer() {
         });
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify(payload));
+        return;
+      }
+
+      if (
+        req.method === "POST" &&
+        /^\/ui\/workflow-policies\/organizations\/[^/]+\/bulk-inherit-area$/.test(url.pathname)
+      ) {
+        const organizationSlug = decodeURIComponent(url.pathname.split("/")[4]);
+        const body = await readJson(req);
+        const actorEmail = String(body.actorEmail || "").trim();
+        const areaKey = String(body.areaKey || "").trim();
+        const returnClubSlug = String(body.returnClubSlug || "").trim();
+        const simulationInput =
+          body.simulationInput && typeof body.simulationInput === "object"
+            ? body.simulationInput
+            : {};
+        const requestedClubSlugs = Array.isArray(body.clubSlugs)
+          ? body.clubSlugs.map((value) => String(value || "").trim()).filter(Boolean)
+          : [];
+
+        if (!actorEmail) {
+          res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: "actorEmail is required" }));
+          return;
+        }
+
+        if (!trackedPolicyAreaFields.find((area) => area.key === areaKey)) {
+          res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: "A valid areaKey is required" }));
+          return;
+        }
+
+        if (!requestedClubSlugs.length) {
+          res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: "Select at least one club to clean up" }));
+          return;
+        }
+
+        const organizationPolicy = await fetchJson(
+          `/workflow-policies/organizations/${encodeURIComponent(organizationSlug)}`
+        );
+        const organizationDirectory = await fetchJson(
+          `/organizations/${encodeURIComponent(organizationSlug)}`
+        );
+        const currentClubPolicyMap = await fetchOrganizationClubPolicyMap({
+          organizationDirectory,
+          selectedClubSlug: "",
+          selectedClubPolicy: null
+        });
+        const knownClubs = new Map(
+          (organizationDirectory?.clubs || []).map((club) => [club.slug, club])
+        );
+        const targetedClubs = requestedClubSlugs
+          .map((slug) => knownClubs.get(slug) || null)
+          .filter(Boolean);
+
+        if (!targetedClubs.length) {
+          res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: "No valid clubs were selected for this organization" }));
+          return;
+        }
+
+        const organizationPolicyValue = organizationPolicy?.organizationPolicy || {};
+        const actionableClubs = targetedClubs.filter((club) => {
+          const clubPolicy = currentClubPolicyMap?.[club.slug]?.clubPolicy || {};
+          const liveSummary = buildClubOverrideSummary({
+            clubPolicy,
+            organizationPolicy: organizationPolicyValue
+          });
+          const previewSummary = buildClubOverrideSummary({
+            clubPolicy: {
+              ...clubPolicy,
+              [areaKey]: null
+            },
+            organizationPolicy: organizationPolicyValue
+          });
+
+          return previewSummary.overridden.length < liveSummary.overridden.length;
+        });
+
+        if (!actionableClubs.length) {
+          res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: "Selected clubs are already inheriting this area" }));
+          return;
+        }
+
+        const currentSummary = buildOrganizationOverrideBurdenSummaryFromClubPolicyMap({
+          organizationDirectory,
+          organizationPolicy: organizationPolicyValue,
+          clubPolicyMap: currentClubPolicyMap
+        });
+        const projectedClubPolicyMap = Object.fromEntries(
+          Object.entries(currentClubPolicyMap).map(([slug, value]) => [
+            slug,
+            actionableClubs.find((club) => club.slug === slug)
+              ? {
+                  ...value,
+                  clubPolicy: {
+                    ...(value?.clubPolicy || {}),
+                    [areaKey]: null
+                  }
+                }
+              : value
+          ])
+        );
+        const projectedSummary = buildOrganizationOverrideBurdenSummaryFromClubPolicyMap({
+          organizationDirectory,
+          organizationPolicy: organizationPolicyValue,
+          clubPolicyMap: projectedClubPolicyMap
+        });
+
+        for (const club of actionableClubs) {
+          await fetchJson(`/workflow-policies/clubs/${encodeURIComponent(club.slug)}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              actorEmail,
+              [areaKey]: null
+            })
+          });
+        }
+
+        const params = new URLSearchParams();
+        params.set("clubSlug", returnClubSlug || actionableClubs[0]?.slug || "");
+        params.set("saveScopeType", "organization_cleanup");
+        params.set("saveCleanupAreaKey", areaKey);
+        params.set(
+          "saveCurrentOverrideClubCount",
+          String(currentSummary.currentOverrideClubCount)
+        );
+        params.set(
+          "saveProjectedOverrideClubCount",
+          String(projectedSummary.currentOverrideClubCount)
+        );
+        params.set(
+          "saveCurrentOverrideAreaCount",
+          String(currentSummary.currentOverrideAreaCount)
+        );
+        params.set(
+          "saveProjectedOverrideAreaCount",
+          String(projectedSummary.currentOverrideAreaCount)
+        );
+        params.set(
+          "saveCleanedClubs",
+          JSON.stringify(
+            actionableClubs.map((club) => ({
+              name: club.name,
+              slug: club.slug
+            }))
+          )
+        );
+        if (simulationInput?.contentType) {
+          params.set("simulationContentType", String(simulationInput.contentType));
+        }
+        if (simulationInput?.visibilityTarget) {
+          params.set(
+            "simulationVisibilityTarget",
+            String(simulationInput.visibilityTarget)
+          );
+        }
+        if (simulationInput?.riskScore !== undefined && simulationInput?.riskScore !== null) {
+          params.set("simulationRiskScore", String(simulationInput.riskScore));
+        }
+        if (
+          simulationInput?.moderationFlagged !== undefined &&
+          simulationInput?.moderationFlagged !== null
+        ) {
+          params.set(
+            "simulationModerationFlagged",
+            String(simulationInput.moderationFlagged)
+          );
+        }
+        if (simulationInput?.agentSuggestedApproverRole) {
+          params.set(
+            "simulationAgentSuggestedApproverRole",
+            String(simulationInput.agentSuggestedApproverRole)
+          );
+        }
+        params.set("clubView", "overrides");
+        params.set("clubArea", areaKey);
+
+        res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+        res.end(
+          JSON.stringify({
+            ok: true,
+            redirectUrl: `/workflow-settings?${params.toString()}`
+          })
+        );
         return;
       }
 

@@ -762,6 +762,8 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /No clubs gained override burden from this save\./);
     assert.match(body, /Remaining exception cleanup/);
     assert.match(body, /These clubs still override one or more organization areas you just changed/);
+    assert.match(body, /Bulk cleanup by area/);
+    assert.match(body, /Apply org notification rule to selected clubs/);
     assert.match(body, /Eastside/);
     assert.match(body, /Still overriding changed areas: Public approver, Notification rule/);
     assert.match(body, /Preview inheriting public approver/);
@@ -959,6 +961,158 @@ test("GET /workflow-settings previews inheriting a single club area from the org
     assert.match(body, /href="#policy-area-notificationRule"/);
     assert.match(body, /id="policy-area-notificationRule"/);
     assert.match(body, /Reset to live policy[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await new Promise((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))
+    );
+  }
+});
+
+test("GET /workflow-settings renders a post-bulk organization cleanup summary", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith("/app/readiness")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            demo: {
+              clubSlug: "westside",
+              reviewerEmail: "comms@westside.test"
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/clubs/westside")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            club: { slug: "westside", name: "Westside" },
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubPolicy: {
+              publicApproverRole: "club_admin"
+            },
+            effectivePolicy: {
+              defaultApproverRole: "team_manager",
+              publicApproverRole: "club_admin",
+              mediumRiskApproverRole: "club_comms",
+              allowAgentRouting: true,
+              autoApproveInternalLowRisk: false,
+              autoApproveMaxRisk: 0.35,
+              autoApprovalRule: {},
+              routingRule: {},
+              approvalRule: {},
+              publishingRule: {},
+              notificationRule: { email: true, push: true }
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/organizations/metro")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "metro", name: "Metro Sports" },
+            organizationPolicy: {
+              defaultApproverRole: "team_manager",
+              publicApproverRole: "club_comms",
+              mediumRiskApproverRole: "club_comms",
+              allowAgentRouting: true,
+              autoApproveInternalLowRisk: false,
+              autoApproveMaxRisk: 0.35,
+              autoApprovalRule: {},
+              routingRule: {},
+              approvalRule: {},
+              publishingRule: {},
+              notificationRule: { email: true, push: true }
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/organizations/metro/history")) {
+      return {
+        ok: true,
+        async json() {
+          return { items: [] };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/clubs/westside/history")) {
+      return {
+        ok: true,
+        async json() {
+          return { items: [] };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/organizations/metro")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubs: [
+              {
+                slug: "westside",
+                name: "Westside",
+                overrideSummary: {
+                  overrideCount: 1,
+                  overriddenFields: ["Public approver"]
+                }
+              },
+              {
+                slug: "eastside",
+                name: "Eastside",
+                overrideSummary: {
+                  overrideCount: 0,
+                  overriddenFields: []
+                }
+              }
+            ],
+            admins: []
+          };
+        }
+      };
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  };
+
+  const server = createAdminServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const address = server.address();
+    const cleanedClubs = encodeURIComponent(
+      JSON.stringify([{ name: "Eastside", slug: "eastside" }])
+    );
+    const response = await originalFetch(
+      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&saveScopeType=organization_cleanup&saveCleanupAreaKey=notificationRule&saveCurrentOverrideClubCount=3&saveProjectedOverrideClubCount=2&saveCurrentOverrideAreaCount=8&saveProjectedOverrideAreaCount=6&saveCleanedClubs=${cleanedClubs}&simulationContentType=photo&simulationVisibilityTarget=internal&simulationRiskScore=0.19&simulationModerationFlagged=true`
+    );
+    const body = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(body, /Bulk exception cleanup saved/);
+    assert.match(body, /Notification rule returned to the organization default/);
+    assert.match(body, /Clubs cleaned/);
+    assert.match(body, /1/);
+    assert.match(body, /3 -&gt; 2|3 -> 2/);
+    assert.match(body, /8 -&gt; 6|8 -> 6/);
+    assert.match(body, /Eastside/);
+    assert.match(body, /Review remaining notification rule exceptions/);
+    assert.match(body, /Review inheriting notification rule clubs/);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise((resolve, reject) =>
@@ -2907,6 +3061,195 @@ test("POST /ui/workflow-policies/organizations/:slug proxies policy updates to t
         }
       }
     ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await new Promise((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))
+    );
+  }
+});
+
+test("POST /ui/workflow-policies/organizations/:slug/bulk-inherit-area applies one area across selected clubs", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+
+  globalThis.fetch = async (url, init) => {
+    const method = init?.method || "GET";
+    const body = init?.body ? JSON.parse(init.body) : null;
+    calls.push({ url: String(url), method, body });
+
+    if (String(url).endsWith("/workflow-policies/organizations/metro")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "metro", name: "Metro Sports" },
+            organizationPolicy: {
+              defaultApproverRole: "team_manager",
+              publicApproverRole: "club_comms",
+              mediumRiskApproverRole: "club_comms",
+              allowAgentRouting: true,
+              autoApproveInternalLowRisk: false,
+              autoApproveMaxRisk: 0.35,
+              autoApprovalRule: {},
+              routingRule: {},
+              approvalRule: {},
+              publishingRule: {},
+              notificationRule: { email: true, push: true }
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/organizations/metro")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubs: [
+              {
+                slug: "eastside",
+                name: "Eastside",
+                overrideSummary: {
+                  overrideCount: 2,
+                  overriddenFields: ["Public approver", "Notification rule"]
+                }
+              },
+              {
+                slug: "westside",
+                name: "Westside",
+                overrideSummary: {
+                  overrideCount: 1,
+                  overriddenFields: ["Notification rule"]
+                }
+              },
+              {
+                slug: "northside",
+                name: "Northside",
+                overrideSummary: {
+                  overrideCount: 0,
+                  overriddenFields: []
+                }
+              }
+            ],
+            admins: []
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/clubs/eastside") && method === "GET") {
+      return {
+        ok: true,
+        async json() {
+          return {
+            club: { slug: "eastside", name: "Eastside" },
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubPolicy: {
+              publicApproverRole: "club_admin",
+              notificationRule: { email: false }
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/clubs/westside") && method === "GET") {
+      return {
+        ok: true,
+        async json() {
+          return {
+            club: { slug: "westside", name: "Westside" },
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubPolicy: {
+              notificationRule: { email: false, push: false }
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/clubs/northside") && method === "GET") {
+      return {
+        ok: true,
+        async json() {
+          return {
+            club: { slug: "northside", name: "Northside" },
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubPolicy: {}
+          };
+        }
+      };
+    }
+
+    if (
+      (String(url).endsWith("/workflow-policies/clubs/eastside") ||
+        String(url).endsWith("/workflow-policies/clubs/westside")) &&
+      method === "POST"
+    ) {
+      return {
+        ok: true,
+        async json() {
+          return { ok: true };
+        }
+      };
+    }
+
+    throw new Error(`Unexpected fetch: ${method} ${url}`);
+  };
+
+  const server = createAdminServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const address = server.address();
+    const response = await originalFetch(
+      `http://127.0.0.1:${address.port}/ui/workflow-policies/organizations/metro/bulk-inherit-area`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          actorEmail: "org-admin@metro.test",
+          areaKey: "notificationRule",
+          clubSlugs: ["eastside", "westside", "northside"],
+          returnClubSlug: "westside",
+          simulationInput: {
+            contentType: "photo",
+            visibilityTarget: "internal",
+            riskScore: "0.19",
+            moderationFlagged: "true"
+          }
+        })
+      }
+    );
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.ok, true);
+    assert.match(payload.redirectUrl, /saveScopeType=organization_cleanup/);
+    assert.match(payload.redirectUrl, /saveCleanupAreaKey=notificationRule/);
+    assert.match(payload.redirectUrl, /clubSlug=westside/);
+    assert.match(payload.redirectUrl, /saveCurrentOverrideClubCount=2/);
+    assert.match(payload.redirectUrl, /saveProjectedOverrideClubCount=1/);
+    assert.match(payload.redirectUrl, /saveCurrentOverrideAreaCount=3/);
+    assert.match(payload.redirectUrl, /saveProjectedOverrideAreaCount=1/);
+    assert.match(payload.redirectUrl, /clubArea=notificationRule/);
+
+    const clubPosts = calls.filter(
+      (call) =>
+        call.method === "POST" &&
+        /\/workflow-policies\/clubs\/(eastside|westside)$/.test(call.url)
+    );
+    assert.equal(clubPosts.length, 2);
+    assert.deepEqual(
+      clubPosts.map((call) => call.body),
+      [
+        { actorEmail: "org-admin@metro.test", notificationRule: null },
+        { actorEmail: "org-admin@metro.test", notificationRule: null }
+      ]
+    );
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise((resolve, reject) =>
