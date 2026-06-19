@@ -372,6 +372,16 @@ test("GET /workflow-settings previews unsaved club draft values in the simulator
 
     assert.equal(response.status, 200);
     assert.match(body, /Previewing unsaved club draft/);
+    assert.match(body, /High-signal save warnings/);
+    assert.match(body, /2 flagged/);
+    assert.match(
+      body,
+      /This draft removes the second human approval step for the simulated public submission/
+    );
+    assert.match(
+      body,
+      /This draft turns off the published email notification for the simulated submission/
+    );
     assert.match(body, /What changes if you save this club draft/);
     assert.match(body, /Live vs draft/);
     assert.match(body, /First approver/);
@@ -383,6 +393,7 @@ test("GET /workflow-settings previews unsaved club draft values in the simulator
     assert.match(body, /Live[\s\S]*Enabled/);
     assert.match(body, /Draft[\s\S]*Disabled \(Notification Policy Email Disabled\)/);
     assert.match(body, /Previewing draft/);
+    assert.match(body, /data-preview-warning-count="2"/);
     assert.match(body, /This routes to Team Manager from Routing Rule Content Type/);
     assert.match(body, /This goes through one human approval step before publishing/);
     assert.match(body, /Published email: Disabled \(Notification Policy Email Disabled\)/);

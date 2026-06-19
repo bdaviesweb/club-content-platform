@@ -2517,6 +2517,70 @@ function renderOutcomeDiffCard({ liveOutcome, previewOutcome, previewScopeType }
   </div>`;
 }
 
+function buildOutcomeRiskWarnings({ liveOutcome, previewOutcome }) {
+  if (!liveOutcome || !previewOutcome) {
+    return [];
+  }
+
+  const warnings = [];
+
+  if (liveOutcome.secondApproval.required && !previewOutcome.secondApproval.required) {
+    warnings.push(
+      "This draft removes the second human approval step for the simulated public submission."
+    );
+  }
+
+  if (!liveOutcome.autoApproval.allowed && previewOutcome.autoApproval.allowed) {
+    warnings.push(
+      "This draft auto-approves a submission that currently requires human review."
+    );
+  }
+
+  if (
+    liveOutcome.publishedNotifications.email?.enabled &&
+    !previewOutcome.publishedNotifications.email?.enabled
+  ) {
+    warnings.push(
+      "This draft turns off the published email notification for the simulated submission."
+    );
+  }
+
+  if (
+    liveOutcome.publishedNotifications.push?.enabled &&
+    !previewOutcome.publishedNotifications.push?.enabled
+  ) {
+    warnings.push(
+      "This draft turns off the published push notification for the simulated submission."
+    );
+  }
+
+  return warnings;
+}
+
+function renderOutcomeRiskWarningsCard(warnings) {
+  if (!warnings.length) {
+    return "";
+  }
+
+  return `<div class="signal-card" style="margin-bottom:16px; border:1px solid rgba(180, 83, 9, 0.24); background: rgba(255, 247, 237, 0.92);">
+    <div class="badge-row" style="margin-bottom:10px;">
+      <strong>High-signal save warnings</strong>
+      ${renderStatusBadge(`${warnings.length} flagged`, "review")}
+    </div>
+    <p class="subtle">These changes reduce review or notification coverage in the simulated workflow. Double-check them before saving.</p>
+    <div class="summary-stack" style="margin-top:12px;">
+      ${warnings
+        .map(
+          (warning) => `<div class="summary-item">
+            <strong>Review before save</strong>
+            <p>${escapeHtml(warning)}</p>
+          </div>`
+        )
+        .join("")}
+    </div>
+  </div>`;
+}
+
 function renderPolicySimulator({
   effectivePolicy,
   simulationInput,
@@ -2597,6 +2661,15 @@ function renderPolicySimulator({
         )}">Reset to live policy</a></p>
       </div>`
     : "";
+  const riskWarnings = previewContext
+    ? buildOutcomeRiskWarnings({
+        liveOutcome,
+        previewOutcome: outcome
+      })
+    : [];
+  const riskWarningsCard = previewContext
+    ? renderOutcomeRiskWarningsCard(riskWarnings)
+    : "";
   const outcomeDiffCard = previewContext
     ? renderOutcomeDiffCard({
         liveOutcome,
@@ -2616,6 +2689,7 @@ function renderPolicySimulator({
       </div>
     </div>
     ${previewNotice}
+    ${riskWarningsCard}
     ${outcomeDiffCard}
 
     <form method="GET" action="/workflow-settings" class="workflow-policy-form">
@@ -2815,7 +2889,8 @@ function renderWorkflowPolicyForm({
   policy,
   actorEmail = "",
   allowInheritance = false,
-  previewScopeType = null
+  previewScopeType = null,
+  previewWarningCount = 0
 }) {
   const roleOptions = [
     { value: "team_manager", label: "Team manager" },
@@ -2909,7 +2984,7 @@ function renderWorkflowPolicyForm({
       </div>
       <span class="badge badge-neutral">${escapeHtml(scopeSlug || "n/a")}</span>
     </div>
-    <form class="workflow-policy-form" data-scope-type="${escapeHtml(scopeType)}" data-scope-slug="${escapeHtml(scopeSlug || "")}">
+    <form class="workflow-policy-form" data-scope-type="${escapeHtml(scopeType)}" data-scope-slug="${escapeHtml(scopeSlug || "")}" data-preview-warning-count="${escapeHtml(String(previewWarningCount))}">
       ${renderPolicyField({
         label: "Actor email",
         name: "actorEmail",
@@ -3298,6 +3373,21 @@ async function renderWorkflowSettingsPage(
     organizationPolicy: organizationPolicy?.organizationPolicy || {},
     clubPolicy: clubPolicy.clubPolicy || {}
   });
+  const normalizedSimulationInput = normalizeSimulationInput(simulationInput);
+  const previewOutcome =
+    previewScopeType && effectivePolicy
+      ? simulatePolicyOutcome(effectivePolicy, normalizedSimulationInput)
+      : null;
+  const livePreviewOutcome =
+    previewScopeType && liveEffectivePolicy
+      ? simulatePolicyOutcome(liveEffectivePolicy, normalizedSimulationInput)
+      : null;
+  const previewRiskWarningCount = previewScopeType
+    ? buildOutcomeRiskWarnings({
+        liveOutcome: livePreviewOutcome,
+        previewOutcome
+      }).length
+    : 0;
 
   return layout(`
     <section class="hero">
@@ -3353,7 +3443,9 @@ async function renderWorkflowSettingsPage(
         policy: previewOrganizationPolicy,
         actorEmail: reviewerEmail,
         allowInheritance: false,
-        previewScopeType
+        previewScopeType,
+        previewWarningCount:
+          previewScopeType === "organization" ? previewRiskWarningCount : 0
       })}
       ${renderWorkflowPolicyForm({
         scopeType: "club",
@@ -3363,7 +3455,8 @@ async function renderWorkflowSettingsPage(
         policy: previewClubPolicy,
         actorEmail: reviewerEmail,
         allowInheritance: true,
-        previewScopeType
+        previewScopeType,
+        previewWarningCount: previewScopeType === "club" ? previewRiskWarningCount : 0
       })}
     </section>
 
@@ -3565,6 +3658,21 @@ async function renderWorkflowSettingsPage(
         if (!payload.actorEmail) {
           status.textContent = 'Actor email is required.';
           return;
+        }
+
+        const previewWarningCount = Number(form.dataset.previewWarningCount || '0');
+        if (previewWarningCount > 0) {
+          const confirmed = window.confirm(
+            'This draft has ' +
+              previewWarningCount +
+              ' simulated workflow warning' +
+              (previewWarningCount === 1 ? '' : 's') +
+              '. Save anyway?'
+          );
+          if (!confirmed) {
+            status.textContent = 'Save cancelled. Review the warnings above.';
+            return;
+          }
         }
 
         status.textContent = 'Saving...';
