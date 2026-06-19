@@ -4285,6 +4285,7 @@ function renderPolicyHistoryCard(
                 : "No field summary recorded"
             )}</p>
             <p class="subtle" style="margin-top:8px;">${escapeHtml(followUpCopy)}</p>
+            ${renderHistoryCompareSummary(item, linkVariant)}
             ${changedAreaBadges}
             ${organizationFollowUpLinks}
             ${changeDetailRows}
@@ -4303,6 +4304,97 @@ function renderPolicyHistoryCard(
     <h3>${escapeHtml(title)}</h3>
     <div class="summary-stack" style="margin-top:12px;">${content}</div>
   </div>`;
+}
+
+function renderHistoryCompareSummary(item, linkVariant) {
+  if (!item || typeof item !== "object") {
+    return "";
+  }
+
+  const changedFields = Array.isArray(item.metadata?.changedFields)
+    ? item.metadata.changedFields
+    : [];
+  const simulationTrace = item.metadata?.simulationTrace || null;
+  const cleanupSummary = item.metadata?.cleanupSummary || null;
+  const rolloutSnapshot =
+    linkVariant === "organization" ? item.metadata?.rolloutSnapshot || null : null;
+  const overrideSnapshot =
+    linkVariant === "club" ? item.metadata?.overrideSnapshot || null : null;
+  const compareBits = [];
+
+  if (changedFields.length) {
+    compareBits.push(
+      `${changedFields.length} changed area${changedFields.length === 1 ? "" : "s"}`
+    );
+  }
+
+  if (rolloutSnapshot && typeof rolloutSnapshot === "object") {
+    const inheritingCount = Array.isArray(rolloutSnapshot.inheritingClubs)
+      ? rolloutSnapshot.inheritingClubs.length
+      : 0;
+    const insulatedCount = Array.isArray(rolloutSnapshot.insulatedClubs)
+      ? rolloutSnapshot.insulatedClubs.length
+      : 0;
+    compareBits.push(`${inheritingCount} clubs inheriting`);
+    compareBits.push(`${insulatedCount} clubs insulated`);
+  }
+
+  if (overrideSnapshot && typeof overrideSnapshot === "object") {
+    compareBits.push(
+      `${Number(overrideSnapshot.liveOverrideCount || 0)} -> ${Number(
+        overrideSnapshot.previewOverrideCount || 0
+      )} override areas`
+    );
+    const addedCount = Array.isArray(overrideSnapshot.addedAreas)
+      ? overrideSnapshot.addedAreas.length
+      : 0;
+    const removedCount = Array.isArray(overrideSnapshot.removedAreas)
+      ? overrideSnapshot.removedAreas.length
+      : 0;
+    compareBits.push(`${addedCount} new exception${addedCount === 1 ? "" : "s"}`);
+    compareBits.push(
+      `${removedCount} removed exception${removedCount === 1 ? "" : "s"}`
+    );
+  }
+
+  if (
+    cleanupSummary &&
+    typeof cleanupSummary === "object" &&
+    Array.isArray(cleanupSummary.clubs) &&
+    cleanupSummary.clubs.length
+  ) {
+    compareBits.push(
+      `${cleanupSummary.clubs.length} cleanup club${
+        cleanupSummary.clubs.length === 1 ? "" : "s"
+      }`
+    );
+  }
+
+  if (
+    simulationTrace &&
+    typeof simulationTrace === "object" &&
+    Array.isArray(simulationTrace.changedRows) &&
+    simulationTrace.changedRows.length
+  ) {
+    compareBits.push(
+      `${simulationTrace.changedRows.length} simulated path change${
+        simulationTrace.changedRows.length === 1 ? "" : "s"
+      }`
+    );
+  }
+
+  if (!compareBits.length) {
+    return "";
+  }
+
+  return `<div class="summary-item" style="background: rgba(255,255,255,0.68); margin-top:12px;">
+      <strong>Quick compare</strong>
+      <div class="badge-row" style="margin-top:10px; align-items:flex-start;">
+        ${compareBits
+          .map((bit) => `<span class="badge badge-neutral">${escapeHtml(bit)}</span>`)
+          .join("")}
+      </div>
+    </div>`;
 }
 
 function renderPolicyHistorySection({

@@ -306,6 +306,10 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Open the club stack to confirm whether these overrides should stay/);
     assert.match(body, /Review approval rule exceptions/);
     assert.match(body, /Review approval rule inheriting clubs/);
+    assert.match(body, /Quick compare/);
+    assert.match(body, /2 changed areas/);
+    assert.match(body, /1 clubs inheriting/);
+    assert.match(body, /1 clubs insulated/);
     assert.match(body, /Preview rollback of latest org change/);
     assert.match(body, /Preview rollback of approval rule/);
     assert.match(body, /Preview rollback of notification rule/);
@@ -318,6 +322,9 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Preview rollback of latest club change/);
     assert.match(body, /Preview rollback of routing rule/);
     assert.match(body, /This restores the earlier club-specific value recorded before this change\./);
+    assert.match(body, /0 -&gt; 1 override areas|0 -> 1 override areas/);
+    assert.match(body, /1 new exception/);
+    assert.match(body, /0 removed exceptions/);
     assert.match(body, /Saved override snapshot/);
     assert.match(body, /This captures how customized this club was compared with the organization default when the save was recorded\./);
     assert.match(body, /0 -&gt; 1 override areas|0 -> 1 override areas/);
