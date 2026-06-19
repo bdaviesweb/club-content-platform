@@ -3173,6 +3173,11 @@ function renderWorkflowPolicyForm({
       <div class="policy-actions">
         <button type="submit" class="button-primary">Save ${escapeHtml(scopeType)} policy</button>
         <button type="button" class="button-secondary" data-preview-policy>Preview ${escapeHtml(scopeType)} draft</button>
+        ${
+          allowInheritance
+            ? `<button type="button" class="button-secondary" data-reset-inheritance>Clear club overrides</button>`
+            : ""
+        }
         <span class="subtle policy-status" data-policy-status>Ready</span>
         ${previewScopeType === scopeType ? `<span class="badge badge-review">Previewing draft</span>` : ""}
       </div>
@@ -3816,6 +3821,33 @@ async function renderWorkflowSettingsPage(
         window.location.assign('/workflow-settings?' + params.toString());
       }
 
+      function resetInheritedPolicyDraft(form) {
+        const status = form.querySelector('[data-policy-status]');
+        const actorEmail = form.querySelector('[name="actorEmail"]');
+
+        form
+          .querySelectorAll('input:not([name="actorEmail"]), select')
+          .forEach((field) => {
+            if (field.tagName === 'SELECT') {
+              field.value = '';
+              return;
+            }
+
+            if (field.type === 'number' || field.type === 'text' || field.type === 'email') {
+              field.value = '';
+            }
+          });
+
+        if (actorEmail && !actorEmail.value.trim()) {
+          actorEmail.focus();
+        }
+
+        if (status) {
+          status.textContent =
+            'Club draft reset to inherited organization defaults. Preview or save when ready.';
+        }
+      }
+
       document.querySelectorAll('.workflow-policy-form[data-scope-type]').forEach((form) => {
         form.addEventListener('submit', (event) => {
           event.preventDefault();
@@ -3831,6 +3863,13 @@ async function renderWorkflowSettingsPage(
         if (previewButton) {
           previewButton.addEventListener('click', () => {
             previewPolicyDraft(form);
+          });
+        }
+
+        const resetButton = form.querySelector('[data-reset-inheritance]');
+        if (resetButton) {
+          resetButton.addEventListener('click', () => {
+            resetInheritedPolicyDraft(form);
           });
         }
       });

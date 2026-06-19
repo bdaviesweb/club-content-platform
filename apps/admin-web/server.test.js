@@ -249,6 +249,7 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Simulate a submission before it hits the queue/);
     assert.match(body, /Hermes suggested approver/);
     assert.match(body, /Preview club draft/);
+    assert.match(body, /Clear club overrides/);
     assert.match(body, /Preview organization draft/);
     assert.match(body, /Club override/);
     assert.match(body, /Organization default/);
