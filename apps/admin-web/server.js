@@ -3213,7 +3213,9 @@ function renderWorkflowPolicyForm({
   previewGainingClubs = [],
   previewGuardrailWarnings = [],
   simulationInput = null,
-  focusedInheritanceAreaKey = null
+  focusedInheritanceAreaKey = null,
+  stagedCleanupAreaKey = null,
+  stagedCleanupClubSlugs = []
 }) {
   const roleOptions = [
     { value: "team_manager", label: "Team manager" },
@@ -3346,7 +3348,7 @@ function renderWorkflowPolicyForm({
     </div>
     ${guardrailCard}
     ${focusedInheritanceCard}
-    <form class="workflow-policy-form" data-scope-type="${escapeHtml(scopeType)}" data-scope-slug="${escapeHtml(scopeSlug || "")}" data-return-club-slug="${escapeHtml(returnClubSlug || "")}" data-preview-warning-count="${escapeHtml(String(previewWarningCount))}" data-preview-affected-club-count="${escapeHtml(String(previewAffectedClubCount))}" data-preview-changed-area-count="${escapeHtml(String(previewChangedAreaCount))}" data-preview-insulated-club-count="${escapeHtml(String(previewInsulatedClubCount))}" data-preview-changed-area-keys="${escapeHtml((previewChangedAreaKeys || []).join(","))}" data-preview-current-override-club-count="${escapeHtml(String(previewCurrentOverrideClubCount))}" data-preview-projected-override-club-count="${escapeHtml(String(previewProjectedOverrideClubCount))}" data-preview-current-override-area-count="${escapeHtml(String(previewCurrentOverrideAreaCount))}" data-preview-projected-override-area-count="${escapeHtml(String(previewProjectedOverrideAreaCount))}" data-preview-added-area-keys="${escapeHtml((previewAddedAreaKeys || []).join(","))}" data-preview-removed-area-keys="${escapeHtml((previewRemovedAreaKeys || []).join(","))}" data-preview-retained-area-keys="${escapeHtml((previewRetainedAreaKeys || []).join(","))}" data-preview-reducing-clubs="${escapeHtml(JSON.stringify(previewReducingClubs || []))}" data-preview-gaining-clubs="${escapeHtml(JSON.stringify(previewGainingClubs || []))}" data-preview-guardrail-warnings="${escapeHtml(JSON.stringify(previewGuardrailWarnings || []))}">
+    <form class="workflow-policy-form" data-scope-type="${escapeHtml(scopeType)}" data-scope-slug="${escapeHtml(scopeSlug || "")}" data-return-club-slug="${escapeHtml(returnClubSlug || "")}" data-preview-warning-count="${escapeHtml(String(previewWarningCount))}" data-preview-affected-club-count="${escapeHtml(String(previewAffectedClubCount))}" data-preview-changed-area-count="${escapeHtml(String(previewChangedAreaCount))}" data-preview-insulated-club-count="${escapeHtml(String(previewInsulatedClubCount))}" data-preview-changed-area-keys="${escapeHtml((previewChangedAreaKeys || []).join(","))}" data-preview-current-override-club-count="${escapeHtml(String(previewCurrentOverrideClubCount))}" data-preview-projected-override-club-count="${escapeHtml(String(previewProjectedOverrideClubCount))}" data-preview-current-override-area-count="${escapeHtml(String(previewCurrentOverrideAreaCount))}" data-preview-projected-override-area-count="${escapeHtml(String(previewProjectedOverrideAreaCount))}" data-preview-added-area-keys="${escapeHtml((previewAddedAreaKeys || []).join(","))}" data-preview-removed-area-keys="${escapeHtml((previewRemovedAreaKeys || []).join(","))}" data-preview-retained-area-keys="${escapeHtml((previewRetainedAreaKeys || []).join(","))}" data-preview-reducing-clubs="${escapeHtml(JSON.stringify(previewReducingClubs || []))}" data-preview-gaining-clubs="${escapeHtml(JSON.stringify(previewGainingClubs || []))}" data-preview-guardrail-warnings="${escapeHtml(JSON.stringify(previewGuardrailWarnings || []))}" data-preview-cleanup-area-key="${escapeHtml(stagedCleanupAreaKey || "")}" data-preview-cleanup-club-slugs="${escapeHtml((stagedCleanupClubSlugs || []).join(","))}">
       ${renderPolicyField({
         label: "Actor email",
         name: "actorEmail",
@@ -4050,6 +4052,8 @@ function buildWorkflowSettingsLink({
   previewScopeType = null,
   previewDraftPolicy = null,
   previewResetArea = null,
+  previewCleanupArea = null,
+  previewCleanupClubs = null,
   simulationInput = null
 } = {}) {
   const params = new URLSearchParams();
@@ -4071,6 +4075,12 @@ function buildWorkflowSettingsLink({
   }
   if (previewResetArea) {
     params.set("previewResetArea", previewResetArea);
+  }
+  if (previewCleanupArea) {
+    params.set("previewCleanupArea", previewCleanupArea);
+  }
+  if (Array.isArray(previewCleanupClubs) && previewCleanupClubs.length) {
+    params.set("previewCleanupClubs", previewCleanupClubs.join(","));
   }
   if (simulationInput?.contentType) {
     params.set("simulationContentType", String(simulationInput.contentType));
@@ -4103,7 +4113,8 @@ function buildWorkflowSettingsLink({
 function buildOrganizationDraftImpact({
   organizationPolicy,
   previewOrganizationPolicy,
-  organizationDirectory
+  organizationDirectory,
+  clubPolicyMap = null
 }) {
   const changedAreas = listChangedPolicyAreas({
     livePolicy: organizationPolicy?.organizationPolicy || {},
@@ -4111,9 +4122,14 @@ function buildOrganizationDraftImpact({
   });
 
   const clubImpacts = (organizationDirectory?.clubs || []).map((club) => {
-    const overriddenFields = Array.isArray(club.overrideSummary?.overriddenFields)
-      ? club.overrideSummary.overriddenFields
-      : [];
+    const overriddenFields = clubPolicyMap
+      ? buildClubOverrideSummary({
+          clubPolicy: clubPolicyMap?.[club.slug]?.clubPolicy || {},
+          organizationPolicy: previewOrganizationPolicy || {}
+        }).overridden.map((area) => area.label)
+      : Array.isArray(club.overrideSummary?.overriddenFields)
+        ? club.overrideSummary.overriddenFields
+        : [];
     const impactedAreas = changedAreas.filter(
       (area) => !overriddenFields.includes(area.label)
     );
@@ -4150,15 +4166,25 @@ function buildOrganizationDraftAreaImpactSummary({ changedAreas = [], clubImpact
   });
 }
 
-function buildRemainingExceptionCleanupItems({ clubs = [], changedAreas = [] }) {
+function buildRemainingExceptionCleanupItems({
+  clubs = [],
+  changedAreas = [],
+  clubPolicyMap = null,
+  organizationPolicy = {}
+}) {
   const changedAreaLabels = new Set(changedAreas.map((area) => area.label));
   const changedAreaMap = new Map(changedAreas.map((area) => [area.label, area]));
 
   return clubs
     .map((club) => {
-      const overriddenFields = Array.isArray(club.overrideSummary?.overriddenFields)
-        ? club.overrideSummary.overriddenFields
-        : [];
+      const overriddenFields = clubPolicyMap
+        ? buildClubOverrideSummary({
+            clubPolicy: clubPolicyMap?.[club.slug]?.clubPolicy || {},
+            organizationPolicy
+          }).overridden.map((area) => area.label)
+        : Array.isArray(club.overrideSummary?.overriddenFields)
+          ? club.overrideSummary.overriddenFields
+          : [];
       const remainingAreas = overriddenFields
         .filter((label) => changedAreaLabels.has(label))
         .map((label) => changedAreaMap.get(label))
@@ -4177,6 +4203,34 @@ function buildRemainingExceptionCleanupItems({ clubs = [], changedAreas = [] }) 
           Number(left.club.overrideSummary?.overrideCount || 0) ||
         String(left.club.name || "").localeCompare(String(right.club.name || ""))
     );
+}
+
+function buildOrganizationDirectoryPreview({
+  organizationDirectory,
+  organizationPolicy = {},
+  clubPolicyMap = {}
+}) {
+  if (!organizationDirectory) {
+    return null;
+  }
+
+  return {
+    ...organizationDirectory,
+    clubs: (organizationDirectory.clubs || []).map((club) => {
+      const summary = buildClubOverrideSummary({
+        clubPolicy: clubPolicyMap?.[club.slug]?.clubPolicy || {},
+        organizationPolicy
+      });
+
+      return {
+        ...club,
+        overrideSummary: {
+          overrideCount: summary.overridden.length,
+          overriddenFields: summary.overridden.map((area) => area.label)
+        }
+      };
+    })
+  };
 }
 
 function buildExceptionCleanupAreaItems(items = []) {
@@ -4252,7 +4306,9 @@ function renderExceptionCleanupSummary({
   previewDraftPolicy = null,
   simulationInput = null,
   includePreviewInheritanceLinks = false,
-  includeBulkCleanupControls = false
+  includeBulkCleanupControls = false,
+  stagedCleanupAreaKey = null,
+  stagedCleanupClubSlugs = []
 }) {
   if (!items.length) {
     return "";
@@ -4275,32 +4331,117 @@ function renderExceptionCleanupSummary({
             <div class="summary-stack" style="margin-top:12px;">
               ${cleanupAreaItems
                 .map(
-                  (item) => `<form class="workflow-bulk-inherit-form summary-item" data-organization-slug="${escapeHtml(
+                  (item) => `<form class="${
+                    previewScopeType === "organization"
+                      ? "workflow-bulk-preview-form"
+                      : "workflow-bulk-inherit-form"
+                  } summary-item" data-organization-slug="${escapeHtml(
                     organizationSlug
-                  )}" style="background: rgba(255,255,255,0.72);">
+                  )}" ${
+                    previewScopeType === "organization"
+                      ? `method="GET" action="/workflow-settings" data-preview-draft-policy="${escapeHtml(
+                          previewDraftPolicy || ""
+                        )}" data-selected-club-slug="${escapeHtml(selectedClubSlug)}"`
+                      : ""
+                  } style="background: rgba(255,255,255,0.72);">
+                    ${
+                      previewScopeType === "organization"
+                        ? `<input type="hidden" name="clubSlug" value="${escapeHtml(
+                            selectedClubSlug
+                          )}" />
+                          <input type="hidden" name="previewScopeType" value="organization" />
+                          <input type="hidden" name="previewDraftPolicy" value="${escapeHtml(
+                            previewDraftPolicy || ""
+                          )}" />`
+                        : ""
+                    }
                     <input type="hidden" name="areaKey" value="${escapeHtml(
                       item.area.key
                     )}" />
                     <input type="hidden" name="returnClubSlug" value="${escapeHtml(
                       selectedClubSlug
                     )}" />
+                    ${
+                      previewScopeType === "organization"
+                        ? `<input type="hidden" name="previewCleanupArea" value="${escapeHtml(
+                            item.area.key
+                          )}" />`
+                        : ""
+                    }
+                    ${
+                      simulationInput?.contentType
+                        ? `<input type="hidden" name="simulationContentType" value="${escapeHtml(
+                            String(simulationInput.contentType)
+                          )}" />`
+                        : ""
+                    }
+                    ${
+                      simulationInput?.visibilityTarget
+                        ? `<input type="hidden" name="simulationVisibilityTarget" value="${escapeHtml(
+                            String(simulationInput.visibilityTarget)
+                          )}" />`
+                        : ""
+                    }
+                    ${
+                      simulationInput?.riskScore !== null &&
+                      simulationInput?.riskScore !== undefined
+                        ? `<input type="hidden" name="simulationRiskScore" value="${escapeHtml(
+                            String(simulationInput.riskScore)
+                          )}" />`
+                        : ""
+                    }
+                    ${
+                      simulationInput?.moderationFlagged !== null &&
+                      simulationInput?.moderationFlagged !== undefined
+                        ? `<input type="hidden" name="simulationModerationFlagged" value="${escapeHtml(
+                            String(Boolean(simulationInput.moderationFlagged))
+                          )}" />`
+                        : ""
+                    }
+                    ${
+                      simulationInput?.agentSuggestedApproverRole
+                        ? `<input type="hidden" name="simulationAgentSuggestedApproverRole" value="${escapeHtml(
+                            String(simulationInput.agentSuggestedApproverRole)
+                          )}" />`
+                        : ""
+                    }
                     <div class="badge-row" style="justify-content:space-between; margin-bottom:6px;">
                       <strong>${escapeHtml(item.area.label)}</strong>
                       ${renderStatusBadge(
-                        `${item.clubs.length} selected by default`,
-                        "review"
+                        previewScopeType === "organization" &&
+                          stagedCleanupAreaKey === item.area.key &&
+                          stagedCleanupClubSlugs.length
+                          ? `${stagedCleanupClubSlugs.length} staged`
+                          : `${item.clubs.length} selected by default`,
+                        previewScopeType === "organization" &&
+                          stagedCleanupAreaKey === item.area.key &&
+                          stagedCleanupClubSlugs.length
+                          ? "info"
+                          : "review"
                       )}
                     </div>
                     <p class="subtle">Apply the organization ${escapeHtml(
                       item.area.label.toLowerCase()
-                    )} default to:</p>
+                    )} default to${
+                      previewScopeType === "organization"
+                        ? " in this preview"
+                        : ""
+                    }:</p>
                     <div class="summary-stack" style="margin-top:10px;">
                       ${item.clubs
                         .map(
                           (club) => `<label class="badge-row" style="justify-content:flex-start; gap:8px;">
                             <input type="checkbox" name="clubSlugs" value="${escapeHtml(
                               club.slug || ""
-                            )}" checked />
+                            )}" ${
+                              previewScopeType === "organization" &&
+                              stagedCleanupAreaKey === item.area.key &&
+                              stagedCleanupClubSlugs.length
+                                ? stagedCleanupClubSlugs.includes(club.slug || "")
+                                  ? "checked"
+                                  : ""
+                                : "checked"
+                            } />
                             <span>${escapeHtml(club.name)}</span>
                             <span class="subtle">${escapeHtml(club.slug || "")}</span>
                           </label>`
@@ -4308,9 +4449,27 @@ function renderExceptionCleanupSummary({
                         .join("")}
                     </div>
                     <div class="policy-actions" style="margin-top:12px;">
-                      <button type="submit" class="button-secondary">Apply org ${escapeHtml(
-                        item.area.label.toLowerCase()
-                      )} to selected clubs</button>
+                      <button type="submit" class="button-secondary">${
+                        previewScopeType === "organization"
+                          ? `Stage ${escapeHtml(
+                              item.area.label.toLowerCase()
+                            )} cleanup in preview`
+                          : `Apply org ${escapeHtml(
+                              item.area.label.toLowerCase()
+                            )} to selected clubs`
+                      }</button>
+                      ${
+                        previewScopeType === "organization" &&
+                        stagedCleanupAreaKey === item.area.key &&
+                        stagedCleanupClubSlugs.length
+                          ? `<a class="quick-link" href="${buildWorkflowSettingsLink({
+                              clubSlug: selectedClubSlug,
+                              previewScopeType: "organization",
+                              previewDraftPolicy,
+                              simulationInput
+                            })}">Clear staged cleanup</a>`
+                          : ""
+                      }
                       <span class="subtle" data-bulk-status>Ready</span>
                     </div>
                   </form>`
@@ -4469,7 +4628,10 @@ function renderOrganizationDraftImpactSummary({
   organizationPolicy,
   previewOrganizationPolicy,
   organizationDirectory,
+  clubPolicyMap = null,
   selectedClubSlug = "",
+  previewCleanupAreaKey = null,
+  previewCleanupClubSlugs = [],
   overrideBurdenSummary = null,
   simulationInput = null
 }) {
@@ -4485,7 +4647,8 @@ function renderOrganizationDraftImpactSummary({
   } = buildOrganizationDraftImpact({
     organizationPolicy,
     previewOrganizationPolicy,
-    organizationDirectory
+    organizationDirectory,
+    clubPolicyMap
   });
   const areaImpactSummary = buildOrganizationDraftAreaImpactSummary({
     changedAreas,
@@ -4493,7 +4656,9 @@ function renderOrganizationDraftImpactSummary({
   });
   const cleanupItems = buildRemainingExceptionCleanupItems({
     clubs: organizationDirectory?.clubs || [],
-    changedAreas
+    changedAreas,
+    clubPolicyMap,
+    organizationPolicy: previewOrganizationPolicy || {}
   });
 
   if (!changedAreas.length) {
@@ -4734,9 +4899,13 @@ function renderOrganizationDraftImpactSummary({
         "These clubs still override at least one organization area changed by this draft. Start here after you save if you want the rollout to land more uniformly.",
       items: cleanupItems,
       selectedClubSlug,
+      organizationSlug: organizationDirectory?.organization?.slug || "",
       previewScopeType: "organization",
       previewDraftPolicy: JSON.stringify(previewOrganizationPolicy || {}),
-      simulationInput
+      simulationInput,
+      includeBulkCleanupControls: true,
+      stagedCleanupAreaKey: previewCleanupAreaKey,
+      stagedCleanupClubSlugs: previewCleanupClubSlugs
     })}
     <div class="summary-stack" style="margin-top:16px;">
       ${clubRows}
@@ -5036,6 +5205,10 @@ function renderWorkflowSaveSummary(
   const reducingClubs = saveSummary.reducingClubs || [];
   const gainingClubs = saveSummary.gainingClubs || [];
   const guardrailWarnings = saveSummary.guardrailWarnings || [];
+  const cleanupArea = trackedPolicyAreaFields.find(
+    (area) => area.key === saveSummary.cleanupAreaKey
+  );
+  const cleanedClubs = saveSummary.cleanedClubs || [];
   const latestOrganizationChangeDetails = extractSaveChangeDetails(
     organizationHistory,
     saveSummary.changedAreaKeys || []
@@ -5151,6 +5324,29 @@ function renderWorkflowSaveSummary(
       latestOrganizationChangeDetails,
       "These before-and-after values come from the latest recorded organization policy update."
     )}
+    ${
+      cleanupArea && cleanedClubs.length
+        ? `<div class="summary-stack" style="margin-top:16px;">
+            <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+              <strong>Cleanup staged into this save</strong>
+              <p class="subtle" style="margin-top:6px;">${escapeHtml(
+                `${cleanupArea.label} exceptions were cleared for ${cleanedClubs.length} club${
+                  cleanedClubs.length === 1 ? "" : "s"
+                } as part of this organization save.`
+              )}</p>
+              <div class="badge-row" style="margin-top:10px; align-items:flex-start;">
+                ${cleanedClubs
+                  .map(
+                    (club) => `<span class="badge badge-good">${escapeHtml(
+                      club.name || club.slug || ""
+                    )}</span>`
+                  )
+                  .join("")}
+              </div>
+            </div>
+          </div>`
+        : ""
+    }
     <div class="summary-stack" style="margin-top:16px;">${burdenDeltaRows}</div>
     ${renderExceptionCleanupSummary({
       title: "Remaining exception cleanup",
@@ -5750,7 +5946,9 @@ async function renderWorkflowSettingsPage(
   clubView = "all",
   clubArea = "all",
   saveSummary = null,
-  previewResetArea = null
+  previewResetArea = null,
+  previewCleanupArea = null,
+  previewCleanupClubs = []
 ) {
   const readiness = await fetchJson("/app/readiness");
   const selectedClubSlug = clubSlug || readiness?.demo?.clubSlug || "demo-soccer-club";
@@ -5773,6 +5971,8 @@ async function renderWorkflowSettingsPage(
   const reviewerEmail = readiness?.demo?.reviewerEmail || "comms@demo-club.local";
   const validPreviewResetArea =
     trackedPolicyAreaFields.find((area) => area.key === previewResetArea)?.key || null;
+  const validPreviewCleanupArea =
+    trackedPolicyAreaFields.find((area) => area.key === previewCleanupArea)?.key || null;
   const previewScopeType =
     previewDraft?.scopeType === "club" || previewDraft?.scopeType === "organization"
       ? previewDraft.scopeType
@@ -5818,14 +6018,6 @@ async function renderWorkflowSettingsPage(
         previewOutcome
       }).length
     : 0;
-  const organizationDraftImpact =
-    previewScopeType === "organization"
-      ? buildOrganizationDraftImpact({
-          organizationPolicy,
-          previewOrganizationPolicy,
-          organizationDirectory
-        })
-      : null;
   const clubDraftChangedAreas =
     previewScopeType === "club"
       ? listChangedPolicyAreas({
@@ -5849,13 +6041,58 @@ async function renderWorkflowSettingsPage(
           selectedClubPolicy: clubPolicy
         })
       : null;
-  const overrideBurdenSummary =
-    previewScopeType === "organization" && organizationClubPolicyMap
-      ? buildOrganizationDraftOverrideBurdenSummary({
+  const validPreviewCleanupClubSlugs =
+    validPreviewCleanupArea && organizationDirectory
+      ? previewCleanupClubs.filter((slug) =>
+          (organizationDirectory.clubs || []).some((club) => club.slug === slug)
+        )
+      : [];
+  const stagedOrganizationClubPolicyMap =
+    previewScopeType === "organization" &&
+    validPreviewCleanupArea &&
+    validPreviewCleanupClubSlugs.length &&
+    organizationClubPolicyMap
+      ? Object.fromEntries(
+          Object.entries(organizationClubPolicyMap).map(([slug, value]) => [
+            slug,
+            validPreviewCleanupClubSlugs.includes(slug)
+              ? {
+                  ...value,
+                  clubPolicy: {
+                    ...(value?.clubPolicy || {}),
+                    [validPreviewCleanupArea]: null
+                  }
+                }
+              : value
+          ])
+        )
+      : organizationClubPolicyMap;
+  const previewOrganizationDirectory =
+    previewScopeType === "organization" &&
+    organizationDirectory &&
+    stagedOrganizationClubPolicyMap
+      ? buildOrganizationDirectoryPreview({
           organizationDirectory,
+          organizationPolicy: previewOrganizationPolicy,
+          clubPolicyMap: stagedOrganizationClubPolicyMap
+        })
+      : organizationDirectory;
+  const organizationDraftImpact =
+    previewScopeType === "organization"
+      ? buildOrganizationDraftImpact({
           organizationPolicy,
           previewOrganizationPolicy,
-          clubPolicyMap: organizationClubPolicyMap
+          organizationDirectory: previewOrganizationDirectory,
+          clubPolicyMap: stagedOrganizationClubPolicyMap
+        })
+      : null;
+  const overrideBurdenSummary =
+    previewScopeType === "organization" && stagedOrganizationClubPolicyMap
+      ? buildOrganizationDraftOverrideBurdenSummary({
+          organizationDirectory: previewOrganizationDirectory,
+          organizationPolicy,
+          previewOrganizationPolicy,
+          clubPolicyMap: stagedOrganizationClubPolicyMap
         })
       : null;
   const previewPolicyGuardrails =
@@ -5968,8 +6205,11 @@ async function renderWorkflowSettingsPage(
       previewScopeType,
       organizationPolicy,
       previewOrganizationPolicy,
-      organizationDirectory,
+      organizationDirectory: previewOrganizationDirectory,
+      clubPolicyMap: stagedOrganizationClubPolicyMap,
       selectedClubSlug,
+      previewCleanupAreaKey: validPreviewCleanupArea,
+      previewCleanupClubSlugs: validPreviewCleanupClubSlugs,
       overrideBurdenSummary,
       simulationInput: normalizedSimulationInput
     })}
@@ -5986,7 +6226,7 @@ async function renderWorkflowSettingsPage(
       simulationInput: normalizedSimulationInput
     })}
     ${renderOrganizationDirectory(
-      organizationDirectory,
+      previewScopeType === "organization" ? previewOrganizationDirectory : organizationDirectory,
       clubView,
       clubArea,
       selectedClubSlug,
@@ -6062,6 +6302,10 @@ async function renderWorkflowSettingsPage(
         previewWarningCount: previewScopeType === "organization" ? previewWarningCount : 0,
         previewGuardrailWarnings:
           previewScopeType === "organization" ? previewPolicyGuardrails : [],
+        stagedCleanupAreaKey:
+          previewScopeType === "organization" ? validPreviewCleanupArea : null,
+        stagedCleanupClubSlugs:
+          previewScopeType === "organization" ? validPreviewCleanupClubSlugs : [],
         simulationInput: normalizedSimulationInput
       })}
       ${renderWorkflowPolicyForm({
@@ -6366,6 +6610,11 @@ async function renderWorkflowSettingsPage(
         const previewGuardrailWarnings = parsePreviewGuardrailWarnings(
           form.dataset.previewGuardrailWarnings
         );
+        const previewCleanupAreaKey = String(form.dataset.previewCleanupAreaKey || '').trim();
+        const previewCleanupClubSlugs = String(form.dataset.previewCleanupClubSlugs || '')
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean);
         const returnClubSlug = String(form.dataset.returnClubSlug || scopeSlug || '').trim();
         if (scopeType === 'organization' && previewAffectedClubCount > 0) {
           const confirmed = window.confirm(
@@ -6401,10 +6650,22 @@ async function renderWorkflowSettingsPage(
         }
 
         status.textContent = 'Saving...';
-        const response = await fetch('/ui/workflow-policies/' + scopeType + 's/' + encodeURIComponent(scopeSlug), {
+        const response = await fetch(
+          scopeType === 'organization' && previewCleanupAreaKey && previewCleanupClubSlugs.length
+            ? '/ui/workflow-policies/organizations/' + encodeURIComponent(scopeSlug) + '/save-with-cleanup'
+            : '/ui/workflow-policies/' + scopeType + 's/' + encodeURIComponent(scopeSlug),
+          {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(
+            scopeType === 'organization' && previewCleanupAreaKey && previewCleanupClubSlugs.length
+              ? {
+                  ...payload,
+                  cleanupAreaKey: previewCleanupAreaKey,
+                  cleanupClubSlugs: previewCleanupClubSlugs
+                }
+              : payload
+          )
         });
         const result = await response.json();
 
@@ -6431,10 +6692,24 @@ async function renderWorkflowSettingsPage(
           params.set('saveReducingClubs', JSON.stringify(previewReducingClubs));
           params.set('saveGainingClubs', JSON.stringify(previewGainingClubs));
           params.set('saveGuardrailWarnings', JSON.stringify(previewGuardrailWarnings));
+          if (previewCleanupAreaKey && previewCleanupClubSlugs.length) {
+            params.set('saveCleanupAreaKey', previewCleanupAreaKey);
+            params.set(
+              'saveCleanedClubs',
+              JSON.stringify(
+                previewCleanupClubSlugs.map((slug) => ({
+                  slug,
+                  name: slug
+                }))
+              )
+            );
+          }
           if (previewChangedAreaKeys) {
             params.set('saveChangedAreaKeys', previewChangedAreaKeys);
           }
-          window.location.assign('/workflow-settings?' + params.toString());
+          window.location.assign(
+            result.redirectUrl || '/workflow-settings?' + params.toString()
+          );
           return;
         }
 
@@ -6780,6 +7055,10 @@ export function createAdminServer() {
                 guardrailWarnings: parseGuardrailWarningList(
                   url.searchParams.get("saveGuardrailWarnings")
                 ),
+                cleanupAreaKey: url.searchParams.get("saveCleanupAreaKey") || "",
+                cleanedClubs: parseSavedClubDeltaList(
+                  url.searchParams.get("saveCleanedClubs")
+                ),
                 changedAreaKeys: String(url.searchParams.get("saveChangedAreaKeys") || "")
                   .split(",")
                   .map((value) => value.trim())
@@ -6846,7 +7125,7 @@ export function createAdminServer() {
         }, {
           scopeType: url.searchParams.get("previewScopeType"),
           payload: parsePreviewDraft(url.searchParams.get("previewDraftPolicy"))
-        }, url.searchParams.get("clubView"), url.searchParams.get("clubArea"), saveSummary, url.searchParams.get("previewResetArea"));
+        }, url.searchParams.get("clubView"), url.searchParams.get("clubArea"), saveSummary, url.searchParams.get("previewResetArea"), url.searchParams.get("previewCleanupArea"), String(url.searchParams.get("previewCleanupClubs") || "").split(",").map((value) => value.trim()).filter(Boolean));
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         res.end(html);
         return;
@@ -6899,6 +7178,57 @@ export function createAdminServer() {
         });
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify(payload));
+        return;
+      }
+
+      if (
+        req.method === "POST" &&
+        /^\/ui\/workflow-policies\/organizations\/[^/]+\/save-with-cleanup$/.test(url.pathname)
+      ) {
+        const organizationSlug = decodeURIComponent(url.pathname.split("/")[4]);
+        const body = await readJson(req);
+        const actorEmail = String(body.actorEmail || "").trim();
+        const cleanupAreaKey = String(body.cleanupAreaKey || "").trim();
+        const cleanupClubSlugs = Array.isArray(body.cleanupClubSlugs)
+          ? body.cleanupClubSlugs.map((value) => String(value || "").trim()).filter(Boolean)
+          : [];
+
+        if (!actorEmail) {
+          res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: "actorEmail is required" }));
+          return;
+        }
+
+        const { cleanupAreaKey: _cleanupAreaKey, cleanupClubSlugs: _cleanupClubSlugs, ...policyPayload } = body;
+        const policyResult = await fetchJson(
+          `/workflow-policies/organizations/${encodeURIComponent(organizationSlug)}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(policyPayload)
+          }
+        );
+
+        if (cleanupAreaKey && cleanupClubSlugs.length) {
+          for (const clubSlug of cleanupClubSlugs) {
+            await fetchJson(`/workflow-policies/clubs/${encodeURIComponent(clubSlug)}`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                actorEmail,
+                [cleanupAreaKey]: null
+              })
+            });
+          }
+        }
+
+        res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+        res.end(
+          JSON.stringify({
+            ok: true,
+            organization: policyResult.organization || null
+          })
+        );
         return;
       }
 
