@@ -2063,6 +2063,7 @@ test("GET /workflow-settings renders a post-save club exception summary", async 
             club: { slug: "westside", name: "Westside" },
             organization: { slug: "metro", name: "Metro Sports" },
             clubPolicy: {
+              publicApproverRole: "club_comms",
               allowAgentRouting: false,
               autoApproveInternalLowRisk: true,
               autoApproveMaxRisk: 0.2,
@@ -2250,6 +2251,10 @@ test("GET /workflow-settings renders a post-save club exception summary", async 
     assert.match(body, /0/);
     assert.match(body, /Override burden/);
     assert.match(body, /Increased/);
+    assert.match(body, /Saved inheritance cleanup opportunities/);
+    assert.match(body, /These saved club-specific values currently match the organization default, so you can preview inheriting them before removing the redundant exception\./);
+    assert.match(body, /Preview inheriting public approver/);
+    assert.match(body, /previewResetArea=publicApproverRole/);
     assert.match(body, /Agent routing/);
     assert.match(body, /Low-risk internal auto-approval/);
     assert.match(body, /Auto-approve max risk/);

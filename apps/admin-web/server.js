@@ -5935,7 +5935,9 @@ function renderWorkflowSaveSummary(
   simulationInput = null,
   {
     organizationHistory = null,
-    clubHistory = null
+    clubHistory = null,
+    currentOrganizationPolicy = null,
+    currentClubPolicy = null
   } = {}
 ) {
   if (!saveSummary) {
@@ -6042,6 +6044,10 @@ function renderWorkflowSaveSummary(
       clubHistory,
       saveSummary.changedAreaKeys || []
     );
+    const savedInheritanceOpportunitySummary = buildClubInheritanceOpportunitySummary({
+      clubPolicy: currentClubPolicy || {},
+      organizationPolicy: currentOrganizationPolicy || {}
+    });
     const sections = [
       {
         title: "New exceptions",
@@ -6127,6 +6133,40 @@ function renderWorkflowSaveSummary(
       })}
       <div class="summary-stack" style="margin-top:16px;">
         ${removedExceptionsCard}
+        <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+          <strong>Saved inheritance cleanup opportunities</strong>
+          <p class="subtle" style="margin-top:6px;">These saved club-specific values currently match the organization default, so you can preview inheriting them before removing the redundant exception.</p>
+          <div class="badge-row" style="margin-top:10px; align-items:flex-start;">
+            ${
+              savedInheritanceOpportunitySummary.matchingExplicitCount
+                ? savedInheritanceOpportunitySummary.matchingExplicit
+                    .map(
+                      (area) => `<span class="badge badge-info">${escapeHtml(
+                        area.label
+                      )}</span>`
+                    )
+                    .join("")
+                : `<span class="subtle">No saved club-specific values currently duplicate the organization default.</span>`
+            }
+          </div>
+          ${
+            savedInheritanceOpportunitySummary.matchingExplicitCount
+              ? `<div class="badge-row" style="margin-top:10px;">
+                  ${savedInheritanceOpportunitySummary.matchingExplicit
+                    .map(
+                      (area) => `<a class="quick-link" href="${buildWorkflowSettingsLink({
+                        clubSlug: saveSummary.clubSlug || "",
+                        previewResetArea: area.key,
+                        simulationInput
+                      })}${buildPolicyAreaAnchor(area.key)}">Preview inheriting ${escapeHtml(
+                        area.label.toLowerCase()
+                      )}</a>`
+                    )
+                    .join("")}
+                </div>`
+              : ""
+          }
+        </div>
         <div class="summary-item" style="background: rgba(255,255,255,0.68);">
           <strong>Changed policy areas</strong>
           <div class="badge-row" style="margin-top:10px; align-items:flex-start;">
@@ -7434,7 +7474,9 @@ async function renderWorkflowSettingsPage(
       normalizedSimulationInput,
       {
         organizationHistory,
-        clubHistory
+        clubHistory,
+        currentOrganizationPolicy: organizationPolicy?.organizationPolicy || null,
+        currentClubPolicy: clubPolicy.clubPolicy || null
       }
     )}
 
