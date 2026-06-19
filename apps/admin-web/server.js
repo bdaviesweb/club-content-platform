@@ -3568,7 +3568,7 @@ function renderClubOverrideSummary({ clubPolicy = {}, organizationPolicy = {} })
   </section>`;
 }
 
-function renderOrganizationDirectory(directory, clubView = "all") {
+function renderOrganizationDirectory(directory, clubView = "all", clubArea = "all") {
   if (!directory) {
     return "";
   }
@@ -3576,8 +3576,20 @@ function renderOrganizationDirectory(directory, clubView = "all") {
   const clubs = Array.isArray(directory.clubs) ? [...directory.clubs] : [];
   const normalizedClubView =
     clubView === "overrides" || clubView === "inheriting" ? clubView : "all";
+  const areaOption = trackedPolicyAreaFields.find(({ key }) => key === clubArea) || null;
+  const normalizedClubArea = areaOption?.key || "all";
+  const focusedAreaLabel = areaOption?.label || "All policy areas";
   const clubsWithOverrides = clubs
     .filter((club) => Number(club.overrideSummary?.overrideCount || 0) > 0)
+    .filter((club) => {
+      if (normalizedClubArea === "all") {
+        return true;
+      }
+
+      return Array.isArray(club.overrideSummary?.overriddenFields)
+        ? club.overrideSummary.overriddenFields.includes(areaOption.label)
+        : false;
+    })
     .sort(
       (left, right) =>
         Number(right.overrideSummary?.overrideCount || 0) -
@@ -3641,18 +3653,49 @@ function renderOrganizationDirectory(directory, clubView = "all") {
           )}</strong>
           <span class="subtle">Use the page filter to narrow exception cleanup.</span>
         </div>
+        <div class="metric-card">
+          <span class="metric-label">Policy area focus</span>
+          <strong>${escapeHtml(
+            normalizedClubView === "inheriting" ? "Not applied" : focusedAreaLabel
+          )}</strong>
+          <span class="subtle">${
+            normalizedClubView === "inheriting"
+              ? "Area focus only applies when reviewing clubs with overrides."
+              : escapeHtml(
+                  normalizedClubArea === "all"
+                    ? "Review overrides across every tracked workflow area."
+                    : `Showing clubs overriding ${focusedAreaLabel.toLowerCase()}.`
+                )
+          }</span>
+        </div>
       </div>
       <div class="summary-stack" style="margin-top:12px;">
         ${
           normalizedClubView !== "inheriting"
             ? `<div class="summary-item" style="background: rgba(255,255,255,0.68);">
-                <strong>Clubs needing exception review</strong>
-                <p class="subtle" style="margin-top:6px;">Most customized clubs appear first so you can clean up the biggest outliers quickly.</p>
+                <strong>${
+                  normalizedClubArea === "all"
+                    ? "Clubs needing exception review"
+                    : `Clubs overriding ${escapeHtml(focusedAreaLabel)}`
+                }</strong>
+                <p class="subtle" style="margin-top:6px;">${
+                  normalizedClubArea === "all"
+                    ? "Most customized clubs appear first so you can clean up the biggest outliers quickly."
+                    : `Most customized clubs affecting ${escapeHtml(
+                        focusedAreaLabel.toLowerCase()
+                      )} appear first so you can clean up that exception pattern quickly.`
+                }</p>
               </div>
               ${
                 clubsWithOverrides.length
                   ? clubsWithOverrides.map(renderClubDirectoryItem).join("")
-                  : `<p class="subtle">No clubs in this organization are carrying custom workflow policy right now.</p>`
+                  : `<p class="subtle">${
+                      normalizedClubArea === "all"
+                        ? "No clubs in this organization are carrying custom workflow policy right now."
+                        : `No clubs in this organization are overriding ${escapeHtml(
+                            focusedAreaLabel.toLowerCase()
+                          )} right now.`
+                    }</p>`
               }`
             : ""
         }
@@ -3710,7 +3753,8 @@ async function renderWorkflowSettingsPage(
   clubSlug,
   simulationInput = {},
   previewDraft = null,
-  clubView = "all"
+  clubView = "all",
+  clubArea = "all"
 ) {
   const readiness = await fetchJson("/app/readiness");
   const selectedClubSlug = clubSlug || readiness?.demo?.clubSlug || "demo-soccer-club";
@@ -3812,6 +3856,21 @@ async function renderWorkflowSettingsPage(
             clubView || "all"
           )}</select>`
         })}
+        ${renderPolicyField({
+          label: "Policy area",
+          name: "clubArea",
+          helper: "Focus override cleanup on one workflow area such as routing, approvals, publishing, or notifications.",
+          input: `<select name="clubArea">${renderPolicySelectOptions(
+            [
+              { value: "all", label: "All policy areas" },
+              ...trackedPolicyAreaFields.map((area) => ({
+                value: area.key,
+                label: area.label
+              }))
+            ],
+            clubArea || "all"
+          )}</select>`
+        })}
         <div class="policy-actions">
           <button type="submit" class="button-secondary">Load settings</button>
           <span class="subtle">Organization: ${escapeHtml(clubPolicy.organization?.name || "No organization linked")}</span>
@@ -3847,7 +3906,7 @@ async function renderWorkflowSettingsPage(
       clubPolicy: previewClubPolicy,
       organizationPolicy: previewOrganizationPolicy
     })}
-    ${renderOrganizationDirectory(organizationDirectory, clubView)}
+    ${renderOrganizationDirectory(organizationDirectory, clubView, clubArea)}
     
 
     <section class="workflow-settings-grid">
@@ -4300,7 +4359,7 @@ export function createAdminServer() {
         }, {
           scopeType: url.searchParams.get("previewScopeType"),
           payload: parsePreviewDraft(url.searchParams.get("previewDraftPolicy"))
-        }, url.searchParams.get("clubView"));
+        }, url.searchParams.get("clubView"), url.searchParams.get("clubArea"));
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         res.end(html);
         return;
