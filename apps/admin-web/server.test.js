@@ -632,7 +632,7 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
   try {
     const address = server.address();
     const response = await originalFetch(
-      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&saveScopeType=organization&saveChangedAreaCount=2&saveAffectedClubCount=1&saveInsulatedClubCount=1`
+      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&saveScopeType=organization&saveChangedAreaCount=2&saveAffectedClubCount=1&saveInsulatedClubCount=1&saveChangedAreaKeys=publicApproverRole,notificationRule`
     );
     const body = await response.text();
 
@@ -643,7 +643,12 @@ test("GET /workflow-settings renders a post-save organization rollout summary", 
     assert.match(body, /Clubs now inheriting/);
     assert.match(body, /Clubs still insulating/);
     assert.match(body, /Review exceptions/);
-    assert.match(body, /1/);
+    assert.match(body, /Review changed areas/);
+    assert.match(body, /Review public approver exceptions/);
+    assert.match(body, /Review notification rule exceptions/);
+    assert.match(body, /clubView=overrides/);
+    assert.match(body, /clubArea=publicApproverRole/);
+    assert.match(body, /clubArea=notificationRule/);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise((resolve, reject) =>

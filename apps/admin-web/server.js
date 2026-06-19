@@ -2900,7 +2900,8 @@ function renderWorkflowPolicyForm({
   previewWarningCount = 0,
   previewAffectedClubCount = 0,
   previewChangedAreaCount = 0,
-  previewInsulatedClubCount = 0
+  previewInsulatedClubCount = 0,
+  previewChangedAreaKeys = []
 }) {
   const roleOptions = [
     { value: "team_manager", label: "Team manager" },
@@ -2994,7 +2995,7 @@ function renderWorkflowPolicyForm({
       </div>
       <span class="badge badge-neutral">${escapeHtml(scopeSlug || "n/a")}</span>
     </div>
-    <form class="workflow-policy-form" data-scope-type="${escapeHtml(scopeType)}" data-scope-slug="${escapeHtml(scopeSlug || "")}" data-preview-warning-count="${escapeHtml(String(previewWarningCount))}" data-preview-affected-club-count="${escapeHtml(String(previewAffectedClubCount))}" data-preview-changed-area-count="${escapeHtml(String(previewChangedAreaCount))}" data-preview-insulated-club-count="${escapeHtml(String(previewInsulatedClubCount))}">
+    <form class="workflow-policy-form" data-scope-type="${escapeHtml(scopeType)}" data-scope-slug="${escapeHtml(scopeSlug || "")}" data-preview-warning-count="${escapeHtml(String(previewWarningCount))}" data-preview-affected-club-count="${escapeHtml(String(previewAffectedClubCount))}" data-preview-changed-area-count="${escapeHtml(String(previewChangedAreaCount))}" data-preview-insulated-club-count="${escapeHtml(String(previewInsulatedClubCount))}" data-preview-changed-area-keys="${escapeHtml((previewChangedAreaKeys || []).join(","))}">
       ${renderPolicyField({
         label: "Actor email",
         name: "actorEmail",
@@ -3690,6 +3691,29 @@ function renderWorkflowSaveSummary(saveSummary) {
   const changedAreaCount = Number(saveSummary.changedAreaCount || 0);
   const affectedClubCount = Number(saveSummary.affectedClubCount || 0);
   const insulatedClubCount = Number(saveSummary.insulatedClubCount || 0);
+  const changedAreas = (saveSummary.changedAreaKeys || [])
+    .map((key) => trackedPolicyAreaFields.find((area) => area.key === key) || null)
+    .filter(Boolean);
+  const changedAreaLinks = changedAreas.length
+    ? `<div class="summary-stack" style="margin-top:16px;">
+        <div class="summary-item" style="background: rgba(255,255,255,0.68);">
+          <strong>Review changed areas</strong>
+          <p class="subtle" style="margin-top:6px;">Use these links to review remaining overrides and fully inherited clubs for the areas you just changed.</p>
+        </div>
+        ${changedAreas
+          .map(
+            (area) => `<div class="summary-item">
+              <strong>${escapeHtml(area.label)}</strong>
+              <p style="margin-top:8px;"><a class="quick-link" href="${buildWorkflowSettingsLink({
+                clubSlug: saveSummary.clubSlug || "",
+                clubView: "overrides",
+                clubArea: area.key
+              })}">Review ${escapeHtml(area.label.toLowerCase())} exceptions</a></p>
+            </div>`
+          )
+          .join("")}
+      </div>`
+    : "";
 
   return `<section class="panel" style="border-color: rgba(23, 103, 68, 0.26); background: linear-gradient(180deg, rgba(235, 248, 240, 0.96), rgba(255, 255, 255, 0.96));">
     <div class="section-header">
@@ -3723,6 +3747,7 @@ function renderWorkflowSaveSummary(saveSummary) {
         }</span>
       </div>
     </div>
+    ${changedAreaLinks}
   </section>`;
 }
 
@@ -4178,6 +4203,10 @@ async function renderWorkflowSettingsPage(
           previewScopeType === "organization"
             ? organizationDraftImpact?.insulatedClubs.length || 0
             : 0,
+        previewChangedAreaKeys:
+          previewScopeType === "organization"
+            ? (organizationDraftImpact?.changedAreas || []).map((area) => area.key)
+            : [],
         previewWarningCount:
           previewScopeType === "organization" ? previewRiskWarningCount : 0
       })}
@@ -4397,6 +4426,7 @@ async function renderWorkflowSettingsPage(
         const previewAffectedClubCount = Number(form.dataset.previewAffectedClubCount || '0');
         const previewChangedAreaCount = Number(form.dataset.previewChangedAreaCount || '0');
         const previewInsulatedClubCount = Number(form.dataset.previewInsulatedClubCount || '0');
+        const previewChangedAreaKeys = String(form.dataset.previewChangedAreaKeys || '').trim();
         if (scopeType === 'organization' && previewAffectedClubCount > 0) {
           const confirmed = window.confirm(
             'This organization draft changes ' +
@@ -4451,6 +4481,9 @@ async function renderWorkflowSettingsPage(
           params.set('saveChangedAreaCount', String(previewChangedAreaCount));
           params.set('saveAffectedClubCount', String(previewAffectedClubCount));
           params.set('saveInsulatedClubCount', String(previewInsulatedClubCount));
+          if (previewChangedAreaKeys) {
+            params.set('saveChangedAreaKeys', previewChangedAreaKeys);
+          }
           window.location.assign('/workflow-settings?' + params.toString());
           return;
         }
@@ -4616,9 +4649,14 @@ export function createAdminServer() {
           saveScopeType === "organization"
             ? {
                 scopeType: "organization",
+                clubSlug: url.searchParams.get("clubSlug") || "",
                 changedAreaCount: Number(url.searchParams.get("saveChangedAreaCount") || "0"),
                 affectedClubCount: Number(url.searchParams.get("saveAffectedClubCount") || "0"),
-                insulatedClubCount: Number(url.searchParams.get("saveInsulatedClubCount") || "0")
+                insulatedClubCount: Number(url.searchParams.get("saveInsulatedClubCount") || "0"),
+                changedAreaKeys: String(url.searchParams.get("saveChangedAreaKeys") || "")
+                  .split(",")
+                  .map((value) => value.trim())
+                  .filter(Boolean)
               }
             : null;
         const html = await renderWorkflowSettingsPage(url.searchParams.get("clubSlug"), {
