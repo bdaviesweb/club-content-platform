@@ -3317,6 +3317,222 @@ test("POST /ui/workflow-policies/organizations/:slug proxies policy updates to t
   }
 });
 
+test("POST /ui/workflow-policies/organizations/:slug/restore-area restores one organization area from history", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({
+      url: String(url),
+      method: init.method || "GET",
+      body: init.body ? JSON.parse(init.body) : null
+    });
+
+    if (String(url).endsWith("/workflow-policies/organizations/metro")) {
+      if ((init.method || "GET") === "POST") {
+        return {
+          ok: true,
+          async json() {
+            return {
+              organization: { slug: "metro" },
+              organizationPolicy: {
+                defaultApproverRole: "team_manager",
+                notificationRule: { email: true }
+              }
+            };
+          }
+        };
+      }
+
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "metro", name: "Metro Sports" },
+            organizationPolicy: {
+              defaultApproverRole: "team_manager",
+              publicApproverRole: "club_comms",
+              mediumRiskApproverRole: "club_comms",
+              allowAgentRouting: true,
+              autoApproveInternalLowRisk: false,
+              autoApproveMaxRisk: 0.35,
+              autoApprovalRule: {},
+              routingRule: {},
+              approvalRule: {
+                requireSecondApprovalForPublic: true
+              },
+              publishingRule: {
+                visibilityDestinations: {
+                  internal: ["internal_feed"],
+                  public: ["internal_feed"]
+                }
+              },
+              notificationRule: { email: false, push: false }
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/organizations/metro")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubs: [
+              {
+                slug: "westside",
+                name: "Westside",
+                overrideSummary: {
+                  overrideCount: 1,
+                  overriddenFields: ["Default approver"]
+                }
+              },
+              {
+                slug: "eastside",
+                name: "Eastside",
+                overrideSummary: {
+                  overrideCount: 1,
+                  overriddenFields: ["Notification rule"]
+                }
+              }
+            ],
+            admins: []
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/clubs/westside")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            club: { slug: "westside", name: "Westside" },
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubPolicy: {
+              defaultApproverRole: "club_admin"
+            }
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/clubs/eastside")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            club: { slug: "eastside", name: "Eastside" },
+            organization: { slug: "metro", name: "Metro Sports" },
+            clubPolicy: {
+              notificationRule: { email: false }
+            }
+          };
+        }
+      };
+    }
+
+    throw new Error(`Unexpected fetch: ${init.method || "GET"} ${url}`);
+  };
+
+  const server = createAdminServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const address = server.address();
+    const response = await originalFetch(
+      `http://127.0.0.1:${address.port}/ui/workflow-policies/organizations/metro/restore-area`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          actorEmail: "org-admin@example.test",
+          fieldKey: "notificationRule",
+          restoreValue: { email: true },
+          returnClubSlug: "westside",
+          simulationInput: {
+            contentType: "photo",
+            visibilityTarget: "internal",
+            riskScore: "0.19",
+            moderationFlagged: "true",
+            agentSuggestedApproverRole: "club_admin"
+          }
+        })
+      }
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.ok, true);
+    assert.match(body.redirectUrl, /saveScopeType=organization/);
+    assert.match(body.redirectUrl, /saveChangedAreaKeys=notificationRule/);
+    assert.match(body.redirectUrl, /clubSlug=westside/);
+    assert.match(body.redirectUrl, /saveSimulationTrace=/);
+    assert.deepEqual(calls, [
+      {
+        url: "http://app-api:4000/workflow-policies/organizations/metro",
+        method: "GET",
+        body: null
+      },
+      {
+        url: "http://app-api:4000/organizations/metro",
+        method: "GET",
+        body: null
+      },
+      {
+        url: "http://app-api:4000/workflow-policies/clubs/westside",
+        method: "GET",
+        body: null
+      },
+      {
+        url: "http://app-api:4000/workflow-policies/clubs/eastside",
+        method: "GET",
+        body: null
+      },
+      {
+        url: "http://app-api:4000/workflow-policies/organizations/metro",
+        method: "POST",
+        body: {
+          actorEmail: "org-admin@example.test",
+          notificationRule: { email: true },
+          historyContext: {
+            simulationTrace: {
+              scenario: {
+                contentType: "photo",
+                visibilityTarget: "internal",
+                riskScore: 0.19,
+                moderationFlagged: true,
+                agentSuggestedApproverRole: "club_admin"
+              },
+              changedRows: [
+                {
+                  key: "publishedEmail",
+                  label: "Published email",
+                  before: "Disabled (Notification Policy Email Disabled)",
+                  after: "Enabled"
+                },
+                {
+                  key: "publishedPush",
+                  label: "Published push",
+                  before: "Disabled (Notification Policy Push Disabled)",
+                  after: "Enabled"
+                }
+              ]
+            }
+          }
+        }
+      }
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await new Promise((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))
+    );
+  }
+});
+
 test("POST /ui/workflow-policies/organizations/:slug/bulk-inherit-area applies one area across selected clubs", async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];

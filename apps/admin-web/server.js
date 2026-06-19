@@ -3980,6 +3980,8 @@ function renderPolicyHistoryCard(
   emptyLabel,
   {
     clubSlug = "",
+    organizationSlug = "",
+    currentActorEmail = "",
     linkVariant = "stack",
     simulationInput = null,
     previewScopeType = null,
@@ -4136,7 +4138,33 @@ function renderPolicyHistoryCard(
                               simulationInput
                             })}">Preview rollback of ${escapeHtml(
                               formatPolicyFieldLabel(detail.field).toLowerCase()
-                            )}</a></p>`
+                            )}</a></p>
+                            <form class="workflow-history-restore-form" data-organization-slug="${escapeHtml(
+                              organizationSlug
+                            )}" data-field-label="${escapeHtml(
+                              formatPolicyFieldLabel(detail.field)
+                            )}" style="margin-top:8px;">
+                              <input type="hidden" name="returnClubSlug" value="${escapeHtml(
+                                clubSlug
+                              )}" />
+                              <input type="hidden" name="actorEmail" value="${escapeHtml(
+                                currentActorEmail
+                              )}" />
+                              <input type="hidden" name="fieldKey" value="${escapeHtml(
+                                String(detail.field || "")
+                              )}" />
+                              <input type="hidden" name="restoreValue" value="${escapeHtml(
+                                JSON.stringify(
+                                  detail && Object.hasOwn(detail, "previousValue")
+                                    ? detail.previousValue ?? null
+                                    : null
+                                )
+                              )}" />
+                              <button type="submit" class="button-secondary">Restore ${escapeHtml(
+                                formatPolicyFieldLabel(detail.field).toLowerCase()
+                              )} now</button>
+                              <span class="subtle" data-restore-status style="margin-left:10px;">Ready</span>
+                            </form>`
                           : ""
                       }
                     </div>`;
@@ -4244,6 +4272,8 @@ function renderPolicyHistorySection({
   organizationHistory,
   clubHistory,
   selectedClubSlug = "",
+  organizationSlug = "",
+  currentActorEmail = "",
   currentOrganizationPolicy = null,
   simulationInput = null,
   previewScopeType = null,
@@ -4268,6 +4298,8 @@ function renderPolicyHistorySection({
         "No organization policy changes recorded yet.",
         {
           clubSlug: selectedClubSlug,
+          organizationSlug,
+          currentActorEmail,
           linkVariant: "organization",
           currentPolicy: currentOrganizationPolicy,
           simulationInput,
@@ -4281,6 +4313,8 @@ function renderPolicyHistorySection({
         "No club-specific policy changes recorded yet.",
         {
           clubSlug: selectedClubSlug,
+          organizationSlug,
+          currentActorEmail,
           linkVariant: "club",
           simulationInput,
           previewScopeType,
@@ -6666,6 +6700,8 @@ async function renderWorkflowSettingsPage(
       organizationHistory,
       clubHistory,
       selectedClubSlug,
+      organizationSlug,
+      currentActorEmail: reviewerEmail,
       currentOrganizationPolicy: organizationPolicy?.organizationPolicy || null,
       simulationInput: normalizedSimulationInput,
       previewScopeType,
@@ -7457,6 +7493,87 @@ async function renderWorkflowSettingsPage(
           window.location.assign(result.redirectUrl || '/workflow-settings');
         });
       });
+
+      document.querySelectorAll('.workflow-history-restore-form').forEach((form) => {
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const status = form.querySelector('[data-restore-status]');
+          const organizationSlug = String(form.dataset.organizationSlug || '').trim();
+          const fieldLabel = String(form.dataset.fieldLabel || 'this area').trim();
+          const fieldKey = String(form.querySelector('[name="fieldKey"]')?.value || '').trim();
+          const returnClubSlug = String(form.querySelector('[name="returnClubSlug"]')?.value || '').trim();
+          const restoreValueRaw = String(form.querySelector('[name="restoreValue"]')?.value || '').trim();
+          const actorEmail =
+            String(
+              document.querySelector('.workflow-policy-form[data-scope-type="organization"] [name="actorEmail"]')
+                ?.value || form.querySelector('[name="actorEmail"]')?.value || ''
+            ).trim();
+          const simulatorForm = document.querySelector('form[action="/workflow-settings"]:not([data-scope-type])');
+          const simulatorData = simulatorForm ? new FormData(simulatorForm) : new FormData();
+
+          if (!organizationSlug || !fieldKey) {
+            if (status) status.textContent = 'This restore action is not available right now.';
+            return;
+          }
+
+          if (!actorEmail) {
+            if (status) status.textContent = 'Enter the organization actor email before restoring.';
+            document
+              .querySelector('.workflow-policy-form[data-scope-type="organization"] [name="actorEmail"]')
+              ?.focus();
+            return;
+          }
+
+          let restoreValue = null;
+          try {
+            restoreValue = JSON.parse(restoreValueRaw || 'null');
+          } catch {
+            if (status) status.textContent = 'This restore value could not be read.';
+            return;
+          }
+
+          const confirmed = window.confirm(
+            'Restore ' + fieldLabel.toLowerCase() + ' to its previous organization value?'
+          );
+          if (!confirmed) {
+            if (status) status.textContent = 'Restore cancelled.';
+            return;
+          }
+
+          if (status) status.textContent = 'Restoring...';
+          const response = await fetch(
+            '/ui/workflow-policies/organizations/' + encodeURIComponent(organizationSlug) + '/restore-area',
+            {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                actorEmail,
+                fieldKey,
+                restoreValue,
+                returnClubSlug,
+                simulationInput: {
+                  contentType: String(simulatorData.get('simulationContentType') || ''),
+                  visibilityTarget: String(simulatorData.get('simulationVisibilityTarget') || ''),
+                  riskScore: String(simulatorData.get('simulationRiskScore') || ''),
+                  moderationFlagged: String(simulatorData.get('simulationModerationFlagged') || ''),
+                  agentSuggestedApproverRole: String(
+                    simulatorData.get('simulationAgentSuggestedApproverRole') || ''
+                  ).trim()
+                }
+              })
+            }
+          );
+          const result = await response.json();
+
+          if (!response.ok) {
+            if (status) status.textContent = result.error || 'Restore failed';
+            return;
+          }
+
+          if (status) status.textContent = 'Restored. Reloading summary...';
+          window.location.assign(result.redirectUrl || '/workflow-settings');
+        });
+      });
     </script>
   `, "Club Content Workflow Settings");
 }
@@ -7671,6 +7788,204 @@ export function createAdminServer() {
         });
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify(payload));
+        return;
+      }
+
+      if (
+        req.method === "POST" &&
+        /^\/ui\/workflow-policies\/organizations\/[^/]+\/restore-area$/.test(url.pathname)
+      ) {
+        const organizationSlug = decodeURIComponent(url.pathname.split("/")[4]);
+        const body = await readJson(req);
+        const actorEmail = String(body.actorEmail || "").trim();
+        const fieldKey = String(body.fieldKey || "").trim();
+        const returnClubSlug = String(body.returnClubSlug || "").trim();
+        const simulationInput =
+          body.simulationInput && typeof body.simulationInput === "object"
+            ? body.simulationInput
+            : {};
+        const area = trackedPolicyAreaFields.find((item) => item.key === fieldKey) || null;
+
+        if (!actorEmail) {
+          res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: "actorEmail is required" }));
+          return;
+        }
+
+        if (!area) {
+          res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: "fieldKey is required" }));
+          return;
+        }
+
+        const organizationPolicy = await fetchJson(
+          `/workflow-policies/organizations/${encodeURIComponent(organizationSlug)}`
+        );
+        const organizationDirectory = await fetchJson(
+          `/organizations/${encodeURIComponent(organizationSlug)}`
+        );
+        const selectedClubSlug =
+          returnClubSlug || organizationDirectory?.clubs?.[0]?.slug || "";
+        const selectedClubPolicy = selectedClubSlug
+          ? await fetchJson(
+              `/workflow-policies/clubs/${encodeURIComponent(selectedClubSlug)}`
+            )
+          : null;
+        const organizationClubPolicyMap = await fetchOrganizationClubPolicyMap({
+          organizationDirectory,
+          selectedClubSlug,
+          selectedClubPolicy
+        });
+        const previewOrganizationPolicy = {
+          ...(organizationPolicy?.organizationPolicy || {}),
+          [fieldKey]: Object.hasOwn(body, "restoreValue") ? body.restoreValue ?? null : null
+        };
+        const organizationDraftImpact = buildOrganizationDraftImpact({
+          organizationPolicy,
+          previewOrganizationPolicy,
+          organizationDirectory,
+          clubPolicyMap: organizationClubPolicyMap
+        });
+        const overrideBurdenSummary = buildOrganizationDraftOverrideBurdenSummary({
+          organizationDirectory,
+          organizationPolicy,
+          previewOrganizationPolicy,
+          clubPolicyMap: organizationClubPolicyMap
+        });
+        const normalizedSimulationInput = normalizeSimulationInput(simulationInput);
+        const liveEffectivePolicy = buildEffectivePolicyFromPolicies({
+          organizationPolicy: organizationPolicy?.organizationPolicy || {},
+          clubPolicy: selectedClubPolicy?.clubPolicy || {}
+        });
+        const previewEffectivePolicy = buildEffectivePolicyFromPolicies({
+          organizationPolicy: previewOrganizationPolicy,
+          clubPolicy: selectedClubPolicy?.clubPolicy || {}
+        });
+        const simulationTrace = buildSimulationTraceSummary({
+          liveOutcome: simulatePolicyOutcome(liveEffectivePolicy, normalizedSimulationInput),
+          previewOutcome: simulatePolicyOutcome(previewEffectivePolicy, normalizedSimulationInput)
+        });
+        const guardrailWarnings = buildPolicyGuardrailWarnings({
+          scopeType: "organization",
+          livePolicy: organizationPolicy?.organizationPolicy || {},
+          previewPolicy: previewOrganizationPolicy,
+          affectedClubCount: organizationDraftImpact?.affectedClubs.length || 0,
+          overrideBurdenSummary
+        });
+
+        await fetchJson(
+          `/workflow-policies/organizations/${encodeURIComponent(organizationSlug)}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              actorEmail,
+              [fieldKey]: Object.hasOwn(body, "restoreValue") ? body.restoreValue ?? null : null,
+              historyContext: simulationTrace
+                ? {
+                    simulationTrace
+                  }
+                : undefined
+            })
+          }
+        );
+
+        const params = new URLSearchParams();
+        params.set("clubSlug", selectedClubSlug || organizationSlug);
+        if (normalizedSimulationInput?.contentType) {
+          params.set("simulationContentType", String(normalizedSimulationInput.contentType));
+        }
+        if (normalizedSimulationInput?.visibilityTarget) {
+          params.set(
+            "simulationVisibilityTarget",
+            String(normalizedSimulationInput.visibilityTarget)
+          );
+        }
+        if (
+          normalizedSimulationInput?.riskScore !== undefined &&
+          normalizedSimulationInput?.riskScore !== null
+        ) {
+          params.set("simulationRiskScore", String(normalizedSimulationInput.riskScore));
+        }
+        if (
+          normalizedSimulationInput?.moderationFlagged !== undefined &&
+          normalizedSimulationInput?.moderationFlagged !== null
+        ) {
+          params.set(
+            "simulationModerationFlagged",
+            String(normalizedSimulationInput.moderationFlagged)
+          );
+        }
+        if (normalizedSimulationInput?.agentSuggestedApproverRole) {
+          params.set(
+            "simulationAgentSuggestedApproverRole",
+            String(normalizedSimulationInput.agentSuggestedApproverRole)
+          );
+        }
+        params.set("saveScopeType", "organization");
+        params.set(
+          "saveChangedAreaCount",
+          String(organizationDraftImpact?.changedAreas.length || 0)
+        );
+        params.set(
+          "saveAffectedClubCount",
+          String(organizationDraftImpact?.affectedClubs.length || 0)
+        );
+        params.set(
+          "saveInsulatedClubCount",
+          String(organizationDraftImpact?.insulatedClubs.length || 0)
+        );
+        params.set(
+          "saveCurrentOverrideClubCount",
+          String(overrideBurdenSummary?.currentOverrideClubCount || 0)
+        );
+        params.set(
+          "saveProjectedOverrideClubCount",
+          String(overrideBurdenSummary?.projectedOverrideClubCount || 0)
+        );
+        params.set(
+          "saveCurrentOverrideAreaCount",
+          String(overrideBurdenSummary?.currentOverrideAreaCount || 0)
+        );
+        params.set(
+          "saveProjectedOverrideAreaCount",
+          String(overrideBurdenSummary?.projectedOverrideAreaCount || 0)
+        );
+        params.set(
+          "saveReducingClubs",
+          JSON.stringify(
+            (overrideBurdenSummary?.clubsReducingOverrides || []).map((item) => ({
+              name: item.club.name,
+              slug: item.club.slug,
+              liveOverrideCount: item.liveOverrideCount,
+              previewOverrideCount: item.previewOverrideCount
+            }))
+          )
+        );
+        params.set(
+          "saveGainingClubs",
+          JSON.stringify(
+            (overrideBurdenSummary?.clubsGainingOverrides || []).map((item) => ({
+              name: item.club.name,
+              slug: item.club.slug,
+              liveOverrideCount: item.liveOverrideCount,
+              previewOverrideCount: item.previewOverrideCount
+            }))
+          )
+        );
+        params.set("saveGuardrailWarnings", JSON.stringify(guardrailWarnings));
+        if (simulationTrace) {
+          params.set("saveSimulationTrace", JSON.stringify(simulationTrace));
+        }
+        params.set("saveChangedAreaKeys", fieldKey);
+
+        res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+        res.end(
+          JSON.stringify({
+            ok: true,
+            redirectUrl: `/workflow-settings?${params.toString()}`
+          })
+        );
         return;
       }
 
