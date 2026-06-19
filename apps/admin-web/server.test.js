@@ -304,6 +304,7 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Notification rule/);
     assert.match(body, /Organization changes/);
     assert.match(body, /Club changes/);
+    assert.match(body, /Latest change stays open\. Older changes are tucked behind a quick reveal\./);
     assert.match(body, /Changed 2 areas: Approval Rule, Notification Rule/);
     assert.match(body, /Changed 1 area: Routing Rule/);
     assert.match(body, /Review the changed organization areas across clubs, including both remaining exceptions and clubs inheriting the default\./);
@@ -720,6 +721,22 @@ test("GET /workflow-settings can focus history on organization changes only", as
                     }
                   ]
                 }
+              },
+              {
+                action: "workflow_policy.updated",
+                createdAt: "2026-06-18T12:00:00.000Z",
+                actorEmail: "ops@westside.test",
+                actorFullName: "Ops Lead",
+                metadata: {
+                  changedFields: ["notificationRule"],
+                  changedFieldDetails: [
+                    {
+                      field: "notificationRule",
+                      previousValue: { email: false },
+                      nextValue: { email: true }
+                    }
+                  ]
+                }
               }
             ]
           };
@@ -803,6 +820,8 @@ test("GET /workflow-settings can focus history on organization changes only", as
     assert.match(body, /Showing organization history only\./);
     assert.match(body, /Organization changes/);
     assert.doesNotMatch(body, /<h3>Club changes<\/h3>/);
+    assert.match(body, /Latest change stays open\. Older changes are tucked behind a quick reveal\./);
+    assert.match(body, /Show 1 older change/);
     assert.match(body, /historyView=organization[\s\S]*?Preview rollback of latest org change/);
     assert.match(body, /historyView=organization[\s\S]*?Preview rollback of approval rule/);
     assert.match(body, /clubSlug=westside[\s\S]*?All history/);

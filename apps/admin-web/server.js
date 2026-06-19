@@ -3992,8 +3992,8 @@ function renderPolicyHistoryCard(
 ) {
   const items = history?.items || [];
   const content = items.length
-    ? items
-        .map((item, index) => {
+    ? (() => {
+        const renderedItems = items.map((item, index) => {
           const changedFields = Array.isArray(item.metadata?.changedFields)
             ? item.metadata.changedFields
             : [];
@@ -4306,12 +4306,28 @@ function renderPolicyHistoryCard(
             ${simulationTraceCard}
             ${followUpLink}
           </div>`;
-        })
-        .join("")
+        });
+
+        const latestItem = renderedItems[0] || "";
+        const olderItems = renderedItems.slice(1);
+        const olderCount = olderItems.length;
+
+        return `${latestItem}${
+          olderCount
+            ? `<details class="disclosure" style="margin-top:12px;">
+                <summary>Show ${olderCount} older change${olderCount === 1 ? "" : "s"}</summary>
+                <div class="summary-stack" style="margin-top:12px;">
+                  ${olderItems.join("")}
+                </div>
+              </details>`
+            : ""
+        }`;
+      })()
     : `<p class="subtle">${escapeHtml(emptyLabel)}</p>`;
 
   return `<div class="panel" style="background: rgba(255,255,255,0.72);">
     <h3>${escapeHtml(title)}</h3>
+    ${items.length ? `<p class="subtle" style="margin-top:6px;">Latest change stays open. Older changes are tucked behind a quick reveal.</p>` : ""}
     <div class="summary-stack" style="margin-top:12px;">${content}</div>
   </div>`;
 }
