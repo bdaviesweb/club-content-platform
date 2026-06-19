@@ -289,6 +289,10 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Westside/);
     assert.match(body, /Metro Sports/);
     assert.match(body, /Recent workflow policy changes/);
+    assert.match(body, /Saved rollout posture/);
+    assert.match(body, /What the latest organization default is reaching right now/);
+    assert.match(body, /Current rollout state by latest saved area/);
+    assert.match(body, /Use this live view to confirm which clubs are now inheriting the most recently saved organization areas and which clubs are still insulating themselves with overrides\./);
     assert.match(body, /All history/);
     assert.match(body, /Organization only/);
     assert.match(body, /Club only/);
@@ -315,6 +319,8 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /2 changed areas/);
     assert.match(body, /1 clubs inheriting/);
     assert.match(body, /1 clubs insulated/);
+    assert.match(body, /Clubs inheriting/);
+    assert.match(body, /Clubs insulating/);
     assert.match(body, /historyView=organization/);
     assert.match(body, /historyView=club/);
     assert.match(body, /Preview rollback of latest org change/);
@@ -825,6 +831,7 @@ test("GET /workflow-settings can focus history on organization changes only", as
     assert.match(body, /historyView=organization[\s\S]*?Preview rollback of latest org change/);
     assert.match(body, /historyView=organization[\s\S]*?Preview rollback of approval rule/);
     assert.match(body, /historyView=organization[\s\S]*?Open Westside policy stack/);
+    assert.match(body, /historyView=organization[\s\S]*?Review approval rule exceptions/);
     assert.match(body, /clubSlug=westside[\s\S]*?All history/);
     assert.match(body, /historyView=club[\s\S]*?Club only/);
   } finally {

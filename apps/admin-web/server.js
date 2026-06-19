@@ -5766,6 +5766,7 @@ function renderCurrentOrganizationRolloutState({
   organizationDirectory = null,
   changedAreas = [],
   selectedClubSlug = "",
+  historyView = "all",
   simulationInput = null,
   previewScopeType = null,
   previewDraftPolicy = null,
@@ -5817,6 +5818,7 @@ function renderCurrentOrganizationRolloutState({
             <div class="badge-row" style="margin-top:10px; align-items:flex-start;">
               <a class="quick-link" href="${buildWorkflowSettingsLink({
                 clubSlug: selectedClubSlug,
+                historyView: historyView !== "all" ? historyView : null,
                 clubView: "overrides",
                 clubArea: area.key,
                 simulationInput,
@@ -5825,6 +5827,7 @@ function renderCurrentOrganizationRolloutState({
               })}">Review ${escapeHtml(area.label.toLowerCase())} exceptions</a>
               <a class="quick-link" href="${buildWorkflowSettingsLink({
                 clubSlug: selectedClubSlug,
+                historyView: historyView !== "all" ? historyView : null,
                 clubView: "inheriting",
                 clubArea: area.key,
                 simulationInput,
@@ -5836,6 +5839,72 @@ function renderCurrentOrganizationRolloutState({
         )
         .join("")}
     </div>`;
+}
+
+function renderLatestOrganizationRolloutPosture({
+  organizationHistory = null,
+  organizationDirectory = null,
+  selectedClubSlug = "",
+  historyView = "all",
+  simulationInput = null
+}) {
+  const latestItem = organizationHistory?.items?.[0] || null;
+  const changedAreas = (Array.isArray(latestItem?.metadata?.changedFields)
+    ? latestItem.metadata.changedFields
+    : []
+  )
+    .map((key) => trackedPolicyAreaFields.find((area) => area.key === key) || null)
+    .filter(Boolean);
+
+  if (!changedAreas.length || !organizationDirectory) {
+    return "";
+  }
+
+  const rolloutSnapshot = buildLiveOrganizationRolloutSnapshot({
+    organizationDirectory,
+    changedAreas
+  });
+
+  if (!rolloutSnapshot.inheritingClubs.length && !rolloutSnapshot.insulatedClubs.length) {
+    return "";
+  }
+
+  return `<section class="panel">
+    <div class="section-header">
+      <div>
+        <div class="eyebrow">Saved rollout posture</div>
+        <h2>What the latest organization default is reaching right now</h2>
+        <p class="subtle" style="margin-top:8px;">This uses the most recent saved organization change and the current club override layer to show where that default is landing versus still being insulated.</p>
+      </div>
+    </div>
+    <div class="topline">
+      <div class="metric-card">
+        <span class="metric-label">Latest changed areas</span>
+        <strong>${escapeHtml(String(changedAreas.length))}</strong>
+        <span class="subtle">${escapeHtml(changedAreas.map((area) => area.label).join(", "))}</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Clubs inheriting</span>
+        <strong>${escapeHtml(String(rolloutSnapshot.inheritingClubs.length))}</strong>
+        <span class="subtle">Clubs currently following at least one of those saved areas</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Clubs insulating</span>
+        <strong>${escapeHtml(String(rolloutSnapshot.insulatedClubs.length))}</strong>
+        <span class="subtle">Clubs still shielding at least one saved area with overrides</span>
+      </div>
+    </div>
+    ${renderCurrentOrganizationRolloutState({
+      organizationDirectory,
+      changedAreas,
+      selectedClubSlug,
+      historyView,
+      simulationInput,
+      title: "Current rollout state by latest saved area",
+      subtitle:
+        "Use this live view to confirm which clubs are now inheriting the most recently saved organization areas and which clubs are still insulating themselves with overrides."
+    })}
+  </section>`;
 }
 
 function renderWorkflowSaveSummary(
@@ -7358,6 +7427,17 @@ async function renderWorkflowSettingsPage(
         ? { scopeType: previewScopeType }
         : null
     })}
+    ${
+      previewScopeType !== "organization"
+        ? renderLatestOrganizationRolloutPosture({
+            organizationHistory,
+            organizationDirectory,
+            selectedClubSlug,
+            historyView,
+            simulationInput: normalizedSimulationInput
+          })
+        : ""
+    }
     ${renderPolicyHistorySection({
       organizationHistory,
       clubHistory,
