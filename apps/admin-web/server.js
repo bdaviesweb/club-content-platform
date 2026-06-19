@@ -2588,6 +2588,147 @@ function buildOutcomeRiskWarnings({ liveOutcome, previewOutcome }) {
   return warnings;
 }
 
+function buildPolicyGuardrailWarnings({
+  scopeType,
+  livePolicy = {},
+  previewPolicy = {},
+  affectedClubCount = 0,
+  overrideBurdenSummary = null
+}) {
+  if (!scopeType) {
+    return [];
+  }
+
+  const warnings = [];
+  const scopeTarget =
+    scopeType === "organization"
+      ? affectedClubCount === 1
+        ? "1 affected club"
+        : `${affectedClubCount} affected clubs`
+      : "this club";
+  const liveSecondApproval = Boolean(
+    livePolicy?.approvalRule?.requireSecondApprovalForPublic
+  );
+  const previewSecondApproval = Boolean(
+    previewPolicy?.approvalRule?.requireSecondApprovalForPublic
+  );
+
+  if (liveSecondApproval && !previewSecondApproval) {
+    warnings.push({
+      title: "Public second approval removed",
+      message:
+        scopeType === "organization"
+          ? `Public posts no longer require a second human approval for ${scopeTarget} that inherit this draft.`
+          : "Public posts no longer require a second human approval for this club."
+    });
+  }
+
+  const liveAutoApprove = Boolean(livePolicy?.autoApproveInternalLowRisk);
+  const previewAutoApprove = Boolean(previewPolicy?.autoApproveInternalLowRisk);
+
+  if (!liveAutoApprove && previewAutoApprove) {
+    warnings.push({
+      title: "Internal auto-approval enabled",
+      message:
+        scopeType === "organization"
+          ? `Low-risk internal submissions can now auto-approve for ${scopeTarget} that inherit this draft.`
+          : "Low-risk internal submissions can now auto-approve for this club."
+    });
+  }
+
+  const liveAutoApproveMaxRisk =
+    livePolicy?.autoApproveMaxRisk === null || livePolicy?.autoApproveMaxRisk === undefined
+      ? null
+      : Number(livePolicy.autoApproveMaxRisk);
+  const previewAutoApproveMaxRisk =
+    previewPolicy?.autoApproveMaxRisk === null ||
+    previewPolicy?.autoApproveMaxRisk === undefined
+      ? null
+      : Number(previewPolicy.autoApproveMaxRisk);
+
+  if (
+    Number.isFinite(liveAutoApproveMaxRisk) &&
+    Number.isFinite(previewAutoApproveMaxRisk) &&
+    previewAutoApproveMaxRisk > liveAutoApproveMaxRisk
+  ) {
+    warnings.push({
+      title: "Auto-approve threshold widened",
+      message:
+        scopeType === "organization"
+          ? `The auto-approve max risk rises from ${liveAutoApproveMaxRisk.toFixed(
+              2
+            )} to ${previewAutoApproveMaxRisk.toFixed(
+              2
+            )} for ${scopeTarget} that inherit this draft.`
+          : `The auto-approve max risk rises from ${liveAutoApproveMaxRisk.toFixed(
+              2
+            )} to ${previewAutoApproveMaxRisk.toFixed(2)} for this club.`
+    });
+  }
+
+  const livePublishedEmail = resolveNotificationChannelPolicy({
+    notificationPolicy: livePolicy.notificationRule || {},
+    type: "submission_published",
+    channel: "email"
+  });
+  const previewPublishedEmail = resolveNotificationChannelPolicy({
+    notificationPolicy: previewPolicy.notificationRule || {},
+    type: "submission_published",
+    channel: "email"
+  });
+
+  if (livePublishedEmail.enabled && !previewPublishedEmail.enabled) {
+    warnings.push({
+      title: "Published email disabled",
+      message:
+        scopeType === "organization"
+          ? `Published email coverage drops for ${scopeTarget} that inherit this draft.`
+          : "Published email coverage drops for this club."
+    });
+  }
+
+  const livePublishedPush = resolveNotificationChannelPolicy({
+    notificationPolicy: livePolicy.notificationRule || {},
+    type: "submission_published",
+    channel: "push"
+  });
+  const previewPublishedPush = resolveNotificationChannelPolicy({
+    notificationPolicy: previewPolicy.notificationRule || {},
+    type: "submission_published",
+    channel: "push"
+  });
+
+  if (livePublishedPush.enabled && !previewPublishedPush.enabled) {
+    warnings.push({
+      title: "Published push disabled",
+      message:
+        scopeType === "organization"
+          ? `Published push coverage drops for ${scopeTarget} that inherit this draft.`
+          : "Published push coverage drops for this club."
+    });
+  }
+
+  if (
+    scopeType === "organization" &&
+    overrideBurdenSummary &&
+    overrideBurdenSummary.projectedOverrideAreaCount >
+      overrideBurdenSummary.currentOverrideAreaCount
+  ) {
+    const additionalOverrideAreas =
+      overrideBurdenSummary.projectedOverrideAreaCount -
+      overrideBurdenSummary.currentOverrideAreaCount;
+    const expandingClubs = (overrideBurdenSummary.clubsGainingOverrides || []).length;
+    warnings.push({
+      title: "Override sprawl expands",
+      message: `This draft adds ${additionalOverrideAreas} override area${
+        additionalOverrideAreas === 1 ? "" : "s"
+      } across ${expandingClubs} club${expandingClubs === 1 ? "" : "s"}, increasing exception cleanup work.`
+    });
+  }
+
+  return warnings;
+}
+
 function renderOutcomeRiskWarningsCard(warnings) {
   if (!warnings.length) {
     return "";
@@ -2605,6 +2746,30 @@ function renderOutcomeRiskWarningsCard(warnings) {
           (warning) => `<div class="summary-item">
             <strong>Review before save</strong>
             <p>${escapeHtml(warning)}</p>
+          </div>`
+        )
+        .join("")}
+      </div>
+    </div>`;
+}
+
+function renderPolicyGuardrailsCard(warnings) {
+  if (!warnings.length) {
+    return "";
+  }
+
+  return `<div class="signal-card" style="margin-bottom:16px; border:1px solid rgba(180, 83, 9, 0.24); background: rgba(255, 247, 237, 0.92);">
+    <div class="badge-row" style="margin-bottom:10px;">
+      <strong>Policy guardrails</strong>
+      ${renderStatusBadge(`${warnings.length} flagged`, "review")}
+    </div>
+    <p class="subtle">These warnings come from the policy diff itself, so they still show up even when a single simulator scenario would miss them.</p>
+    <div class="summary-stack" style="margin-top:12px;">
+      ${warnings
+        .map(
+          (warning) => `<div class="summary-item">
+            <strong>${escapeHtml(warning.title)}</strong>
+            <p style="margin-top:6px;">${escapeHtml(warning.message)}</p>
           </div>`
         )
         .join("")}
@@ -2931,7 +3096,8 @@ function renderWorkflowPolicyForm({
   previewCurrentOverrideAreaCount = 0,
   previewProjectedOverrideAreaCount = 0,
   previewReducingClubs = [],
-  previewGainingClubs = []
+  previewGainingClubs = [],
+  previewGuardrailWarnings = []
 }) {
   const roleOptions = [
     { value: "team_manager", label: "Team manager" },
@@ -3015,6 +3181,10 @@ function renderWorkflowPolicyForm({
     notificationRule?.eventChannels?.submission_published?.push === undefined
       ? null
       : String(Boolean(notificationRule.eventChannels.submission_published.push));
+  const guardrailCard =
+    previewScopeType === scopeType
+      ? renderPolicyGuardrailsCard(previewGuardrailWarnings)
+      : "";
 
   return `<section class="panel workflow-form-panel">
     <div class="section-header">
@@ -3025,6 +3195,7 @@ function renderWorkflowPolicyForm({
       </div>
       <span class="badge badge-neutral">${escapeHtml(scopeSlug || "n/a")}</span>
     </div>
+    ${guardrailCard}
     <form class="workflow-policy-form" data-scope-type="${escapeHtml(scopeType)}" data-scope-slug="${escapeHtml(scopeSlug || "")}" data-preview-warning-count="${escapeHtml(String(previewWarningCount))}" data-preview-affected-club-count="${escapeHtml(String(previewAffectedClubCount))}" data-preview-changed-area-count="${escapeHtml(String(previewChangedAreaCount))}" data-preview-insulated-club-count="${escapeHtml(String(previewInsulatedClubCount))}" data-preview-changed-area-keys="${escapeHtml((previewChangedAreaKeys || []).join(","))}" data-preview-current-override-club-count="${escapeHtml(String(previewCurrentOverrideClubCount))}" data-preview-projected-override-club-count="${escapeHtml(String(previewProjectedOverrideClubCount))}" data-preview-current-override-area-count="${escapeHtml(String(previewCurrentOverrideAreaCount))}" data-preview-projected-override-area-count="${escapeHtml(String(previewProjectedOverrideAreaCount))}" data-preview-reducing-clubs="${escapeHtml(JSON.stringify(previewReducingClubs || []))}" data-preview-gaining-clubs="${escapeHtml(JSON.stringify(previewGainingClubs || []))}">
       ${renderPolicyField({
         label: "Actor email",
@@ -4345,6 +4516,23 @@ async function renderWorkflowSettingsPage(
           clubPolicyMap: organizationClubPolicyMap
         })
       : null;
+  const previewPolicyGuardrails =
+    previewScopeType === "organization"
+      ? buildPolicyGuardrailWarnings({
+          scopeType: "organization",
+          livePolicy: organizationPolicy?.organizationPolicy || {},
+          previewPolicy: previewOrganizationPolicy,
+          affectedClubCount: organizationDraftImpact?.affectedClubs.length || 0,
+          overrideBurdenSummary
+        })
+      : previewScopeType === "club"
+        ? buildPolicyGuardrailWarnings({
+            scopeType: "club",
+            livePolicy: liveEffectivePolicy,
+            previewPolicy: effectivePolicy
+          })
+        : [];
+  const previewWarningCount = previewRiskWarningCount + previewPolicyGuardrails.length;
 
   return layout(`
     <section class="hero">
@@ -4501,8 +4689,9 @@ async function renderWorkflowSettingsPage(
                 previewOverrideCount: item.previewOverrideCount
               }))
             : [],
-        previewWarningCount:
-          previewScopeType === "organization" ? previewRiskWarningCount : 0
+        previewWarningCount: previewScopeType === "organization" ? previewWarningCount : 0,
+        previewGuardrailWarnings:
+          previewScopeType === "organization" ? previewPolicyGuardrails : []
       })}
       ${renderWorkflowPolicyForm({
         scopeType: "club",
@@ -4513,7 +4702,9 @@ async function renderWorkflowSettingsPage(
         actorEmail: reviewerEmail,
         allowInheritance: true,
         previewScopeType,
-        previewWarningCount: previewScopeType === "club" ? previewRiskWarningCount : 0
+        previewWarningCount: previewScopeType === "club" ? previewWarningCount : 0,
+        previewGuardrailWarnings:
+          previewScopeType === "club" ? previewPolicyGuardrails : []
       })}
     </section>
 

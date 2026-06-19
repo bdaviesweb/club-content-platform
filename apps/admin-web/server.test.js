@@ -1210,6 +1210,11 @@ test("GET /workflow-settings previews unsaved club draft values in the simulator
 
     assert.equal(response.status, 200);
     assert.match(body, /Previewing unsaved club draft/);
+    assert.match(body, /Policy guardrails/);
+    assert.match(body, /3 flagged/);
+    assert.match(body, /Public second approval removed/);
+    assert.match(body, /Internal auto-approval enabled/);
+    assert.match(body, /Published email disabled/);
     assert.match(body, /High-signal save warnings/);
     assert.match(body, /2 flagged/);
     assert.match(
@@ -1231,7 +1236,7 @@ test("GET /workflow-settings previews unsaved club draft values in the simulator
     assert.match(body, /Live[\s\S]*Enabled/);
     assert.match(body, /Draft[\s\S]*Disabled \(Notification Policy Email Disabled\)/);
     assert.match(body, /Previewing draft/);
-    assert.match(body, /data-preview-warning-count="2"/);
+    assert.match(body, /data-preview-warning-count="5"/);
     assert.match(body, /This routes to Team Manager from Routing Rule Content Type/);
     assert.match(body, /This goes through one human approval step before publishing/);
     assert.match(body, /Published email: Disabled \(Notification Policy Email Disabled\)/);
@@ -1453,6 +1458,10 @@ test("GET /workflow-settings previews organization draft rollout impact", async 
     assert.match(body, /9 -&gt; 7|9 -> 7/);
     assert.match(body, /Override burden/);
     assert.match(body, /Reduced/);
+    assert.match(body, /Policy guardrails/);
+    assert.match(body, /1 flagged/);
+    assert.match(body, /Published email disabled/);
+    assert.match(body, /Published email coverage drops for 1 affected club that inherit this draft\./);
     assert.match(body, /Clubs reducing override burden/);
     assert.match(body, /Eastside reduces 2 override areas under this draft\./);
     assert.match(body, /2 -&gt; 0 override areas|2 -> 0 override areas/);
