@@ -137,6 +137,100 @@ test("GET /workflow-policies/clubs/:slug returns club and organization policy de
   }
 });
 
+test("GET /workflow-policies/clubs/:slug/history returns recent policy changes", async () => {
+  const queries = [];
+  const pool = {
+    async query(query, params) {
+      queries.push({ query, params });
+
+      if (String(query).includes("FROM clubs c")) {
+        return {
+          rows: [
+            {
+              clubId: "club-1",
+              clubSlug: "westside",
+              clubName: "Westside",
+              organizationId: "org-1",
+              organizationSlug: "metro",
+              organizationName: "Metro",
+              orgDefaultApproverRole: "team_manager",
+              orgPublicApproverRole: "club_comms",
+              orgMediumRiskApproverRole: "club_admin",
+              orgAllowAgentRouting: true,
+              orgAutoApproveInternalLowRisk: false,
+              orgAutoApproveMaxRisk: "0.35",
+              orgAutoApprovalRule: {},
+              orgRoutingRule: {},
+              orgPublishingRule: {},
+              orgNotificationRule: {},
+              clubDefaultApproverRole: null,
+              clubPublicApproverRole: null,
+              clubMediumRiskApproverRole: null,
+              clubAllowAgentRouting: null,
+              clubAutoApproveInternalLowRisk: null,
+              clubAutoApproveMaxRisk: null,
+              clubAutoApprovalRule: {},
+              clubRoutingRule: {},
+              clubPublishingRule: {},
+              clubNotificationRule: {}
+            }
+          ]
+        };
+      }
+
+      if (String(query).includes("FROM audit_logs al")) {
+        return {
+          rows: [
+            {
+              action: "workflow_policy.updated",
+              createdAt: "2026-06-19T15:20:00.000Z",
+              actorEmail: "admin@example.test",
+              actorFullName: "Admin Example",
+              metadata: {
+                changedFields: ["approvalRule"]
+              }
+            }
+          ]
+        };
+      }
+
+      throw new Error(`Unexpected query: ${query}`);
+    }
+  };
+
+  const server = createAppServer({ pool });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/workflow-policies/clubs/westside/history`);
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.scopeType, "club");
+    assert.equal(body.scopeSlug, "westside");
+    assert.deepEqual(body.items, [
+      {
+        action: "workflow_policy.updated",
+        createdAt: "2026-06-19T15:20:00.000Z",
+        actorEmail: "admin@example.test",
+        actorFullName: "Admin Example",
+        metadata: {
+          changedFields: ["approvalRule"]
+        }
+      }
+    ]);
+    assert.equal(queries.length, 2);
+    assert.match(queries[1].query, /FROM audit_logs al/);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
 test("POST /workflow-policies/clubs/:slug updates club policy through the workflow manager flow", async () => {
   const calls = [];
   const runInTransaction = async (fn) =>
@@ -228,6 +322,10 @@ test("POST /workflow-policies/clubs/:slug updates club policy through the workfl
         }
 
         if (String(query).includes("INSERT INTO club_workflow_policies")) {
+          return { rowCount: 1, rows: [] };
+        }
+
+        if (String(query).includes("INSERT INTO audit_logs")) {
           return { rowCount: 1, rows: [] };
         }
 
@@ -491,6 +589,10 @@ test("POST /workflow-policies/organizations/:slug updates organization policy th
         }
 
         if (String(query).includes("INSERT INTO organization_workflow_policies")) {
+          return { rowCount: 1, rows: [] };
+        }
+
+        if (String(query).includes("INSERT INTO audit_logs")) {
           return { rowCount: 1, rows: [] };
         }
 

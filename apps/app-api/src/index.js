@@ -40,6 +40,7 @@ import {
   loadEffectiveApprovalRuleForClubId,
   loadEffectiveNotificationRuleForClubId,
   loadOrganizationDirectory,
+  loadWorkflowPolicyHistory,
   loadWorkflowPolicyScope,
   updateWorkflowPolicyScope,
   validateWorkflowPolicyPatch
@@ -535,6 +536,22 @@ async function handleGetWorkflowPolicy(
   }
 
   sendJson(res, 200, policy);
+}
+
+async function handleGetWorkflowPolicyHistory(
+  res,
+  scopeType,
+  scopeSlug,
+  { pool = getPool() } = {}
+) {
+  const history = await loadWorkflowPolicyHistory(pool, { scopeType, scopeSlug });
+
+  if (!history.found) {
+    sendNotFound(res);
+    return;
+  }
+
+  sendJson(res, 200, history);
 }
 
 async function handleGetOrganization(res, organizationSlug, { pool = getPool() } = {}) {
@@ -1563,6 +1580,19 @@ export function createAppServer({
 
     if (
       req.method === "GET" &&
+      /^\/workflow-policies\/clubs\/[^/]+\/history$/.test(url.pathname)
+    ) {
+      await handleGetWorkflowPolicyHistory(
+        res,
+        "club",
+        decodeURIComponent(url.pathname.split("/")[3]),
+        { pool: pool || getPool() }
+      );
+      return;
+    }
+
+    if (
+      req.method === "GET" &&
       /^\/workflow-policies\/clubs\/[^/]+$/.test(url.pathname)
     ) {
       await handleGetWorkflowPolicy(
@@ -1584,6 +1614,19 @@ export function createAppServer({
         "club",
         decodeURIComponent(url.pathname.split("/")[3]),
         { runInTransaction: runInTransaction || withTransaction }
+      );
+      return;
+    }
+
+    if (
+      req.method === "GET" &&
+      /^\/workflow-policies\/organizations\/[^/]+\/history$/.test(url.pathname)
+    ) {
+      await handleGetWorkflowPolicyHistory(
+        res,
+        "organization",
+        decodeURIComponent(url.pathname.split("/")[3]),
+        { pool: pool || getPool() }
       );
       return;
     }

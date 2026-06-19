@@ -699,6 +699,54 @@ export async function loadWorkflowPolicyScope(pool, { scopeType, scopeSlug }) {
   );
 }
 
+export async function loadWorkflowPolicyHistory(
+  pool,
+  { scopeType, scopeSlug, limit = 10 }
+) {
+  const current = await loadWorkflowPolicyScope(pool, { scopeType, scopeSlug });
+
+  if (!current.found) {
+    return { found: false };
+  }
+
+  const normalizedLimit = Math.max(1, Math.min(Number(limit) || 10, 25));
+  const entityType = scopeType === "club" ? "club" : "organization";
+  const entityId =
+    scopeType === "club" ? current.club?.id || null : current.organization?.id || null;
+
+  const history = await pool.query(
+    `
+    SELECT
+      al.action,
+      al.metadata,
+      al.created_at AS "createdAt",
+      u.email AS "actorEmail",
+      u.full_name AS "actorFullName"
+    FROM audit_logs al
+    LEFT JOIN users u ON u.id = al.actor_user_id
+    WHERE al.entity_type = $1
+      AND al.entity_id = $2
+      AND al.action = 'workflow_policy.updated'
+    ORDER BY al.created_at DESC
+    LIMIT $3
+    `,
+    [entityType, entityId, normalizedLimit]
+  );
+
+  return {
+    found: true,
+    scopeType,
+    scopeSlug,
+    items: history.rows.map((row) => ({
+      action: row.action,
+      createdAt: row.createdAt,
+      actorEmail: row.actorEmail || null,
+      actorFullName: row.actorFullName || null,
+      metadata: row.metadata || {}
+    }))
+  };
+}
+
 export async function loadEffectiveNotificationRuleForClubId(pool, clubId) {
   const normalizedClubId = String(clubId || "").trim();
 
@@ -857,6 +905,18 @@ function applyPatchValue(currentValue, patch, key) {
   return Object.hasOwn(patch, key) ? patch[key] : currentValue;
 }
 
+function listChangedPolicyFields(previousPolicy, nextPolicy) {
+  const changedFields = [];
+
+  for (const key of Object.keys(nextPolicy || {})) {
+    if (JSON.stringify(previousPolicy?.[key] ?? null) !== JSON.stringify(nextPolicy?.[key] ?? null)) {
+      changedFields.push(key);
+    }
+  }
+
+  return changedFields;
+}
+
 export async function updateWorkflowPolicyScope(
   client,
   { scopeType, scopeSlug, actorEmail, patch }
@@ -936,6 +996,7 @@ export async function updateWorkflowPolicyScope(
         "notificationRule"
       )
     };
+    const changedFields = listChangedPolicyFields(currentClubPolicy, nextPolicy);
 
     await client.query(
       `
@@ -982,6 +1043,26 @@ export async function updateWorkflowPolicyScope(
         JSON.stringify(nextPolicy.approvalRule || {}),
         JSON.stringify(nextPolicy.publishingRule || {}),
         JSON.stringify(nextPolicy.notificationRule || {})
+      ]
+    );
+
+    await client.query(
+      `
+      INSERT INTO audit_logs (actor_user_id, entity_type, entity_id, action, metadata)
+      VALUES ($1, 'club', $2, 'workflow_policy.updated', $3::jsonb)
+      `,
+      [
+        authorization.actor.id,
+        current.club.id,
+        JSON.stringify({
+          scopeType: "club",
+          scopeSlug,
+          actorRole: authorization.actorRole,
+          organizationSlug: current.organization?.slug || null,
+          changedFields,
+          previousPolicy: currentClubPolicy,
+          nextPolicy
+        })
       ]
     );
   } else {
@@ -1043,6 +1124,7 @@ export async function updateWorkflowPolicyScope(
         "notificationRule"
       )
     };
+    const changedFields = listChangedPolicyFields(currentOrganizationPolicy, nextPolicy);
 
     await client.query(
       `
@@ -1089,6 +1171,25 @@ export async function updateWorkflowPolicyScope(
         JSON.stringify(nextPolicy.approvalRule || {}),
         JSON.stringify(nextPolicy.publishingRule || {}),
         JSON.stringify(nextPolicy.notificationRule || {})
+      ]
+    );
+
+    await client.query(
+      `
+      INSERT INTO audit_logs (actor_user_id, entity_type, entity_id, action, metadata)
+      VALUES ($1, 'organization', $2, 'workflow_policy.updated', $3::jsonb)
+      `,
+      [
+        authorization.actor.id,
+        current.organization.id,
+        JSON.stringify({
+          scopeType: "organization",
+          scopeSlug,
+          actorRole: authorization.actorRole,
+          changedFields,
+          previousPolicy: currentOrganizationPolicy,
+          nextPolicy
+        })
       ]
     );
   }

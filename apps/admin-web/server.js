@@ -102,6 +102,13 @@ function formatPolicyList(value) {
     .join(", ");
 }
 
+function formatPolicyFieldLabel(value) {
+  return String(value ?? "n/a")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
 function renderPolicySelectOptions(options, selectedValue, { allowEmpty = false, emptyLabel = "Inherit organization default" } = {}) {
   const rows = [];
 
@@ -3284,6 +3291,68 @@ function renderEffectivePolicySummary({
   </section>`;
 }
 
+function renderPolicyHistoryCard(title, history, emptyLabel) {
+  const items = history?.items || [];
+  const content = items.length
+    ? items
+        .map((item) => {
+          const changedFields = Array.isArray(item.metadata?.changedFields)
+            ? item.metadata.changedFields
+            : [];
+          const actorLabel = item.actorFullName || item.actorEmail || "Unknown actor";
+          const actorEmailSuffix =
+            item.actorFullName && item.actorEmail ? ` • ${item.actorEmail}` : "";
+
+          return `<div class="summary-item">
+            <div class="badge-row" style="justify-content:space-between; margin-bottom:6px;">
+              <strong>${escapeHtml(actorLabel)}</strong>
+              <span class="subtle">${escapeHtml(formatRelativeTime(item.createdAt))}</span>
+            </div>
+            <p class="subtle">${escapeHtml(item.action || "workflow_policy.updated")}${escapeHtml(actorEmailSuffix)}</p>
+            <p style="margin-top:6px;">Changed: ${escapeHtml(
+              changedFields.length
+                ? changedFields.map((field) => formatPolicyFieldLabel(field)).join(", ")
+                : "No field summary recorded"
+            )}</p>
+          </div>`;
+        })
+        .join("")
+    : `<p class="subtle">${escapeHtml(emptyLabel)}</p>`;
+
+  return `<div class="panel" style="background: rgba(255,255,255,0.72);">
+    <h3>${escapeHtml(title)}</h3>
+    <div class="summary-stack" style="margin-top:12px;">${content}</div>
+  </div>`;
+}
+
+function renderPolicyHistorySection({ organizationHistory, clubHistory }) {
+  if (!organizationHistory && !clubHistory) {
+    return "";
+  }
+
+  return `<section class="panel">
+    <div class="section-header">
+      <div>
+        <div class="eyebrow">Policy history</div>
+        <h2>Recent workflow policy changes</h2>
+        <p class="subtle" style="margin-top:8px;">Use this to confirm who last changed the organization default or the club override layer.</p>
+      </div>
+    </div>
+    <div class="footer-panels" style="margin-top:0;">
+      ${renderPolicyHistoryCard(
+        "Organization changes",
+        organizationHistory,
+        "No organization policy changes recorded yet."
+      )}
+      ${renderPolicyHistoryCard(
+        "Club changes",
+        clubHistory,
+        "No club-specific policy changes recorded yet."
+      )}
+    </div>
+  </section>`;
+}
+
 function renderOrganizationDirectory(directory) {
   if (!directory) {
     return "";
@@ -3348,6 +3417,14 @@ async function renderWorkflowSettingsPage(
   const organizationDirectory = organizationSlug
     ? await fetchJson(`/organizations/${encodeURIComponent(organizationSlug)}`)
     : null;
+  const organizationHistory = organizationSlug
+    ? await fetchJson(
+        `/workflow-policies/organizations/${encodeURIComponent(organizationSlug)}/history`
+      )
+    : null;
+  const clubHistory = await fetchJson(
+    `/workflow-policies/clubs/${encodeURIComponent(selectedClubSlug)}/history`
+  );
   const reviewerEmail = readiness?.demo?.reviewerEmail || "comms@demo-club.local";
   const previewScopeType =
     previewDraft?.scopeType === "club" || previewDraft?.scopeType === "organization"
@@ -3429,6 +3506,10 @@ async function renderWorkflowSettingsPage(
       previewContext: previewScopeType
         ? { scopeType: previewScopeType }
         : null
+    })}
+    ${renderPolicyHistorySection({
+      organizationHistory,
+      clubHistory
     })}
     ${renderOrganizationDirectory(organizationDirectory)}
 

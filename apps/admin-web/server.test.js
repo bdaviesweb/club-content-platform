@@ -140,6 +140,48 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
       };
     }
 
+    if (String(url).endsWith("/workflow-policies/organizations/metro/history")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            items: [
+              {
+                action: "workflow_policy.updated",
+                createdAt: "2026-06-19T15:20:00.000Z",
+                actorEmail: "org-admin@westside.test",
+                actorFullName: "Org Admin",
+                metadata: {
+                  changedFields: ["approvalRule", "notificationRule"]
+                }
+              }
+            ]
+          };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/clubs/westside/history")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            items: [
+              {
+                action: "workflow_policy.updated",
+                createdAt: "2026-06-19T16:10:00.000Z",
+                actorEmail: "club-admin@westside.test",
+                actorFullName: "Club Admin",
+                metadata: {
+                  changedFields: ["routingRule"]
+                }
+              }
+            ]
+          };
+        }
+      };
+    }
+
     if (String(url).endsWith("/organizations/metro")) {
       return {
         ok: true,
@@ -177,6 +219,11 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Set routing rules by club or by organization/);
     assert.match(body, /Westside/);
     assert.match(body, /Metro Sports/);
+    assert.match(body, /Recent workflow policy changes/);
+    assert.match(body, /Organization changes/);
+    assert.match(body, /Club changes/);
+    assert.match(body, /Changed: Approval Rule, Notification Rule/);
+    assert.match(body, /Changed: Routing Rule/);
     assert.match(body, /Organization directory/);
     assert.match(body, /org-admin@westside.test/);
     assert.match(body, /Auto-approval rule/);
@@ -214,7 +261,9 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
       "http://app-api:4000/app/readiness",
       "http://app-api:4000/workflow-policies/clubs/westside",
       "http://app-api:4000/workflow-policies/organizations/metro",
-      "http://app-api:4000/organizations/metro"
+      "http://app-api:4000/organizations/metro",
+      "http://app-api:4000/workflow-policies/organizations/metro/history",
+      "http://app-api:4000/workflow-policies/clubs/westside/history"
     ]);
   } finally {
     globalThis.fetch = originalFetch;
@@ -324,6 +373,24 @@ test("GET /workflow-settings previews unsaved club draft values in the simulator
               }
             }
           };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/organizations/metro/history")) {
+      return {
+        ok: true,
+        async json() {
+          return { items: [] };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/clubs/westside/history")) {
+      return {
+        ok: true,
+        async json() {
+          return { items: [] };
         }
       };
     }
@@ -487,6 +554,24 @@ test("GET /workflow-settings renders a simulated workflow outcome from the effec
               defaultApproverRole: "team_manager"
             }
           };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/organizations/metro/history")) {
+      return {
+        ok: true,
+        async json() {
+          return { items: [] };
+        }
+      };
+    }
+
+    if (String(url).endsWith("/workflow-policies/clubs/westside/history")) {
+      return {
+        ok: true,
+        async json() {
+          return { items: [] };
         }
       };
     }

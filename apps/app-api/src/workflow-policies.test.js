@@ -5,6 +5,7 @@ import {
   loadEffectiveApprovalRuleForClubId,
   loadEffectiveNotificationRuleForClubId,
   loadOrganizationDirectory,
+  loadWorkflowPolicyHistory,
   loadWorkflowPolicyScope,
   updateWorkflowPolicyScope,
   validateWorkflowPolicyPatch
@@ -78,6 +79,90 @@ test("loads club workflow policies with organization fallback detail", async () 
   assert.deepEqual(result.effectivePolicy.publishingRule, { mode: "org" });
   assert.deepEqual(result.effectivePolicy.notificationRule, { sms: false });
   assert.equal(result.effectivePolicy.defaultApproverRole, "club_admin");
+});
+
+test("loads workflow policy history for a club scope", async () => {
+  const calls = [];
+  const result = await loadWorkflowPolicyHistory(
+    {
+      async query(query, params) {
+        calls.push({ query, params });
+
+        if (String(query).includes("FROM clubs c")) {
+          return {
+            rows: [
+              {
+                clubId: "club-1",
+                clubSlug: "westside",
+                clubName: "Westside",
+                organizationId: "org-1",
+                organizationSlug: "metro",
+                organizationName: "Metro",
+                orgDefaultApproverRole: "team_manager",
+                orgPublicApproverRole: "club_comms",
+                orgMediumRiskApproverRole: "club_admin",
+                orgAllowAgentRouting: true,
+                orgAutoApproveInternalLowRisk: false,
+                orgAutoApproveMaxRisk: "0.35",
+                orgAutoApprovalRule: {},
+                orgRoutingRule: {},
+                orgApprovalRule: {},
+                orgPublishingRule: {},
+                orgNotificationRule: {},
+                clubDefaultApproverRole: null,
+                clubPublicApproverRole: null,
+                clubMediumRiskApproverRole: null,
+                clubAllowAgentRouting: null,
+                clubAutoApproveInternalLowRisk: null,
+                clubAutoApproveMaxRisk: null,
+                clubAutoApprovalRule: {},
+                clubRoutingRule: {},
+                clubApprovalRule: {},
+                clubPublishingRule: {},
+                clubNotificationRule: {}
+              }
+            ]
+          };
+        }
+
+        if (String(query).includes("FROM audit_logs al")) {
+          return {
+            rows: [
+              {
+                action: "workflow_policy.updated",
+                createdAt: "2026-06-19T15:20:00.000Z",
+                actorEmail: "admin@example.test",
+                actorFullName: "Admin Example",
+                metadata: {
+                  changedFields: ["approvalRule", "notificationRule"]
+                }
+              }
+            ]
+          };
+        }
+
+        throw new Error(`Unexpected query: ${query}`);
+      }
+    },
+    { scopeType: "club", scopeSlug: "westside", limit: 5 }
+  );
+
+  assert.equal(result.found, true);
+  assert.equal(result.scopeType, "club");
+  assert.equal(result.scopeSlug, "westside");
+  assert.deepEqual(result.items, [
+    {
+      action: "workflow_policy.updated",
+      createdAt: "2026-06-19T15:20:00.000Z",
+      actorEmail: "admin@example.test",
+      actorFullName: "Admin Example",
+      metadata: {
+        changedFields: ["approvalRule", "notificationRule"]
+      }
+    }
+  ]);
+  assert.match(calls[1].query, /FROM audit_logs al/);
+  assert.deepEqual(calls[1].params, ["club", "club-1", 5]);
 });
 
 test("validates workflow policy patch payloads", () => {
@@ -519,6 +604,10 @@ test("updates club workflow policies with authorized actors and preserves cleara
         return { rowCount: 1, rows: [] };
       }
 
+      if (String(sql).includes("INSERT INTO audit_logs")) {
+        return { rowCount: 1, rows: [] };
+      }
+
       throw new Error(`Unexpected query: ${sql}`);
     }
   };
@@ -575,6 +664,11 @@ test("updates club workflow policies with authorized actors and preserves cleara
     JSON.stringify({ requireSecondApprovalForPublic: false })
   );
   assert.equal(upsert.params[10], JSON.stringify({}));
+  const auditInsert = calls.find((entry) => entry.sql.includes("INSERT INTO audit_logs"));
+  assert.ok(auditInsert);
+  assert.equal(auditInsert.params[0], "user-1");
+  assert.equal(auditInsert.params[1], "club-1");
+  assert.match(auditInsert.params[2], /"changedFields":\["defaultApproverRole","allowAgentRouting","autoApproveInternalLowRisk","autoApproveMaxRisk","autoApprovalRule","routingRule","approvalRule","notificationRule"\]/);
 });
 
 test("loads organization directory with clubs and organization admins", async () => {
