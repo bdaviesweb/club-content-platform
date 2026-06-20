@@ -8018,6 +8018,52 @@ async function renderWorkflowSettingsPage(
         }
       }
 
+      function parseSimulationTrace(value) {
+        try {
+          const parsed = JSON.parse(value || 'null');
+          if (!parsed || typeof parsed !== 'object') {
+            return null;
+          }
+
+          const liveOutcome =
+            parsed.liveOutcome && typeof parsed.liveOutcome === 'object'
+              ? parsed.liveOutcome
+              : null;
+          const previewOutcome =
+            parsed.previewOutcome && typeof parsed.previewOutcome === 'object'
+              ? parsed.previewOutcome
+              : null;
+          const changedSegments = Array.isArray(parsed.changedSegments)
+            ? parsed.changedSegments
+                .filter((item) => item && typeof item === 'object')
+                .map((item) => ({
+                  label: String(item.label || '').trim(),
+                  before: String(item.before || '').trim(),
+                  after: String(item.after || '').trim()
+                }))
+                .filter((item) => item.label && item.before && item.after)
+            : [];
+          const warnings = Array.isArray(parsed.warnings)
+            ? parsed.warnings
+                .filter((item) => item && typeof item === 'object')
+                .map((item) => ({
+                  title: String(item.title || '').trim(),
+                  message: String(item.message || '').trim()
+                }))
+                .filter((item) => item.title && item.message)
+            : [];
+
+          return {
+            liveOutcome,
+            previewOutcome,
+            changedSegments,
+            warnings
+          };
+        } catch {
+          return null;
+        }
+      }
+
       function parseOptionalBoolean(value) {
         if (value === '') {
           return null;

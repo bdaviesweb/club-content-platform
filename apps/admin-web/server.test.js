@@ -293,6 +293,7 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Club view/);
     assert.match(body, /Policy area/);
     assert.match(body, /All policy areas/);
+    assert.match(body, /function parseSimulationTrace\(value\)/);
     assert.match(body, /Overrides only/);
     assert.match(body, /Fully inheriting/);
     assert.match(body, /Westside/);

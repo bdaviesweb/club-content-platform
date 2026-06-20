@@ -104,6 +104,15 @@ Notes from the verification run:
 - Notification email and push paths intentionally ran in log-only or disabled mode where provider credentials were absent
 - Review-provider fallback behavior was exercised and recorded in tests
 
+Live admin validation on 2026-06-19:
+
+- Loaded the real `workflow-settings` page locally in Safari against a controlled mock API surface that returned organization, club, history, and directory workflow-policy data
+- Confirmed the page rendered the organization context, effective policy cards, simulator, rollout posture, history sections, club override summary, organization directory, and both policy editors
+- Exercised the organization save path and confirmed it redirected to the saved rollout summary view
+- Exercised the club save path and confirmed it redirected to the saved club exception summary view
+- Found and fixed a real browser-side regression during this pass: the client save flow referenced `parseSimulationTrace` without defining it in the page script, which broke policy saves after submit
+- Added a regression assertion in `apps/admin-web/server.test.js` so the client helper remains present in rendered workflow settings markup
+
 ## Admin End-to-End Validation Checklist
 
 Run this pass in the admin UI before opening the release lane:
