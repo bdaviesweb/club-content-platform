@@ -35,7 +35,7 @@ const { uploadSelectedAsset } = require("./mediaUpload");
 const { buildApiError } = require("./apiErrors");
 const {
   demoLaunchActions,
-  parseDemoLaunchAction
+  parseDemoLaunchRequest
 } = require("./demoLaunchActions");
 const { buildDemoSubmissionPayload } = require("./demoTools");
 const {
@@ -536,7 +536,8 @@ export default function App() {
     async function handleDemoActionUrl(url) {
       if (!isCurrent || !url || lastHandledDemoActionUrlRef.current === url) return;
 
-      const action = parseDemoLaunchAction(url);
+      const launchRequest = parseDemoLaunchRequest(url);
+      const action = launchRequest?.action;
       if (!action) return;
       lastHandledDemoActionUrlRef.current = url;
 
@@ -556,7 +557,8 @@ export default function App() {
           openFirst:
             action === demoLaunchActions.openFirstReview ||
             action === demoLaunchActions.approveFirstReview,
-          approveFirst: action === demoLaunchActions.approveFirstReview
+          approveFirst: action === demoLaunchActions.approveFirstReview,
+          targetSubmissionId: launchRequest?.submissionId || null
         });
         return;
       }
@@ -1033,9 +1035,14 @@ export default function App() {
       setReviewQueue(items);
       setReviewQueueLastRefreshedAt(new Date().toISOString());
 
-      if (options.openFirst && items[0]?.submission_id) {
+      const targetedItem = options.targetSubmissionId
+        ? items.find((item) => item.submission_id === options.targetSubmissionId) || null
+        : null;
+      const selectedQueueItem = targetedItem || items[0] || null;
+
+      if (options.openFirst && selectedQueueItem?.submission_id) {
         const detailResponse = await fetch(
-          baseUrl + "/submissions/" + items[0].submission_id
+          baseUrl + "/submissions/" + selectedQueueItem.submission_id
         );
         if (!detailResponse.ok) {
           throw new Error("Submission detail failed: " + detailResponse.status);
@@ -1044,7 +1051,7 @@ export default function App() {
         const detail = await detailResponse.json();
         resetReviewActionState();
         setSelectedSubmissionDetail(detail);
-        setSelectedSubmissionId(items[0].submission_id);
+        setSelectedSubmissionId(selectedQueueItem.submission_id);
         setSubmissionDetailLastRefreshedAt(new Date().toISOString());
         setResubmissionText(detail.raw_text || "");
         setResubmissionAsset(null);

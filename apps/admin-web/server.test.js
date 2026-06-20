@@ -34,6 +34,222 @@ test("GET /health responds without admin auth", async () => {
   }
 });
 
+test("GET /demo renders the multi-role walkthrough", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+
+  globalThis.fetch = async (url) => {
+    const requestUrl = String(url);
+    if (requestUrl.startsWith("http://127.0.0.1:")) {
+      return originalFetch(url);
+    }
+    calls.push(requestUrl);
+
+    if (requestUrl.endsWith("/app/readiness")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            environment: "development",
+            demo: {
+              clubSlug: "westside",
+              teamSlug: "u12-boys",
+              submitterEmail: "coach@westside.test",
+              reviewerEmail: "comms@westside.test"
+            }
+          };
+        }
+      };
+    }
+
+    if (requestUrl.endsWith("/workflow-policies/clubs/westside")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "metro", name: "Metro Sports" },
+            club: { slug: "westside", name: "Westside" },
+            effectivePolicy: {
+              defaultApproverRole: "team_manager",
+              publicApproverRole: "club_comms",
+              mediumRiskApproverRole: "club_comms",
+              allowAgentRouting: true,
+              autoApproveInternalLowRisk: false,
+              autoApproveMaxRisk: 0.35,
+              autoApprovalRule: { allowedContentTypes: ["photo"] },
+              routingRule: { contentTypeApprovers: { video: "team_manager" } },
+              approvalRule: { requireSecondApprovalForPublic: false },
+              publishingRule: {
+                visibilityDestinations: {
+                  internal: ["internal_feed"],
+                  public: ["internal_feed"]
+                }
+              },
+              notificationRule: { email: false, push: false }
+            }
+          };
+        }
+      };
+    }
+
+    if (requestUrl.endsWith("/workflow-policies/organizations/metro")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organizationPolicy: {
+              defaultApproverRole: "team_manager",
+              publicApproverRole: "club_comms",
+              mediumRiskApproverRole: "club_comms",
+              allowAgentRouting: true,
+              autoApproveInternalLowRisk: true,
+              autoApproveMaxRisk: 0.35,
+              autoApprovalRule: { allowedContentTypes: ["photo"] },
+              routingRule: { contentTypeApprovers: { video: "club_admin" } },
+              approvalRule: {
+                requireSecondApprovalForPublic: true,
+                secondApproverRole: "club_admin",
+                secondApprovalContentTypes: ["video"]
+              },
+              publishingRule: {
+                visibilityDestinations: {
+                  internal: ["internal_feed"],
+                  public: ["internal_feed"]
+                }
+              },
+              notificationRule: { email: true, push: true }
+            }
+          };
+        }
+      };
+    }
+
+    if (requestUrl.endsWith("/organizations/metro")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            clubs: [{ slug: "westside", name: "Westside" }],
+            admins: [{ email: "org-admin@westside.test", role: "organization_admin" }]
+          };
+        }
+      };
+    }
+
+    if (requestUrl.endsWith("/approvals/queue")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            items: [{ id: "approval-1", raw_text: "Queue item" }]
+          };
+        }
+      };
+    }
+
+    if (requestUrl.endsWith("/feed/internal?includeSmoke=1")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            items: [
+              {
+                submission_id: "submission-1",
+                caption_draft: "Published win recap",
+                content_type: "photo",
+                visibility_target: "internal",
+                destination_name: "Internal Feed",
+                published_at: "2026-06-20T02:48:32.262Z"
+              }
+            ]
+          };
+        }
+      };
+    }
+
+    if (
+      requestUrl.includes("/submissions?submitterEmail=coach%40westside.test&clubSlug=westside&teamSlug=u12-boys&limit=8")
+    ) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            items: [
+              {
+                id: "submission-1",
+                raw_text: "mobile-demo-post-2026-06-20T02:48:32.262Z",
+                status: "published",
+                content_type: "photo",
+                visibility_target: "internal",
+                created_at: "2026-06-20T02:47:32.262Z"
+              }
+            ]
+          };
+        }
+      };
+    }
+
+    if (requestUrl.includes("/notifications?userEmail=coach%40westside.test&limit=8")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            items: [
+              {
+                type: "submission_published",
+                payload: { submissionId: "submission-1" },
+                deliveryStatus: "email.delivered",
+                createdAt: "2026-06-20T02:49:32.262Z"
+              }
+            ]
+          };
+        }
+      };
+    }
+
+    if (requestUrl.endsWith("/notification-delivery/status")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            email: { mode: "log-only" },
+            push: { mode: "disabled" }
+          };
+        }
+      };
+    }
+
+    throw new Error(`Unhandled fetch: ${requestUrl}`);
+  };
+
+  const server = createAdminServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const address = server.address();
+    const response = await fetch(`http://127.0.0.1:${address.port}/demo`);
+    const html = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(html, /Demo command center/);
+    assert.match(html, /Launch the mobile app in demo mode/);
+    assert.match(html, /Human decision surfaces/);
+    assert.match(html, /Policy outcomes for different scenarios/);
+    assert.match(html, /What people see after the backend is done/);
+    assert.match(html, /demoAction=post/);
+    assert.match(html, /Live demo club: public video/);
+    assert.match(html, /Organization default: public video/);
+    assert.match(html, /Published win recap/);
+    assert.match(html, /Submission Published/);
+    assert.ok(calls.some((call) => call.endsWith("/feed/internal?includeSmoke=1")));
+  } finally {
+    globalThis.fetch = originalFetch;
+    await new Promise((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))
+    );
+  }
+});
+
 test("GET /workflow-settings renders policy controls for the selected club", async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];

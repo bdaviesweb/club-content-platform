@@ -3,7 +3,8 @@ const test = require("node:test");
 
 const {
   demoLaunchActions,
-  parseDemoLaunchAction
+  parseDemoLaunchAction,
+  parseDemoLaunchRequest
 } = require("./demoLaunchActions");
 
 test("parseDemoLaunchAction reads Expo Go load-demo URLs", () => {
@@ -59,6 +60,18 @@ test("parseDemoLaunchAction reads query-based approve first review URLs", () => 
   assert.equal(
     parseDemoLaunchAction("exp://10.0.0.133:8082?demoAction=approveFirstReview"),
     demoLaunchActions.approveFirstReview
+  );
+});
+
+test("parseDemoLaunchRequest keeps a targeted submission id for review actions", () => {
+  assert.deepEqual(
+    parseDemoLaunchRequest(
+      "exp://10.0.0.133:8082?demoAction=approveFirstReview&submissionId=submission-123"
+    ),
+    {
+      action: demoLaunchActions.approveFirstReview,
+      submissionId: "submission-123"
+    }
   );
 });
 

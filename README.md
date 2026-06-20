@@ -66,6 +66,7 @@ Useful scripts:
 
 - `npm run dev:stack` - start API, admin, worker, and mobile web together with fixed local URLs
 - `npm run dev:vps` - sync the current checkout to the verified hermes-dev VPS and check the live stack
+- `npm run demo:operator` - start the operator-facing demo command center plus Expo mobile runtime, then print the one-page demo URL and Expo launch URL
 - `./scripts/deploy_vps.sh` - bootstrap or force-sync the repo to the VPS
 - `./scripts/update_vps.sh` - normal day-to-day flow after pushing to GitHub
 - `./scripts/smoke_vps.sh` - check VPS API health, deployed admin health, approval queue, and pending workflow events from your Mac
@@ -88,6 +89,34 @@ Recommended routine:
 5. run `./scripts/hermes_smoke_vps.sh` after AI review changes or VPS env updates when you want an isolated Hermes routing check
 6. run `./scripts/notification_status_smoke_vps.sh` after notification config or delivery-status changes when you want the narrow delivery contract only
 7. run `./scripts/notification_webhook_smoke_vps.sh` after webhook handling changes when you want only the webhook intake check
+
+## Demo Command Center
+
+Use `npm run demo:operator` when you want a single operator-friendly demo surface.
+
+It will:
+
+1. start `admin-web` on port `3013`
+2. print the command-center URL and Expo launch URL
+3. launch the Expo mobile app on iOS with the demo-friendly port wiring
+4. keep the mobile runtime attached for the live demo
+
+If you only want the services started in the background, run:
+
+- `DETACH=1 npm run demo:operator`
+
+The command center lives at:
+
+- `http://127.0.0.1:3013/demo`
+
+From that page you can:
+
+- launch the mobile poster app in demo mode
+- open the reviewer workspace and quick-review view
+- explain backend routing and approval choices across multiple scenarios
+- show the recent submission, notification, and final internal-feed output
+
+Run `bash scripts/mobile_demo_review_smoke.sh` when you want to verify the live demo loop. The smoke now resumes a single pending `mobile-demo-post-*` review item if one is already in the queue, so a half-finished demo does not require manual cleanup before you continue.
 
 `./scripts/update_vps.sh` now autostashes a dirty VPS checkout before it pulls, so a stray edit on the server no longer blocks the update.
 

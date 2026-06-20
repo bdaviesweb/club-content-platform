@@ -15,6 +15,8 @@ import { summarizeReviewHandoff } from "./reviewHandoff.js";
 
 const port = Number(process.env.PORT || 3001);
 const apiBase = process.env.API_BASE_URL || "http://app-api:4000";
+const expoUrl = process.env.EXPO_URL || "exp://127.0.0.1:8082";
+const mobileStatusUrl = process.env.MOBILE_STATUS_URL || "http://127.0.0.1:8082/status";
 const authUser = process.env.ADMIN_BASIC_AUTH_USER || "";
 const authPassword = process.env.ADMIN_BASIC_AUTH_PASSWORD || "";
 const basicAuthEnabled = Boolean(authUser && authPassword);
@@ -35,6 +37,15 @@ async function fetchJson(path, init) {
     throw new Error(`API ${path} failed: ${response.status} ${text}`);
   }
   return response.json();
+}
+
+async function fetchText(url, init) {
+  const response = await fetch(url, init);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Request ${url} failed: ${response.status} ${text}`);
+  }
+  return response.text();
 }
 
 function formatLabel(value) {
@@ -1075,6 +1086,129 @@ function layout(content, title = "Club Content Ops") {
 </html>`;
 }
 
+function buildExpoDemoActionUrl(action) {
+  return `${expoUrl}${expoUrl.includes("?") ? "&" : "?"}demoAction=${encodeURIComponent(action)}`;
+}
+
+function renderDemoLauncher({ label, href, helper }) {
+  return `<div class="summary-item">
+    <div class="badge-row" style="justify-content:space-between; align-items:flex-start;">
+      <strong>${escapeHtml(label)}</strong>
+      <a class="quick-link" href="${escapeHtml(href)}">Open</a>
+    </div>
+    <p class="subtle" style="margin-top:6px;">${escapeHtml(helper)}</p>
+    <pre style="margin-top:10px;">${escapeHtml(href)}</pre>
+  </div>`;
+}
+
+function renderDemoScenarioCard({ title, copy, posture, outcome }) {
+  const publishDestinations = Array.isArray(outcome?.publishingPlan?.destinationTypes)
+    ? outcome.publishingPlan.destinationTypes.map((destination) => formatLabel(destination)).join(", ")
+    : "n/a";
+
+  return `<div class="summary-item">
+    <div class="badge-row" style="justify-content:space-between; align-items:flex-start;">
+      <strong>${escapeHtml(title)}</strong>
+      ${renderStatusBadge(posture, posture.includes("override") ? "review" : "info")}
+    </div>
+    <p class="subtle" style="margin-top:8px; line-height:1.45;">${escapeHtml(copy)}</p>
+    <div class="summary-stack" style="margin-top:12px;">
+      <div class="summary-item">
+        <strong>Route</strong>
+        <p class="subtle" style="margin-top:6px;">${escapeHtml(formatLabel(outcome.routingDecision?.approverRole || "n/a"))}</p>
+        <p class="subtle" style="margin-top:6px;">${escapeHtml(formatRoutingSourceLabel(outcome.routingDecision?.routingSource || "local_rules"))}</p>
+      </div>
+      <div class="summary-item">
+        <strong>Review path</strong>
+        <p class="subtle" style="margin-top:6px;">${escapeHtml(describeOutcomePath(outcome))}</p>
+        <p class="subtle" style="margin-top:6px;">${
+          outcome.autoApproval?.allowed
+            ? escapeHtml(
+                `Auto-approved under a ${formatPercent(
+                  outcome.simulation?.riskScore ?? 0
+                )} simulated risk score.`
+              )
+            : escapeHtml(
+                outcome.secondApproval?.required
+                  ? "Requires a second human approval before publish."
+                  : "Stops after a single human approval."
+              )
+        }</p>
+      </div>
+      <div class="summary-item">
+        <strong>Publish result</strong>
+        <p class="subtle" style="margin-top:6px;">${escapeHtml(publishDestinations || "n/a")}</p>
+        <p class="subtle" style="margin-top:6px;">Published email ${escapeHtml(describeNotificationResult(outcome.publishedNotifications?.email))}</p>
+        <p class="subtle" style="margin-top:6px;">Published push ${escapeHtml(describeNotificationResult(outcome.publishedNotifications?.push))}</p>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderDemoListCard({ title, emptyCopy, items, renderItem }) {
+  return `<div class="panel" style="background: rgba(255,255,255,0.72);">
+    <h3>${escapeHtml(title)}</h3>
+    <div class="summary-stack" style="margin-top:12px;">
+      ${items.length ? items.map(renderItem).join("") : `<p class="subtle">${escapeHtml(emptyCopy)}</p>`}
+    </div>
+  </div>`;
+}
+
+function renderDemoRunStep({ step, title, copy, links = [] }) {
+  return `<div class="summary-item">
+    <div class="badge-row" style="justify-content:space-between; align-items:flex-start;">
+      <strong>Step ${escapeHtml(String(step))}: ${escapeHtml(title)}</strong>
+      ${links.length ? `<span class="subtle">${escapeHtml(`${links.length} launch point${links.length === 1 ? "" : "s"}`)}</span>` : ""}
+    </div>
+    <p class="subtle" style="margin-top:8px; line-height:1.45;">${escapeHtml(copy)}</p>
+    ${
+      links.length
+        ? `<div class="badge-row" style="margin-top:10px;">
+            ${links
+              .map(
+                (link) =>
+                  `<a class="quick-link" href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a>`
+              )
+              .join("")}
+          </div>`
+        : ""
+    }
+  </div>`;
+}
+
+function renderFeedItem(item) {
+  return `<div class="summary-item">
+    <div class="badge-row" style="justify-content:space-between; align-items:flex-start;">
+      <strong>${escapeHtml(item.caption_draft || item.raw_text || item.id)}</strong>
+      ${renderStatusBadge(formatLabel(item.destination_name || item.destination_type || "internal_feed"), "good")}
+    </div>
+    <p class="subtle" style="margin-top:6px;">${escapeHtml(formatLabel(item.content_type || "n/a"))} • ${escapeHtml(formatLabel(item.visibility_target || "internal"))} • ${escapeHtml(formatRelativeTime(item.published_at))}</p>
+    <p class="subtle" style="margin-top:6px;">Submission ${escapeHtml(item.submission_id || "n/a")}</p>
+  </div>`;
+}
+
+function renderSubmissionItem(item) {
+  return `<div class="summary-item">
+    <div class="badge-row" style="justify-content:space-between; align-items:flex-start;">
+      <strong>${escapeHtml(item.raw_text || item.id)}</strong>
+      ${renderStatusBadge(formatLabel(item.status || "unknown"), item.status === "published" ? "good" : item.status === "needs_metadata" ? "review" : "neutral")}
+    </div>
+    <p class="subtle" style="margin-top:6px;">${escapeHtml(formatLabel(item.content_type || "n/a"))} • ${escapeHtml(formatLabel(item.visibility_target || "internal"))}</p>
+    <p class="subtle" style="margin-top:6px;">${escapeHtml(formatRelativeTime(item.created_at))}</p>
+  </div>`;
+}
+
+function renderNotificationItem(item) {
+  return `<div class="summary-item">
+    <div class="badge-row" style="justify-content:space-between; align-items:flex-start;">
+      <strong>${escapeHtml(formatLabel(item.type || "notification"))}</strong>
+      ${renderStatusBadge(formatLabel(item.deliveryStatus || "queued"), item.readAt ? "neutral" : "info")}
+    </div>
+    <p class="subtle" style="margin-top:6px;">${escapeHtml(formatRelativeTime(item.createdAt))}</p>
+    <p class="subtle" style="margin-top:6px;">${escapeHtml(item.payload?.submissionId ? `Submission ${item.payload.submissionId}` : "No submission id attached")}</p>
+  </div>`;
+}
+
 function renderQueue(queue, activeId) {
   if (!queue.length) {
     return `<div class="panel queue-panel"><h2>Queue</h2><p class="subtle">No pending reviews right now.</p></div>`;
@@ -1507,7 +1641,10 @@ async function renderHome(activeId) {
         <h1>See it. Decide it. Move on.</h1>
         <p class="subtle" style="margin-top:10px; max-width:780px;">The default view is intentionally short: content, recommendation, action. Open more details only when you actually need them.</p>
       </div>
-      ${renderStatusBadge(`${queue.length} waiting`, queue.length ? "review" : "good")}
+      <div class="quick-actions">
+        <a class="quick-link" href="/demo">Open demo command center</a>
+        ${renderStatusBadge(`${queue.length} waiting`, queue.length ? "review" : "good")}
+      </div>
     </section>
 
     <details class="queue-toggle">
@@ -2121,6 +2258,320 @@ async function renderQuickReviewHome(activeId) {
       ${renderCenterStage(detail, recommendation, queueIds)}
     </section>
   `, "Club Content Quick Review");
+}
+
+async function renderDemoPage() {
+  const readiness = await fetchJson("/app/readiness");
+  const demoClubSlug = readiness?.demo?.clubSlug || "demo-soccer-club";
+  const demoTeamSlug = readiness?.demo?.teamSlug || "u14-girls";
+  const demoSubmitterEmail = readiness?.demo?.submitterEmail || "coach@demo-club.local";
+  const demoReviewerEmail = readiness?.demo?.reviewerEmail || "comms@demo-club.local";
+  const clubPolicy = await fetchJson(`/workflow-policies/clubs/${encodeURIComponent(demoClubSlug)}`);
+  const organizationSlug = clubPolicy.organization?.slug || "";
+  const organizationPolicy = organizationSlug
+    ? await fetchJson(`/workflow-policies/organizations/${encodeURIComponent(organizationSlug)}`)
+    : { organizationPolicy: defaultWorkflowPolicy };
+  const organizationDirectory = organizationSlug
+    ? await fetchJson(`/organizations/${encodeURIComponent(organizationSlug)}`)
+    : { clubs: [], admins: [] };
+  const queueResponse = await fetchJson("/approvals/queue");
+  const feedResponse = await fetchJson("/feed/internal?includeSmoke=1");
+  const submissionResponse = await fetchJson(
+    `/submissions?${new URLSearchParams({
+      submitterEmail: demoSubmitterEmail,
+      clubSlug: demoClubSlug,
+      teamSlug: demoTeamSlug,
+      limit: "8"
+    }).toString()}`
+  );
+  const notificationsResponse = await fetchJson(
+    `/notifications?${new URLSearchParams({
+      userEmail: demoSubmitterEmail,
+      limit: "8"
+    }).toString()}`
+  );
+  const deliveryStatus = await fetchJson("/notification-delivery/status");
+  let mobileRuntimeReady = false;
+  try {
+    const mobileStatus = await fetchText(mobileStatusUrl);
+    mobileRuntimeReady = mobileStatus.includes("packager-status:running");
+  } catch {
+    mobileRuntimeReady = false;
+  }
+
+  const effectivePolicy = clubPolicy.effectivePolicy || defaultWorkflowPolicy;
+  const organizationDefaults = organizationPolicy.organizationPolicy || defaultWorkflowPolicy;
+  const queue = queueResponse.items || [];
+  const feedItems = (feedResponse.items || []).slice(0, 4);
+  const submissionItems = (submissionResponse.items || []).slice(0, 4);
+  const notificationItems = (notificationsResponse.items || []).slice(0, 4);
+  const orgClubCount = organizationDirectory.clubs?.length || 0;
+  const orgAdminCount = organizationDirectory.admins?.length || 0;
+  const workflowSettingsUrl = `/workflow-settings?clubSlug=${encodeURIComponent(
+    demoClubSlug
+  )}&simulationContentType=video&simulationVisibilityTarget=public&simulationRiskScore=0.42&simulationModerationFlagged=false`;
+  const organizationBaselineUrl = `/workflow-settings?clubSlug=${encodeURIComponent(
+    demoClubSlug
+  )}&previewScopeType=club&previewDraftPolicy=${encodeURIComponent(
+    JSON.stringify({})
+  )}&simulationContentType=video&simulationVisibilityTarget=public&simulationRiskScore=0.42&simulationModerationFlagged=false`;
+
+  const currentClubVideoScenario = simulatePolicyOutcome(effectivePolicy, {
+    contentType: "video",
+    visibilityTarget: "public",
+    riskScore: "0.42",
+    moderationFlagged: "false"
+  });
+  const organizationVideoScenario = simulatePolicyOutcome(organizationDefaults, {
+    contentType: "video",
+    visibilityTarget: "public",
+    riskScore: "0.42",
+    moderationFlagged: "false"
+  });
+  const organizationPhotoScenario = simulatePolicyOutcome(organizationDefaults, {
+    contentType: "photo",
+    visibilityTarget: "internal",
+    riskScore: "0.12",
+    moderationFlagged: "false"
+  });
+  const clubPhotoScenario = simulatePolicyOutcome(effectivePolicy, {
+    contentType: "photo",
+    visibilityTarget: "internal",
+    riskScore: "0.12",
+    moderationFlagged: "false"
+  });
+
+  return layout(`
+    <section class="hero">
+      <div>
+        <div class="eyebrow">Demo command center</div>
+        <h1>Show poster, reviewer, backend choices, and final output in one pass.</h1>
+        <p class="subtle" style="margin-top:10px; max-width:860px;">Use this when you want one clean walkthrough of the Club Content workflow: create from the app, route through policy and review, inspect the backend choice, and land in the final internal product.</p>
+      </div>
+      <div class="quick-actions">
+        <a class="quick-link" href="/workflow-settings?clubSlug=${escapeHtml(demoClubSlug)}">Open workflow settings</a>
+        <a class="quick-link" href="/quick-review">Open quick review</a>
+      </div>
+    </section>
+
+    <section class="topline">
+      <div class="metric">
+        <div class="metric-label">Demo club</div>
+        <strong>${escapeHtml(clubPolicy.club?.name || demoClubSlug)}</strong>
+        <div class="subtle">${escapeHtml(clubPolicy.organization?.name || "No organization")}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Review queue</div>
+        <strong>${escapeHtml(String(queue.length))}</strong>
+        <div class="subtle">Waiting for reviewer action</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Organization</div>
+        <strong>${escapeHtml(String(orgClubCount))} clubs</strong>
+        <div class="subtle">${escapeHtml(String(orgAdminCount))} organization admins</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Delivery posture</div>
+        <strong>${escapeHtml(formatLabel(deliveryStatus.email?.mode || "unknown"))}</strong>
+        <div class="subtle">Push: ${escapeHtml(formatLabel(deliveryStatus.push?.mode || "unknown"))}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Mobile runtime</div>
+        <strong>${escapeHtml(mobileRuntimeReady ? "Ready" : "Not ready")}</strong>
+        <div class="subtle">${escapeHtml(expoUrl)}</div>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-bottom:18px;">
+      <div class="section-header">
+        <div>
+          <div class="eyebrow">Operator run</div>
+          <h2>Run the full demo in one sequence</h2>
+          <p class="subtle" style="margin-top:8px;">This is the fastest polished walkthrough for one operator: show the app, show the queue, explain the backend choice, and land in the finished product.</p>
+        </div>
+        ${renderStatusBadge("Single operator flow", "info")}
+      </div>
+      <div class="summary-stack" style="margin-top:12px;">
+        ${renderDemoRunStep({
+          step: 1,
+          title: "Load the poster workspace",
+          copy: `Open the mobile client in demo mode so the poster identity is already pointed at ${demoClubSlug}.`,
+          links: [
+            { label: "Load demo club", href: buildExpoDemoActionUrl("load") },
+            { label: "Create demo post", href: buildExpoDemoActionUrl("post") }
+          ]
+        })}
+        ${renderDemoRunStep({
+          step: 2,
+          title: "Show the reviewer handoff",
+          copy: "Open either reviewer surface to show how the content arrives after moderation and routing.",
+          links: [
+            { label: "Full reviewer workspace", href: "/" },
+            { label: "Quick review", href: "/quick-review" }
+          ]
+        })}
+        ${renderDemoRunStep({
+          step: 3,
+          title: "Explain why the backend made that choice",
+          copy: "Use workflow settings and the scenario cards below to compare the live club override against the organization default.",
+          links: [
+            { label: "Live club scenario", href: workflowSettingsUrl },
+            { label: "Inspect policy page", href: `/workflow-settings?clubSlug=${encodeURIComponent(demoClubSlug)}` }
+          ]
+        })}
+        ${renderDemoRunStep({
+          step: 4,
+          title: "Land in the final product",
+          copy: "Close on the recent submissions, feed output, and notifications so people can see the completed workflow, not just the admin screens.",
+          links: [
+            { label: "Open internal feed API", href: `${apiBase}/feed/internal?includeSmoke=1` }
+          ]
+        })}
+      </div>
+    </section>
+
+    <section class="panel" style="margin-bottom:18px;">
+      <div class="section-header">
+        <div>
+          <div class="eyebrow">Poster</div>
+          <h2>Launch the mobile app in demo mode</h2>
+          <p class="subtle" style="margin-top:8px;">These links target the Expo client. Use them to load the demo workspace, create a post, open review, or approve the first review from the mobile side.</p>
+        </div>
+        ${renderStatusBadge(formatLabel(readiness.environment || "development"), "info")}
+      </div>
+      <div class="summary-stack" style="margin-top:12px;">
+        ${renderDemoLauncher({
+          label: "Load demo club in the app",
+          href: buildExpoDemoActionUrl("load"),
+          helper: `Seeds ${demoClubSlug}, ${demoTeamSlug}, and ${demoSubmitterEmail} in the mobile client.`
+        })}
+        ${renderDemoLauncher({
+          label: "Create a demo post",
+          href: buildExpoDemoActionUrl("post"),
+          helper: "Shows the poster creating content that enters the hosted workflow."
+        })}
+        ${renderDemoLauncher({
+          label: "Open mobile review queue",
+          href: buildExpoDemoActionUrl("review"),
+          helper: "Opens the reviewer-facing queue from the app so you can show the mobile review surface."
+        })}
+        ${renderDemoLauncher({
+          label: "Approve the first review from mobile",
+          href: buildExpoDemoActionUrl("approveFirstReview"),
+          helper: "Fastest end-to-end mobile proof when you want to show post to publish in one move."
+        })}
+      </div>
+    </section>
+
+    <div class="footer-panels">
+      <section class="panel">
+        <div class="section-header">
+          <div>
+            <div class="eyebrow">Reviewer</div>
+            <h2>Human decision surfaces</h2>
+            <p class="subtle" style="margin-top:8px;">These are the two web views for fast approvals after the backend creates the review request.</p>
+          </div>
+          ${renderStatusBadge(queue.length ? `${queue.length} waiting` : "Queue clear", queue.length ? "review" : "good")}
+        </div>
+        <div class="summary-stack" style="margin-top:12px;">
+          <div class="summary-item">
+            <div class="badge-row" style="justify-content:space-between; align-items:flex-start;">
+              <strong>Full reviewer workspace</strong>
+              <a class="quick-link" href="/">Open</a>
+            </div>
+            <p class="subtle" style="margin-top:6px;">Shows queue, AI recommendation, details, and action history.</p>
+          </div>
+          <div class="summary-item">
+            <div class="badge-row" style="justify-content:space-between; align-items:flex-start;">
+              <strong>Quick review</strong>
+              <a class="quick-link" href="/quick-review">Open</a>
+            </div>
+            <p class="subtle" style="margin-top:6px;">Mobile-first approval surface for moving quickly through routine items.</p>
+          </div>
+          <div class="summary-item">
+            <strong>Current reviewer identity</strong>
+            <p class="subtle" style="margin-top:6px;">${escapeHtml(demoReviewerEmail)}</p>
+            <p class="subtle" style="margin-top:6px;">Use this account when demonstrating approval actions.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-header">
+          <div>
+            <div class="eyebrow">Backend choices</div>
+            <h2>Policy outcomes for different scenarios</h2>
+            <p class="subtle" style="margin-top:8px;">These cards show the choices the backend and worker will make before a human reviewer touches the item.</p>
+          </div>
+          <a class="quick-link" href="/workflow-settings?clubSlug=${escapeHtml(demoClubSlug)}">Inspect live policy</a>
+        </div>
+        <div class="summary-stack" style="margin-top:12px;">
+          ${renderDemoScenarioCard({
+            title: "Live demo club: public video",
+            copy: "This is the current demo-club posture, where the club override reroutes video to the team manager and removes the second approval step.",
+            posture: "Club override active",
+            outcome: currentClubVideoScenario
+          })}
+          <div class="summary-item">
+            <div class="badge-row" style="justify-content:space-between; align-items:flex-start;">
+              <strong>Compare against inheritance</strong>
+              <a class="quick-link" href="${escapeHtml(organizationBaselineUrl)}">Preview inherited club</a>
+            </div>
+            <p class="subtle" style="margin-top:8px;">Use this preview to show what changes when the club stops overriding and simply inherits the organization posture.</p>
+          </div>
+          ${renderDemoScenarioCard({
+            title: "Organization default: public video",
+            copy: "This shows the centralized organization rule if a club fully inherits it: club admin route, second approval required, and organization-level notifications.",
+            posture: "Organization baseline",
+            outcome: organizationVideoScenario
+          })}
+          ${renderDemoScenarioCard({
+            title: "Organization default: internal photo",
+            copy: "Use this to explain the clean centralized case for low-risk internal content under the organization rule set.",
+            posture: "Organization baseline",
+            outcome: organizationPhotoScenario
+          })}
+          ${renderDemoScenarioCard({
+            title: "Live demo club: internal photo",
+            copy: "This shows how the club can keep the same content type but change the workflow by overriding the organization default.",
+            posture: "Club override active",
+            outcome: clubPhotoScenario
+          })}
+        </div>
+      </section>
+    </div>
+
+    <section class="panel" style="margin-top:18px;">
+      <div class="section-header">
+        <div>
+          <div class="eyebrow">Final product</div>
+          <h2>What people see after the backend is done</h2>
+          <p class="subtle" style="margin-top:8px;">This is the output side of the workflow: recent submissions, reviewer notifications, and the internal feed item that got published.</p>
+        </div>
+        <a class="quick-link" href="${escapeHtml(`${apiBase}/feed/internal?includeSmoke=1`)}">Open API feed</a>
+      </div>
+      <div class="footer-panels" style="margin-top:12px;">
+        ${renderDemoListCard({
+          title: "Recent submitter activity",
+          emptyCopy: "No demo submissions found yet.",
+          items: submissionItems,
+          renderItem: renderSubmissionItem
+        })}
+        ${renderDemoListCard({
+          title: "Recent internal feed output",
+          emptyCopy: "Nothing has landed in the internal feed yet.",
+          items: feedItems,
+          renderItem: renderFeedItem
+        })}
+        ${renderDemoListCard({
+          title: "Recent submitter notifications",
+          emptyCopy: "No notifications recorded for the demo submitter yet.",
+          items: notificationItems,
+          renderItem: renderNotificationItem
+        })}
+      </div>
+    </section>
+  `, "Club Content Demo");
 }
 
 function renderPolicyField({
@@ -7713,6 +8164,7 @@ async function renderWorkflowSettingsPage(
         <p class="subtle" style="margin-top:10px; max-width:780px;">This is the multi-organization control layer for review routing, auto-approval, publishing rules, and notification rules. Club settings can override organization defaults when needed.</p>
       </div>
       <div class="quick-actions">
+        <a class="quick-link" href="/demo">Open demo command center</a>
         <a class="quick-link" href="/">Open review workspace</a>
       </div>
     </section>
@@ -8794,6 +9246,13 @@ export function createAdminServer() {
 
       if (req.method === "GET" && url.pathname === "/quick-review") {
         const html = await renderQuickReviewHome(url.searchParams.get("approvalRequestId"));
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.end(html);
+        return;
+      }
+
+      if (req.method === "GET" && url.pathname === "/demo") {
+        const html = await renderDemoPage();
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         res.end(html);
         return;
