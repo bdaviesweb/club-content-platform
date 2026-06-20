@@ -150,6 +150,10 @@ Current default simulator candidate:
 Recommended rehearsal commands:
 
 ```bash
+PILOT_CANDIDATE_PROFILE=simulated-north-river bash scripts/validate_pilot_candidate_profile.sh
+```
+
+```bash
 PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:audit
 ```
 
@@ -160,6 +164,7 @@ PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:vps
 This lets the suite keep `club_comms` for the comms lane while automatically using the team manager where a scenario routes video review to `team_manager`.
 
 For a future real pilot handoff, add a private local profile at `config/pilot-candidates/<candidate>.local.env` and run the same commands with `PILOT_CANDIDATE_PROFILE=<candidate>`.
+Start from `config/pilot-candidates/pilot-candidate.template.env`.
 
 `./scripts/update_vps.sh` now autostashes a dirty VPS checkout before it pulls, so a stray edit on the server no longer blocks the update.
 
