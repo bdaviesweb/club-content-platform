@@ -12,42 +12,54 @@ import {
   buildPublishFailureSummary
 } from "./publish-outcome.js";
 import { buildReviewArtifacts } from "./review-provider.js";
+import {
+  choosePublishingPlan,
+  describePolicyApproverSource,
+  choosePolicyApproverRole,
+  loadEffectiveWorkflowPolicy,
+  shouldAutoApproveSubmission
+} from "./workflow-policy.js";
 
 export { buildReviewArtifacts } from "./review-provider.js";
 
-export function chooseApproverRole(submission) {
-  if (
-    submission.visibility_target === "public" ||
-    Number(submission.risk_score) >= reviewThresholds.mediumRisk
-  ) {
-    return "club_comms";
-  }
-
-  return "team_manager";
-}
-
-function chooseRoutingDecision(submission, reviewArtifacts) {
-  const localApproverRole = chooseApproverRole({
-    visibility_target: submission.visibility_target,
-    risk_score: reviewArtifacts.riskScore
+function chooseRoutingDecision(submission, reviewArtifacts, policy) {
+  const policyApproverRole = choosePolicyApproverRole({
+    visibilityTarget: submission.visibility_target,
+    riskScore: reviewArtifacts.riskScore,
+    contentType: submission.content_type,
+    policy
+  });
+  const policyApproverSource = describePolicyApproverSource({
+    visibilityTarget: submission.visibility_target,
+    riskScore: reviewArtifacts.riskScore,
+    contentType: submission.content_type,
+    policy
   });
   const agentRouting = reviewArtifacts.structured?.review?.routing_decision;
 
-  if (reviewArtifacts.mode === "hermes" && agentRouting?.approver_role) {
+  if (
+    policyApproverSource !== "routing_rule_content_type" &&
+    policy.allowAgentRouting &&
+    reviewArtifacts.mode === "hermes" &&
+    agentRouting?.approver_role
+  ) {
     return {
       approverRole: agentRouting.approver_role,
       routingSource: "hermes_agent",
       agentRationale: agentRouting.rationale || null,
-      localFallbackApproverRole: localApproverRole
+      localFallbackApproverRole: policyApproverRole,
+      policySource: "agent_override",
+      localPolicySource: policyApproverSource
     };
   }
 
   return {
-    approverRole: localApproverRole,
+    approverRole: policyApproverRole,
     routingSource:
       reviewArtifacts.mode === "hermes" ? "local_rules" : reviewArtifacts.mode,
     agentRationale: null,
-    localFallbackApproverRole: null
+    localFallbackApproverRole: null,
+    policySource: policyApproverSource
   };
 }
 
@@ -95,21 +107,32 @@ export async function processSubmissionCreated(client, eventRow) {
 
   const submission = submissionResult.rows[0];
   const reviewArtifacts = await buildReviewArtifacts(submission);
-  const routingDecision = chooseRoutingDecision(submission, reviewArtifacts);
+  const workflowPolicy = await loadEffectiveWorkflowPolicy(client, submission.club_id);
+  const routingDecision = chooseRoutingDecision(
+    submission,
+    reviewArtifacts,
+    workflowPolicy
+  );
   const approverRole = routingDecision.approverRole;
+  const autoApproval = shouldAutoApproveSubmission({
+    submission,
+    reviewArtifacts,
+    policy: workflowPolicy
+  });
 
   await client.query(
     `
     UPDATE submissions
-    SET status = 'needs_human_review',
-        risk_score = $2,
-        caption_draft = $3,
-        routing_decision = $4::jsonb,
+    SET status = $2,
+        risk_score = $3,
+        caption_draft = $4,
+        routing_decision = $5::jsonb,
         updated_at = NOW()
     WHERE id = $1
     `,
     [
       submission.id,
+      autoApproval.allowed ? "approved_internal" : "needs_human_review",
       reviewArtifacts.riskScore,
       reviewArtifacts.captionDraft,
       JSON.stringify({
@@ -117,8 +140,12 @@ export async function processSubmissionCreated(client, eventRow) {
         rationale: reviewArtifacts.summary,
         reviewMode: reviewArtifacts.mode,
         routingSource: routingDecision.routingSource,
+        policySource: routingDecision.policySource,
         agentRationale: routingDecision.agentRationale,
+        localPolicySource: routingDecision.localPolicySource || null,
         localFallbackApproverRole: routingDecision.localFallbackApproverRole,
+        autoApproved: autoApproval.allowed,
+        autoApproveReason: autoApproval.allowed ? autoApproval.reason : null,
         reviewRequiredReason:
           reviewArtifacts.structured?.review?.review_required_reason || null
       })
@@ -205,6 +232,45 @@ export async function processSubmissionCreated(client, eventRow) {
     ]
   );
 
+  if (autoApproval.allowed) {
+    await client.query(
+      `
+      INSERT INTO submission_events (submission_id, event_name, payload)
+      VALUES ($1, $2, $3::jsonb)
+      `,
+      [
+        submission.id,
+        submissionEvents.approved,
+        JSON.stringify({
+          submissionId: submission.id,
+          status: "approved_internal",
+          autoApproved: true,
+          autoApproveReason: autoApproval.reason,
+          policySource: routingDecision.policySource
+        })
+      ]
+    );
+
+    await client.query(
+      `
+      INSERT INTO audit_logs (entity_type, entity_id, action, metadata)
+      VALUES ('submission', $1, 'auto_approved', $2::jsonb)
+      `,
+      [
+        submission.id,
+        JSON.stringify({
+          reason: autoApproval.reason,
+          reviewMode: reviewArtifacts.mode,
+          riskScore: reviewArtifacts.riskScore,
+          policySource: routingDecision.policySource,
+          clubId: submission.club_id
+        })
+      ]
+    );
+
+    return;
+  }
+
   const approver = await findApprover(client, submission.club_id, approverRole);
 
   if (!approver) {
@@ -217,9 +283,10 @@ export async function processSubmissionCreated(client, eventRow) {
       submission_id,
       approver_user_id,
       approver_role,
+      stage,
       state
     )
-    VALUES ($1, $2, $3, 'pending')
+    VALUES ($1, $2, $3, 'primary', 'pending')
     `,
     [submission.id, approver.userId, approver.role]
   );
@@ -233,6 +300,7 @@ export async function processSubmissionCreated(client, eventRow) {
       submission.id,
       submissionEvents.approvalRequested,
       JSON.stringify({
+        stage: "primary",
         approverRole: approver.role,
         originallyRequestedRole: approverRole
       })
@@ -247,7 +315,8 @@ export async function processSubmissionCreated(client, eventRow) {
       status: "needs_human_review",
       approverRole: approver.role,
       summary: reviewArtifacts.summary
-    }
+    },
+    notificationPolicy: workflowPolicy.notificationRule || {}
   });
 }
 
@@ -270,103 +339,121 @@ export async function processSubmissionApproved(
   }
 
   const submission = submissionResult.rows[0];
+  const workflowPolicy = await loadEffectiveWorkflowPolicy(client, submission.club_id);
+  const publishingPlan = choosePublishingPlan({
+    submission,
+    policy: workflowPolicy
+  });
+  const destinationTypes = publishingPlan.destinationTypes;
 
   const destination = await client.query(
     `
     SELECT id, destination_type, name, config
     FROM publishing_destinations
-    WHERE club_id = $1 AND destination_type = $2 AND is_active = TRUE
-    ORDER BY created_at ASC
-    LIMIT 1
+    WHERE club_id = $1
+      AND destination_type = ANY($2::text[])
+      AND is_active = TRUE
+    ORDER BY array_position($2::text[], destination_type), created_at ASC
     `,
-    [submission.club_id, internalDestinationType]
+    [submission.club_id, destinationTypes]
   );
 
   if (!destination.rowCount) {
-    throw new Error("Internal publishing destination not configured");
+    throw new Error(
+      `Publishing destinations not configured for policy: ${destinationTypes.join(", ")}`
+    );
   }
 
-  const publishDestination = destination.rows[0];
-  let publishResult;
-  try {
-    publishResult = await publishImpl({
-      submission,
-      destination: publishDestination
-    });
-  } catch (error) {
-    const resultSummary = buildPublishFailureSummary(error);
+  const publishDestinations = destination.rows;
+  const publishResults = [];
+
+  for (const publishDestination of publishDestinations) {
+    let publishResult;
+
+    try {
+      publishResult = await publishImpl({
+        submission,
+        destination: publishDestination
+      });
+    } catch (error) {
+      const resultSummary = buildPublishFailureSummary(error);
+      await client.query(
+        `
+        INSERT INTO publishing_jobs (
+          submission_id,
+          destination_id,
+          state,
+          attempt_count,
+          result_summary
+        )
+        VALUES ($1, $2, 'failed', 1, $3)
+        `,
+        [submission.id, publishDestination.id, resultSummary]
+      );
+
+      await client.query(
+        `
+        UPDATE submissions
+        SET status = 'publish_failed', updated_at = NOW()
+        WHERE id = $1
+        `,
+        [submission.id]
+      );
+
+      await client.query(
+        `
+        INSERT INTO submission_events (submission_id, event_name, payload)
+        VALUES ($1, $2, $3::jsonb)
+        `,
+        [
+          submission.id,
+          submissionEvents.publishFailed,
+          JSON.stringify({
+            destinationType: publishDestination.destination_type,
+            destinationName: publishDestination.name,
+            attemptedDestinationCount: publishDestinations.length,
+            publishedDestinationCount: publishResults.length,
+            ...buildPublishFailureEventPayload(error)
+          })
+        ]
+      );
+
+      return;
+    }
+
+    publishResults.push(publishResult);
+
     await client.query(
       `
       INSERT INTO publishing_jobs (
         submission_id,
         destination_id,
         state,
-        attempt_count,
-        result_summary
+        result_summary,
+        external_reference
       )
-      VALUES ($1, $2, 'failed', 1, $3)
-      `,
-      [submission.id, publishDestination.id, resultSummary]
-    );
-
-    await client.query(
-      `
-      UPDATE submissions
-      SET status = 'publish_failed', updated_at = NOW()
-      WHERE id = $1
-      `,
-      [submission.id]
-    );
-
-    await client.query(
-      `
-      INSERT INTO submission_events (submission_id, event_name, payload)
-      VALUES ($1, $2, $3::jsonb)
+      VALUES ($1, $2, 'succeeded', $3, $4)
       `,
       [
         submission.id,
-        submissionEvents.publishFailed,
-        JSON.stringify({
-          destinationType: publishDestination.destination_type,
-          destinationName: publishDestination.name,
-          ...buildPublishFailureEventPayload(error)
-        })
+        publishDestination.id,
+        publishResult.resultSummary,
+        publishResult.externalReference
       ]
     );
 
-    return;
+    await client.query(
+      `
+      INSERT INTO published_posts (
+        submission_id,
+        destination_id,
+        external_post_id
+      )
+      VALUES ($1, $2, $3)
+      `,
+      [submission.id, publishDestination.id, publishResult.externalPostId]
+    );
   }
-
-  await client.query(
-    `
-    INSERT INTO publishing_jobs (
-      submission_id,
-      destination_id,
-      state,
-      result_summary,
-      external_reference
-    )
-    VALUES ($1, $2, 'succeeded', $3, $4)
-    `,
-    [
-      submission.id,
-      publishDestination.id,
-      publishResult.resultSummary,
-      publishResult.externalReference
-    ]
-  );
-
-  await client.query(
-    `
-    INSERT INTO published_posts (
-      submission_id,
-      destination_id,
-      external_post_id
-    )
-    VALUES ($1, $2, $3)
-    `,
-    [submission.id, publishDestination.id, publishResult.externalPostId]
-  );
 
   await client.query(
     `
@@ -385,7 +472,12 @@ export async function processSubmissionApproved(
     [
       submission.id,
       submissionEvents.published,
-      JSON.stringify(buildPublishedEventPayload(publishResult))
+      JSON.stringify(
+        buildPublishedEventPayload({
+          results: publishResults,
+          policySource: publishingPlan.policySource
+        })
+      )
     ]
   );
 
@@ -394,7 +486,11 @@ export async function processSubmissionApproved(
     type: "submission_published",
     payload: buildPublishedNotificationPayload({
       submissionId: submission.id,
-      result: publishResult
-    })
+      result: {
+        results: publishResults,
+        policySource: publishingPlan.policySource
+      }
+    }),
+    notificationPolicy: workflowPolicy.notificationRule || {}
   });
 }

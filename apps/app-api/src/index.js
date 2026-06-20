@@ -36,6 +36,15 @@ import { recordNotificationWebhookEvent } from "./notification-webhook.js";
 import { parseResendWebhook } from "./notification-webhook-verification.js";
 import { loadSubmissionRecord } from "./submission-record.js";
 import { loadWorkflowEvents } from "./workflow-events.js";
+import {
+  loadEffectiveApprovalRuleForClubId,
+  loadEffectiveNotificationRuleForClubId,
+  loadOrganizationDirectory,
+  loadWorkflowPolicyHistory,
+  loadWorkflowPolicyScope,
+  updateWorkflowPolicyScope,
+  validateWorkflowPolicyPatch
+} from "./workflow-policies.js";
 
 const port = Number(process.env.API_PORT || 4000);
 const publicAppName = process.env.PUBLIC_PRODUCT_NAME || "Club Content";
@@ -99,6 +108,41 @@ function normalizeOptionalString(value) {
   return trimmed ? trimmed : null;
 }
 
+async function findApprovalStageApprover(client, clubId, teamId, preferredRole) {
+  const fallbackRoles = [preferredRole, "club_comms", "club_admin"];
+
+  for (const role of fallbackRoles) {
+    const result = await client.query(
+      `
+      SELECT u.id
+      FROM memberships m
+      JOIN users u ON u.id = m.user_id
+      WHERE m.club_id = $1
+        AND m.role = $2
+        AND (
+          m.team_id IS NULL
+          OR m.team_id = $3
+          OR $3::uuid IS NULL
+        )
+      ORDER BY
+        CASE WHEN m.role = $2 THEN 0 ELSE 1 END,
+        m.created_at ASC
+      LIMIT 1
+      `,
+      [clubId, role, teamId]
+    );
+
+    if (result.rowCount) {
+      return {
+        userId: result.rows[0].id,
+        role
+      };
+    }
+  }
+
+  return null;
+}
+
 function enrichMediaAsset(item) {
   if (!item) {
     return item;
@@ -116,6 +160,41 @@ function enrichMediaCollection(items) {
   }
 
   return items.map(enrichMediaAsset);
+}
+
+function shouldRequireSecondApprovalForAction({
+  approvalRequest,
+  approvalRule = {}
+}) {
+  if (approvalRequest?.stage === "secondary") {
+    return false;
+  }
+
+  if (approvalRequest?.visibility_target !== "public") {
+    return false;
+  }
+
+  if (approvalRule?.requireSecondApprovalForPublic !== true) {
+    return false;
+  }
+
+  const contentType = String(approvalRequest?.content_type || "").trim();
+  const secondApprovalContentTypes = Array.isArray(
+    approvalRule?.secondApprovalContentTypes
+  )
+    ? approvalRule.secondApprovalContentTypes
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    : [];
+
+  if (
+    secondApprovalContentTypes.length &&
+    (!contentType || !secondApprovalContentTypes.includes(contentType))
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 async function enrichFeedMediaAsset(item) {
@@ -443,6 +522,285 @@ async function handleAppReadiness(
   sendJson(res, 200, readiness);
 }
 
+async function handleGetWorkflowPolicy(
+  res,
+  scopeType,
+  scopeSlug,
+  { pool = getPool() } = {}
+) {
+  const policy = await loadWorkflowPolicyScope(pool, { scopeType, scopeSlug });
+
+  if (!policy.found) {
+    sendNotFound(res);
+    return;
+  }
+
+  sendJson(res, 200, policy);
+}
+
+async function handleGetWorkflowPolicyHistory(
+  res,
+  scopeType,
+  scopeSlug,
+  { pool = getPool() } = {}
+) {
+  const history = await loadWorkflowPolicyHistory(pool, { scopeType, scopeSlug });
+
+  if (!history.found) {
+    sendNotFound(res);
+    return;
+  }
+
+  sendJson(res, 200, history);
+}
+
+async function handleGetOrganization(res, organizationSlug, { pool = getPool() } = {}) {
+  const directory = await loadOrganizationDirectory(pool, organizationSlug);
+
+  if (!directory.found) {
+    sendNotFound(res);
+    return;
+  }
+
+  sendJson(res, 200, directory);
+}
+
+function normalizeWorkflowPolicyHistoryContext(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return null;
+  }
+
+  const normalized = {};
+  const cleanupSummary = input.cleanupSummary;
+
+  if (
+    cleanupSummary &&
+    typeof cleanupSummary === "object" &&
+    !Array.isArray(cleanupSummary)
+  ) {
+    const areaKey = String(cleanupSummary.areaKey || "").trim();
+    const clubs = Array.isArray(cleanupSummary.clubs)
+      ? cleanupSummary.clubs
+          .map((club) => {
+            if (!club || typeof club !== "object" || Array.isArray(club)) {
+              return null;
+            }
+
+            const slug = String(club.slug || "").trim();
+            const name = String(club.name || "").trim();
+
+            if (!slug) {
+              return null;
+            }
+
+            return {
+              slug,
+              name: name || slug
+            };
+          })
+          .filter(Boolean)
+      : [];
+
+    if (areaKey && clubs.length) {
+      normalized.cleanupSummary = {
+        areaKey,
+        clubs
+      };
+    }
+  }
+
+  const simulationTrace = input.simulationTrace;
+  if (
+    simulationTrace &&
+    typeof simulationTrace === "object" &&
+    !Array.isArray(simulationTrace)
+  ) {
+    const scenario =
+      simulationTrace.scenario &&
+      typeof simulationTrace.scenario === "object" &&
+      !Array.isArray(simulationTrace.scenario)
+        ? {
+            contentType: String(simulationTrace.scenario.contentType || "").trim(),
+            visibilityTarget: String(
+              simulationTrace.scenario.visibilityTarget || ""
+            ).trim(),
+            riskScore:
+              simulationTrace.scenario.riskScore === null ||
+              simulationTrace.scenario.riskScore === undefined
+                ? null
+                : Number(simulationTrace.scenario.riskScore),
+            moderationFlagged: Boolean(simulationTrace.scenario.moderationFlagged),
+            agentSuggestedApproverRole: String(
+              simulationTrace.scenario.agentSuggestedApproverRole || ""
+            ).trim() || null
+          }
+        : null;
+    const changedRows = Array.isArray(simulationTrace.changedRows)
+      ? simulationTrace.changedRows
+          .map((row) => {
+            if (!row || typeof row !== "object" || Array.isArray(row)) {
+              return null;
+            }
+
+            const label = String(row.label || "").trim();
+            const before = String(row.before || "").trim();
+            const after = String(row.after || "").trim();
+
+            if (!label || !before || !after) {
+              return null;
+            }
+
+            return {
+              key: String(row.key || "").trim() || null,
+              label,
+              before,
+              after
+            };
+          })
+          .filter(Boolean)
+      : [];
+
+    if (
+      scenario?.contentType &&
+      scenario?.visibilityTarget &&
+      changedRows.length
+    ) {
+      normalized.simulationTrace = {
+        scenario,
+        changedRows
+      };
+    }
+  }
+
+  const rolloutSnapshot = input.rolloutSnapshot;
+  if (
+    rolloutSnapshot &&
+    typeof rolloutSnapshot === "object" &&
+    !Array.isArray(rolloutSnapshot)
+  ) {
+    const normalizeRolloutClubs = (clubs) =>
+      Array.isArray(clubs)
+        ? clubs
+            .map((club) => {
+              if (!club || typeof club !== "object" || Array.isArray(club)) {
+                return null;
+              }
+
+              const slug = String(club.slug || "").trim();
+              const name = String(club.name || "").trim();
+              const areas = Array.isArray(club.areas)
+                ? club.areas.map((area) => String(area || "").trim()).filter(Boolean)
+                : [];
+
+              if (!slug || !areas.length) {
+                return null;
+              }
+
+              return {
+                slug,
+                name: name || slug,
+                areas
+              };
+            })
+            .filter(Boolean)
+        : [];
+
+    const inheritingClubs = normalizeRolloutClubs(rolloutSnapshot.inheritingClubs);
+    const insulatedClubs = normalizeRolloutClubs(rolloutSnapshot.insulatedClubs);
+
+    if (inheritingClubs.length || insulatedClubs.length) {
+      normalized.rolloutSnapshot = {
+        inheritingClubs,
+        insulatedClubs
+      };
+    }
+  }
+
+  const overrideSnapshot = input.overrideSnapshot;
+  if (
+    overrideSnapshot &&
+    typeof overrideSnapshot === "object" &&
+    !Array.isArray(overrideSnapshot)
+  ) {
+    const changedAreas = Array.isArray(overrideSnapshot.changedAreas)
+      ? overrideSnapshot.changedAreas.map((area) => String(area || "").trim()).filter(Boolean)
+      : [];
+    const addedAreas = Array.isArray(overrideSnapshot.addedAreas)
+      ? overrideSnapshot.addedAreas.map((area) => String(area || "").trim()).filter(Boolean)
+      : [];
+    const removedAreas = Array.isArray(overrideSnapshot.removedAreas)
+      ? overrideSnapshot.removedAreas.map((area) => String(area || "").trim()).filter(Boolean)
+      : [];
+    const retainedAreas = Array.isArray(overrideSnapshot.retainedAreas)
+      ? overrideSnapshot.retainedAreas.map((area) => String(area || "").trim()).filter(Boolean)
+      : [];
+    const liveOverrideCount = Number(overrideSnapshot.liveOverrideCount);
+    const previewOverrideCount = Number(overrideSnapshot.previewOverrideCount);
+
+    if (
+      changedAreas.length &&
+      Number.isFinite(liveOverrideCount) &&
+      Number.isFinite(previewOverrideCount)
+    ) {
+      normalized.overrideSnapshot = {
+        liveOverrideCount,
+        previewOverrideCount,
+        changedAreas,
+        addedAreas,
+        removedAreas,
+        retainedAreas
+      };
+    }
+  }
+
+  return Object.keys(normalized).length ? normalized : null;
+}
+
+async function handleUpdateWorkflowPolicy(
+  req,
+  res,
+  scopeType,
+  scopeSlug,
+  { runInTransaction = withTransaction } = {}
+) {
+  const body = await readJson(req);
+  const { actorEmail, historyContext, ...rawPatch } = body;
+
+  if (!actorEmail) {
+    sendJson(res, 400, { error: "actorEmail is required" });
+    return;
+  }
+
+  const validation = validateWorkflowPolicyPatch(rawPatch, { scopeType });
+
+  if (!validation.ok) {
+    sendJson(res, 400, { error: validation.error });
+    return;
+  }
+
+  const result = await runInTransaction((client) =>
+    updateWorkflowPolicyScope(client, {
+      scopeType,
+      scopeSlug,
+      actorEmail,
+      patch: validation.value,
+      historyContext: normalizeWorkflowPolicyHistoryContext(historyContext)
+    })
+  );
+
+  if (!result.found) {
+    sendNotFound(res);
+    return;
+  }
+
+  if (result.ok === false) {
+    sendJson(res, result.status || 403, { error: result.error });
+    return;
+  }
+
+  sendJson(res, 200, result);
+}
+
 async function handleCreateUploadPlan(req, res) {
   const body = await readJson(req);
   const validation = validateUploadRequest(body);
@@ -753,7 +1111,9 @@ async function handleApprovalAction(
   {
     runInTransaction = withTransaction,
     loadApprovalActor = loadAuthorizedApprovalActor,
-    deliverNotification = createAndDeliverNotification
+    deliverNotification = createAndDeliverNotification,
+    loadNotificationRuleForClubId = loadEffectiveNotificationRuleForClubId,
+    loadApprovalRuleForClubId = loadEffectiveApprovalRuleForClubId
   } = {}
 ) {
   const body = await readJson(req);
@@ -790,6 +1150,14 @@ async function handleApprovalAction(
     }
 
     const { actor, approvalRequest } = authorization;
+    const approvalRule = await loadApprovalRuleForClubId(
+      client,
+      approvalRequest.club_id
+    );
+    const notificationPolicy = await loadNotificationRuleForClubId(
+      client,
+      approvalRequest.club_id
+    );
 
     const stateMap = {
       approve: "approved",
@@ -802,6 +1170,15 @@ async function handleApprovalAction(
       reject: "rejected",
       request_changes: "needs_metadata"
     };
+
+    const requiresSecondApproval =
+      normalizedAction === "approve" &&
+      shouldRequireSecondApprovalForAction({
+        approvalRequest,
+        approvalRule
+      });
+    const secondApproverRole =
+      approvalRule?.secondApproverRole || "club_admin";
 
     await client.query(
       `
@@ -831,10 +1208,63 @@ async function handleApprovalAction(
       SET status = $2, updated_at = NOW()
       WHERE id = $1
       `,
-      [approvalRequest.submission_id, submissionStatusMap[normalizedAction]]
+      [
+        approvalRequest.submission_id,
+        requiresSecondApproval
+          ? "needs_human_review"
+          : submissionStatusMap[normalizedAction]
+      ]
     );
 
-    if (normalizedAction === "approve") {
+    if (requiresSecondApproval) {
+      const secondaryApprover = await findApprovalStageApprover(
+        client,
+        approvalRequest.club_id,
+        approvalRequest.team_id,
+        secondApproverRole
+      );
+
+      if (!secondaryApprover) {
+        throw new Error(
+          `No approver found for secondary approval role ${secondApproverRole}`
+        );
+      }
+
+      await client.query(
+        `
+        INSERT INTO approval_requests (
+          submission_id,
+          approver_user_id,
+          approver_role,
+          stage,
+          state
+        )
+        VALUES ($1, $2, $3, 'secondary', 'pending')
+        `,
+        [
+          approvalRequest.submission_id,
+          secondaryApprover.userId,
+          secondaryApprover.role
+        ]
+      );
+
+      await client.query(
+        `
+        INSERT INTO submission_events (submission_id, event_name, payload)
+        VALUES ($1, $2, $3::jsonb)
+        `,
+        [
+          approvalRequest.submission_id,
+          submissionEvents.approvalRequested,
+          JSON.stringify({
+            stage: "secondary",
+            approverRole: secondaryApprover.role,
+            originallyRequestedRole: secondApproverRole,
+            previousApprovalRequestId: approvalRequestId
+          })
+        ]
+      );
+    } else if (normalizedAction === "approve") {
       await client.query(
         `
         INSERT INTO submission_events (submission_id, event_name, payload)
@@ -843,7 +1273,10 @@ async function handleApprovalAction(
         [
           approvalRequest.submission_id,
           submissionEvents.approved,
-          JSON.stringify({ approvalRequestId })
+          JSON.stringify({
+            approvalRequestId,
+            stage: approvalRequest.stage || "primary"
+          })
         ]
       );
     }
@@ -857,7 +1290,11 @@ async function handleApprovalAction(
         actor.id,
         approvalRequestId,
         normalizedAction,
-        JSON.stringify({ notes: notes || null, reasonCode: reasonCode || null })
+        JSON.stringify({
+          notes: notes || null,
+          reasonCode: reasonCode || null,
+          stage: approvalRequest.stage || "primary"
+        })
       ]
     );
 
@@ -875,14 +1312,17 @@ async function handleApprovalAction(
           notes: notes || null,
           reasonCode: reasonCode || null
         },
-        actorUserId: actor.id
+        actorUserId: actor.id,
+        notificationPolicy
       });
     }
 
     return {
       approvalRequestId,
       submissionId: approvalRequest.submission_id,
-      action: normalizedAction
+      action: normalizedAction,
+      stage: approvalRequest.stage || "primary",
+      nextStage: requiresSecondApproval ? "secondary" : null
     };
   });
 
@@ -1279,6 +1719,8 @@ export function createAppServer({
   approvalActionRunInTransaction,
   loadApprovalActor,
   deliverNotification,
+  loadNotificationRuleForClubId,
+  loadApprovalRuleForClubId,
   registerPushTokenFn,
   buildNotificationDeliveryStatusFn,
   parseWebhook,
@@ -1325,6 +1767,98 @@ export function createAppServer({
         pool: pool || getPool(),
         loadAppReadinessFn: loadAppReadinessFn || loadAppReadiness
       });
+      return;
+    }
+
+    if (
+      req.method === "GET" &&
+      /^\/workflow-policies\/clubs\/[^/]+\/history$/.test(url.pathname)
+    ) {
+      await handleGetWorkflowPolicyHistory(
+        res,
+        "club",
+        decodeURIComponent(url.pathname.split("/")[3]),
+        { pool: pool || getPool() }
+      );
+      return;
+    }
+
+    if (
+      req.method === "GET" &&
+      /^\/workflow-policies\/clubs\/[^/]+$/.test(url.pathname)
+    ) {
+      await handleGetWorkflowPolicy(
+        res,
+        "club",
+        decodeURIComponent(url.pathname.split("/")[3]),
+        { pool: pool || getPool() }
+      );
+      return;
+    }
+
+    if (
+      req.method === "POST" &&
+      /^\/workflow-policies\/clubs\/[^/]+$/.test(url.pathname)
+    ) {
+      await handleUpdateWorkflowPolicy(
+        req,
+        res,
+        "club",
+        decodeURIComponent(url.pathname.split("/")[3]),
+        { runInTransaction: runInTransaction || withTransaction }
+      );
+      return;
+    }
+
+    if (
+      req.method === "GET" &&
+      /^\/workflow-policies\/organizations\/[^/]+\/history$/.test(url.pathname)
+    ) {
+      await handleGetWorkflowPolicyHistory(
+        res,
+        "organization",
+        decodeURIComponent(url.pathname.split("/")[3]),
+        { pool: pool || getPool() }
+      );
+      return;
+    }
+
+    if (
+      req.method === "GET" &&
+      /^\/workflow-policies\/organizations\/[^/]+$/.test(url.pathname)
+    ) {
+      await handleGetWorkflowPolicy(
+        res,
+        "organization",
+        decodeURIComponent(url.pathname.split("/")[3]),
+        { pool: pool || getPool() }
+      );
+      return;
+    }
+
+    if (
+      req.method === "GET" &&
+      /^\/organizations\/[^/]+$/.test(url.pathname)
+    ) {
+      await handleGetOrganization(
+        res,
+        decodeURIComponent(url.pathname.split("/")[2]),
+        { pool: pool || getPool() }
+      );
+      return;
+    }
+
+    if (
+      req.method === "POST" &&
+      /^\/workflow-policies\/organizations\/[^/]+$/.test(url.pathname)
+    ) {
+      await handleUpdateWorkflowPolicy(
+        req,
+        res,
+        "organization",
+        decodeURIComponent(url.pathname.split("/")[3]),
+        { runInTransaction: runInTransaction || withTransaction }
+      );
       return;
     }
 
@@ -1444,7 +1978,11 @@ export function createAppServer({
       await handleApprovalAction(req, res, url.pathname.split("/")[2], {
         runInTransaction: approvalActionRunInTransaction || withTransaction,
         loadApprovalActor: loadApprovalActor || loadAuthorizedApprovalActor,
-        deliverNotification: deliverNotification || createAndDeliverNotification
+        deliverNotification: deliverNotification || createAndDeliverNotification,
+        loadNotificationRuleForClubId:
+          loadNotificationRuleForClubId || loadEffectiveNotificationRuleForClubId,
+        loadApprovalRuleForClubId:
+          loadApprovalRuleForClubId || loadEffectiveApprovalRuleForClubId
       });
       return;
     }

@@ -7,7 +7,14 @@ export function isReviewerRole(role) {
 export async function loadAuthorizedApprovalActor(client, approvalRequestId, actedByEmail) {
   const approvalRequest = await client.query(
     `
-    SELECT ar.*, s.club_id, s.team_id, s.id AS submission_id, s.submitted_by_user_id
+    SELECT
+      ar.*,
+      s.club_id,
+      s.team_id,
+      s.id AS submission_id,
+      s.submitted_by_user_id,
+      s.content_type,
+      s.visibility_target
     FROM approval_requests ar
     JOIN submissions s ON s.id = ar.submission_id
     WHERE ar.id = $1

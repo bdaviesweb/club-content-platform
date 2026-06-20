@@ -122,6 +122,7 @@ to clear old smoke approvals before the public mobile smoke starts.
 - `POST /notifications/:id/read`
 - `GET /feed/internal`
 - `GET /feed/internal?includeSmoke=1` to include smoke-generated internal posts
+- `GET /organizations/:slug`
 - `GET /workflow-events?status=failed|pending|all`
 - `POST /workflow-events/:id/retry`
 

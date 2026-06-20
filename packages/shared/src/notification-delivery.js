@@ -24,7 +24,12 @@ export function describeEmailDeliveryConfig({
 }
 
 function isExpectedNotificationSkip(delivery) {
-  return ["log-only", "disabled", "no-recipients"].includes(delivery?.mode);
+  return [
+    "log-only",
+    "disabled",
+    "no-recipients",
+    "policy-disabled"
+  ].includes(delivery?.mode);
 }
 
 function emailAuditAction(delivery) {
@@ -211,6 +216,44 @@ export function buildNotificationEmail({
   };
 }
 
+function isObjectRecord(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+export function resolveNotificationChannelPolicy({
+  notificationPolicy = {},
+  type,
+  channel
+}) {
+  const topLevelEnabled = notificationPolicy?.[channel] !== false;
+  const eventPolicy = isObjectRecord(notificationPolicy?.eventChannels)
+    ? notificationPolicy.eventChannels[type]
+    : null;
+  const eventEnabled =
+    isObjectRecord(eventPolicy) && Object.hasOwn(eventPolicy, channel)
+      ? eventPolicy[channel] !== false
+      : true;
+
+  if (!topLevelEnabled) {
+    return {
+      enabled: false,
+      reason: `notification_policy_${channel}_disabled`
+    };
+  }
+
+  if (!eventEnabled) {
+    return {
+      enabled: false,
+      reason: `notification_policy_${channel}_event_disabled`
+    };
+  }
+
+  return {
+    enabled: true,
+    reason: null
+  };
+}
+
 export async function sendEmailViaResend({
   toEmail,
   subject,
@@ -267,7 +310,8 @@ export async function createAndDeliverNotification(client, {
   userId,
   type,
   payload,
-  actorUserId = null
+  actorUserId = null,
+  notificationPolicy = {}
 }) {
   const insertedNotification = await client.query(
     `
@@ -302,15 +346,27 @@ export async function createAndDeliverNotification(client, {
     publicAppUrl: process.env.PUBLIC_APP_URL || process.env.EXPO_PUBLIC_API_BASE_URL || ""
   });
   const appName = process.env.PUBLIC_PRODUCT_NAME || "Club Content";
-
-  const delivery = await sendEmailViaResend({
-    toEmail: user.email,
-    subject: emailContent.subject,
-    text: emailContent.text,
-    html: emailContent.html,
-    fromEmail: process.env.NOTIFICATION_FROM_EMAIL || "",
-    resendApiKey: process.env.RESEND_API_KEY || ""
+  const emailChannelPolicy = resolveNotificationChannelPolicy({
+    notificationPolicy,
+    type,
+    channel: "email"
   });
+
+  const delivery = emailChannelPolicy.enabled
+    ? await sendEmailViaResend({
+        toEmail: user.email,
+        subject: emailContent.subject,
+        text: emailContent.text,
+        html: emailContent.html,
+        fromEmail: process.env.NOTIFICATION_FROM_EMAIL || "",
+        resendApiKey: process.env.RESEND_API_KEY || ""
+      })
+    : {
+        delivered: false,
+        channel: "email",
+        mode: "policy-disabled",
+        reason: emailChannelPolicy.reason
+      };
 
   await client.query(
     `
@@ -325,6 +381,7 @@ export async function createAndDeliverNotification(client, {
         type,
         recipientEmail: user.email,
         delivery,
+        notificationPolicy,
         payload
       })
     ]
@@ -345,21 +402,41 @@ export async function createAndDeliverNotification(client, {
     );
   }
 
-  const pushRegistrations = await listActivePushRegistrations(client, userId);
+  const pushChannelPolicy = resolveNotificationChannelPolicy({
+    notificationPolicy,
+    type,
+    channel: "push"
+  });
+  const pushRegistrations = pushChannelPolicy.enabled
+    ? await listActivePushRegistrations(client, userId)
+    : [];
   const pushContent = buildNotificationPush({
     type,
     payload,
     appName
   });
-  const pushDelivery = await sendPushNotifications({
-    tokens: pushRegistrations.map((registration) => registration.pushToken),
-    title: pushContent.title,
-    body: pushContent.body,
-    data: pushContent.data,
-    enabled: String(process.env.PUSH_NOTIFICATIONS_ENABLED || "").toLowerCase() === "true",
-    provider: process.env.PUSH_PROVIDER || "expo",
-    projectId: process.env.PUSH_PROJECT_ID || ""
-  });
+  const pushDelivery = pushChannelPolicy.enabled
+    ? await sendPushNotifications({
+        tokens: pushRegistrations.map((registration) => registration.pushToken),
+        title: pushContent.title,
+        body: pushContent.body,
+        data: pushContent.data,
+        enabled:
+          String(process.env.PUSH_NOTIFICATIONS_ENABLED || "").toLowerCase() ===
+          "true",
+        provider: process.env.PUSH_PROVIDER || "expo",
+        projectId: process.env.PUSH_PROJECT_ID || ""
+      })
+    : {
+        delivered: false,
+        channel: "push",
+        mode: "policy-disabled",
+        provider: process.env.PUSH_PROVIDER || "expo",
+        attemptedCount: 0,
+        successCount: 0,
+        failureCount: 0,
+        reason: pushChannelPolicy.reason
+      };
 
   await client.query(
     `
@@ -375,6 +452,7 @@ export async function createAndDeliverNotification(client, {
         recipientEmail: user.email,
         tokenCount: pushRegistrations.length,
         delivery: pushDelivery,
+        notificationPolicy,
         payload
       })
     ]
@@ -410,7 +488,7 @@ function pushAuditAction(delivery) {
     return "notification.push.delivered";
   }
 
-  if (["disabled", "no-recipients"].includes(delivery.mode)) {
+  if (["disabled", "no-recipients", "policy-disabled"].includes(delivery.mode)) {
     return "notification.push.skipped";
   }
 

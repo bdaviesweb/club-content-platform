@@ -61,6 +61,21 @@ REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/smoke_vps.sh
 
 echo
 echo "---"
+echo "Running routing rule smoke"
+run_checked_step "Routing rule smoke" env REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/routing_rule_smoke_vps.sh
+
+echo
+echo "---"
+echo "Running auto-approval rule smoke"
+run_checked_step "Auto-approval rule smoke" env REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/auto_approval_rule_smoke_vps.sh
+
+echo
+echo "---"
+echo "Running auto-approval override smoke"
+run_checked_step "Auto-approval override smoke" env REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/auto_approval_override_smoke_vps.sh
+
+echo
+echo "---"
 echo "Running approval publish smoke"
 approval_publish_output="$(
   REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/approval_publish_smoke_vps.sh
@@ -77,6 +92,37 @@ fi
 
 echo
 echo "---"
+echo "Running publishing override smoke"
+run_checked_step "Publishing override smoke" env REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/publishing_override_smoke_vps.sh
+
+echo
+echo "---"
+echo "Running public second approval smoke"
+public_second_approval_output="$(
+  env REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/public_second_approval_smoke_vps.sh
+)"
+printf '%s\n' "${public_second_approval_output}"
+
+public_submission_id=""
+if public_submission_id="$(extract_output_value "submission_id" "${public_second_approval_output}")"; then
+  :
+else
+  echo "Public second approval smoke did not report submission_id."
+  exit 1
+fi
+
+echo
+echo "---"
+echo "Running approval override smoke"
+run_checked_step "Approval override smoke" env REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/approval_override_smoke_vps.sh
+
+echo
+echo "---"
+echo "Running event notification rule smoke"
+run_checked_step "Event notification rule smoke" env REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" ./scripts/event_notification_rule_smoke_vps.sh
+
+echo
+echo "---"
 echo "Running notification status smoke"
 run_checked_step "Notification status smoke" env REMOTE_HOST="${REMOTE_HOST}" ./scripts/notification_status_smoke_vps.sh
 
@@ -84,7 +130,7 @@ if [[ "${RUN_NOTIFICATION_DEEP_SMOKE}" == "1" ]]; then
   echo
   echo "---"
   echo "Running notification readback smoke"
-  run_checked_step "Notification readback smoke" env REMOTE_HOST="${REMOTE_HOST}" EXPECTED_SUBMISSION_ID="${submission_id}" ./scripts/notification_smoke_vps.sh
+  run_checked_step "Notification readback smoke" env REMOTE_HOST="${REMOTE_HOST}" EXPECTED_SUBMISSION_ID="${public_submission_id}" EXPECTED_EMAIL_REASON="notification_policy_email_disabled" EXPECTED_PUSH_REASON="notification_policy_push_disabled" ./scripts/notification_smoke_vps.sh
 fi
 
 if [[ "${RUN_NOTIFICATION_WEBHOOK_SMOKE}" == "1" ]]; then

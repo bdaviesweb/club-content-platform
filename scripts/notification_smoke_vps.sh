@@ -6,6 +6,8 @@ REMOTE_DIR="${REMOTE_DIR:-/srv/repos/projects/club-content-platform}"
 SUBMITTER_EMAIL="${SUBMITTER_EMAIL:-coach@demo-club.local}"
 NOTIFICATION_LIMIT="${NOTIFICATION_LIMIT:-5}"
 EXPECTED_SUBMISSION_ID="${EXPECTED_SUBMISSION_ID:-}"
+EXPECTED_EMAIL_REASON="${EXPECTED_EMAIL_REASON:-}"
+EXPECTED_PUSH_REASON="${EXPECTED_PUSH_REASON:-}"
 
 status_json="$(
   ssh "${REMOTE_HOST}" \
@@ -53,21 +55,62 @@ audit_rows="$(
       LIMIT ${NOTIFICATION_LIMIT};
     \""
 )"
+expected_submission_rows="$(
+  ssh "${REMOTE_HOST}" \
+    "cd '${REMOTE_DIR}' && docker compose -f docker-compose.vps.yml exec -T postgres psql -U club -d club_content -At -F '|' -c \"
+      SELECT
+        n.id,
+        n.type,
+        COALESCE(n.payload->>'submissionId', ''),
+        COALESCE(email_log.metadata->'delivery'->>'reason', ''),
+        COALESCE(push_log.metadata->'delivery'->>'reason', '')
+      FROM notifications n
+      JOIN users u ON u.id = n.user_id
+      LEFT JOIN LATERAL (
+        SELECT metadata
+        FROM audit_logs
+        WHERE entity_type = 'notification'
+          AND entity_id = n.id
+          AND action LIKE 'notification.email.%'
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) email_log ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT metadata
+        FROM audit_logs
+        WHERE entity_type = 'notification'
+          AND entity_id = n.id
+          AND action LIKE 'notification.push.%'
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) push_log ON TRUE
+      WHERE u.email = '${SUBMITTER_EMAIL}'
+        AND '${EXPECTED_SUBMISSION_ID}' <> ''
+        AND n.payload->>'submissionId' = '${EXPECTED_SUBMISSION_ID}'
+      ORDER BY n.created_at DESC;
+    \""
+)"
 
 node_output="$(
   STATUS_JSON="${status_json}" \
   NOTIFICATIONS_JSON="${notifications_json}" \
   AUDIT_ROWS="${audit_rows}" \
+  EXPECTED_SUBMISSION_ROWS="${expected_submission_rows}" \
   SUBMITTER_EMAIL="${SUBMITTER_EMAIL}" \
   EXPECTED_SUBMISSION_ID="${EXPECTED_SUBMISSION_ID}" \
+  EXPECTED_EMAIL_REASON="${EXPECTED_EMAIL_REASON}" \
+  EXPECTED_PUSH_REASON="${EXPECTED_PUSH_REASON}" \
   node <<'NODE'
 const assert = require("node:assert/strict");
 
 const status = JSON.parse(process.env.STATUS_JSON);
 const notifications = JSON.parse(process.env.NOTIFICATIONS_JSON);
 const rawAuditRows = process.env.AUDIT_ROWS || "";
+const rawExpectedSubmissionRows = process.env.EXPECTED_SUBMISSION_ROWS || "";
 const submitterEmail = process.env.SUBMITTER_EMAIL;
 const expectedSubmissionId = process.env.EXPECTED_SUBMISSION_ID || "";
+const expectedEmailReason = process.env.EXPECTED_EMAIL_REASON || "";
+const expectedPushReason = process.env.EXPECTED_PUSH_REASON || "";
 
 assert.ok(status.email, "notification delivery status must include email state");
 assert.ok(status.push, "notification delivery status must include push state");
@@ -147,9 +190,24 @@ assert.ok(
 
 let expectedSubmissionNotifications = null;
 if (expectedSubmissionId) {
-  expectedSubmissionNotifications = notifications.items.filter(
-    (item) => item?.payload?.submissionId === expectedSubmissionId
-  );
+  expectedSubmissionNotifications = rawExpectedSubmissionRows
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((row) => {
+      const [notificationId, type, submissionId, emailReason, pushReason] =
+        row.split("|");
+
+      return {
+        id: notificationId,
+        type,
+        payload: {
+          submissionId
+        },
+        emailReason,
+        pushReason
+      };
+    });
 
   assert.ok(
     expectedSubmissionNotifications.length > 0,
@@ -167,6 +225,31 @@ if (expectedSubmissionId) {
     expectedTypes.has("submission_published"),
     `expected a submission_published notification for submission ${expectedSubmissionId}`
   );
+
+  const latestExpectedAudit = auditRows.find(
+    (row) =>
+      row.notificationId === expectedSubmissionNotifications[0]?.id ||
+      row.notificationId ===
+        expectedSubmissionNotifications[expectedSubmissionNotifications.length - 1]?.id
+  ) || null;
+
+  if (expectedEmailReason) {
+    assert.equal(
+      expectedSubmissionNotifications[0]?.emailReason ||
+        latestExpectedAudit?.emailReason,
+      expectedEmailReason,
+      `expected email reason ${expectedEmailReason} for submission ${expectedSubmissionId}`
+    );
+  }
+
+  if (expectedPushReason) {
+    assert.equal(
+      expectedSubmissionNotifications[0]?.pushReason ||
+        latestExpectedAudit?.pushReason,
+      expectedPushReason,
+      `expected push reason ${expectedPushReason} for submission ${expectedSubmissionId}`
+    );
+  }
 }
 
 console.log("Notification smoke passed.");

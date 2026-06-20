@@ -67,6 +67,877 @@ test("GET /app/readiness returns the injected readiness payload", async () => {
   }
 });
 
+test("GET /workflow-policies/clubs/:slug returns club and organization policy detail", async () => {
+  const queries = [];
+  const pool = {
+    async query(query, params) {
+      queries.push({ query, params });
+      return {
+        rows: [
+          {
+            clubId: "club-1",
+            clubSlug: "westside",
+            clubName: "Westside",
+            organizationId: "org-1",
+            organizationSlug: "metro",
+            organizationName: "Metro",
+            orgDefaultApproverRole: "team_manager",
+            orgPublicApproverRole: "club_comms",
+            orgMediumRiskApproverRole: "club_admin",
+            orgAllowAgentRouting: true,
+            orgAutoApproveInternalLowRisk: false,
+            orgAutoApproveMaxRisk: "0.35",
+            orgAutoApprovalRule: { allowedContentTypes: ["photo"] },
+            orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
+            orgPublishingRule: { mode: "org" },
+            orgNotificationRule: { email: true },
+            clubDefaultApproverRole: "club_admin",
+            clubPublicApproverRole: null,
+            clubMediumRiskApproverRole: null,
+            clubAllowAgentRouting: false,
+            clubAutoApproveInternalLowRisk: true,
+            clubAutoApproveMaxRisk: "0.20",
+            clubAutoApprovalRule: {},
+            clubRoutingRule: {},
+            clubPublishingRule: {},
+            clubNotificationRule: { push: true }
+          }
+        ]
+      };
+    }
+  };
+
+  const server = createAppServer({ pool });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/workflow-policies/clubs/westside`);
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.club.slug, "westside");
+    assert.equal(body.organization.slug, "metro");
+    assert.deepEqual(body.effectivePolicy.autoApprovalRule, {
+      allowedContentTypes: ["photo"]
+    });
+    assert.deepEqual(body.effectivePolicy.routingRule, {
+      contentTypeApprovers: { video: "club_admin" }
+    });
+    assert.deepEqual(body.effectivePolicy.publishingRule, { mode: "org" });
+    assert.deepEqual(body.clubPolicy.notificationRule, { push: true });
+    assert.match(queries[0].query, /FROM clubs c/);
+    assert.deepEqual(queries[0].params, ["westside"]);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("GET /workflow-policies/clubs/:slug/history returns recent policy changes", async () => {
+  const queries = [];
+  const pool = {
+    async query(query, params) {
+      queries.push({ query, params });
+
+      if (String(query).includes("FROM clubs c")) {
+        return {
+          rows: [
+            {
+              clubId: "club-1",
+              clubSlug: "westside",
+              clubName: "Westside",
+              organizationId: "org-1",
+              organizationSlug: "metro",
+              organizationName: "Metro",
+              orgDefaultApproverRole: "team_manager",
+              orgPublicApproverRole: "club_comms",
+              orgMediumRiskApproverRole: "club_admin",
+              orgAllowAgentRouting: true,
+              orgAutoApproveInternalLowRisk: false,
+              orgAutoApproveMaxRisk: "0.35",
+              orgAutoApprovalRule: {},
+              orgRoutingRule: {},
+              orgPublishingRule: {},
+              orgNotificationRule: {},
+              clubDefaultApproverRole: null,
+              clubPublicApproverRole: null,
+              clubMediumRiskApproverRole: null,
+              clubAllowAgentRouting: null,
+              clubAutoApproveInternalLowRisk: null,
+              clubAutoApproveMaxRisk: null,
+              clubAutoApprovalRule: {},
+              clubRoutingRule: {},
+              clubPublishingRule: {},
+              clubNotificationRule: {}
+            }
+          ]
+        };
+      }
+
+      if (String(query).includes("FROM audit_logs al")) {
+        return {
+          rows: [
+            {
+              action: "workflow_policy.updated",
+              createdAt: "2026-06-19T15:20:00.000Z",
+              actorEmail: "admin@example.test",
+              actorFullName: "Admin Example",
+              metadata: {
+                changedFields: ["approvalRule"]
+              }
+            }
+          ]
+        };
+      }
+
+      throw new Error(`Unexpected query: ${query}`);
+    }
+  };
+
+  const server = createAppServer({ pool });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/workflow-policies/clubs/westside/history`);
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.scopeType, "club");
+    assert.equal(body.scopeSlug, "westside");
+    assert.deepEqual(body.items, [
+      {
+        action: "workflow_policy.updated",
+        createdAt: "2026-06-19T15:20:00.000Z",
+        actorEmail: "admin@example.test",
+        actorFullName: "Admin Example",
+        metadata: {
+          changedFields: ["approvalRule"]
+        }
+      }
+    ]);
+    assert.equal(queries.length, 2);
+    assert.match(queries[1].query, /FROM audit_logs al/);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("POST /workflow-policies/clubs/:slug updates club policy through the workflow manager flow", async () => {
+  const calls = [];
+  const runInTransaction = async (fn) =>
+    fn({
+      async query(query, params = []) {
+        calls.push({ query, params });
+
+        if (String(query).includes("FROM clubs c")) {
+          if (!calls.some((entry) => String(entry.query).includes("INSERT INTO club_workflow_policies"))) {
+            return {
+              rows: [
+                {
+                  clubId: "club-1",
+                  clubSlug: "westside",
+                  clubName: "Westside",
+                  organizationId: "org-1",
+                  organizationSlug: "metro",
+                  organizationName: "Metro",
+                  orgDefaultApproverRole: "team_manager",
+                  orgPublicApproverRole: "club_comms",
+                  orgMediumRiskApproverRole: "club_comms",
+                  orgAllowAgentRouting: true,
+                  orgAutoApproveInternalLowRisk: false,
+                  orgAutoApproveMaxRisk: "0.35",
+                  orgAutoApprovalRule: { allowedContentTypes: ["photo"] },
+                  orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
+                  orgPublishingRule: { destinations: ["internal_feed"] },
+                  orgNotificationRule: { email: true },
+                  clubDefaultApproverRole: null,
+                  clubPublicApproverRole: null,
+                  clubMediumRiskApproverRole: null,
+                  clubAllowAgentRouting: null,
+                  clubAutoApproveInternalLowRisk: null,
+                  clubAutoApproveMaxRisk: null,
+                  clubAutoApprovalRule: {},
+                  clubRoutingRule: {},
+                  clubPublishingRule: {},
+                  clubNotificationRule: {}
+                }
+              ]
+            };
+          }
+
+          return {
+            rows: [
+              {
+                clubId: "club-1",
+                clubSlug: "westside",
+                clubName: "Westside",
+                organizationId: "org-1",
+                organizationSlug: "metro",
+                organizationName: "Metro",
+                orgDefaultApproverRole: "team_manager",
+                orgPublicApproverRole: "club_comms",
+                orgMediumRiskApproverRole: "club_comms",
+                orgAllowAgentRouting: true,
+                orgAutoApproveInternalLowRisk: false,
+                orgAutoApproveMaxRisk: "0.35",
+                orgAutoApprovalRule: { allowedContentTypes: ["photo"] },
+                orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
+                orgPublishingRule: {
+                  visibilityDestinations: {
+                    internal: ["internal_feed"],
+                    public: ["internal_feed"]
+                  }
+                },
+                orgNotificationRule: { email: true },
+                clubDefaultApproverRole: "club_admin",
+                clubPublicApproverRole: null,
+                clubMediumRiskApproverRole: null,
+                clubAllowAgentRouting: false,
+                clubAutoApproveInternalLowRisk: true,
+                clubAutoApproveMaxRisk: "0.15",
+                clubAutoApprovalRule: { blockedContentTypes: ["video"] },
+                clubRoutingRule: { contentTypeApprovers: { video: "team_manager" } },
+                clubPublishingRule: {},
+                clubNotificationRule: { push: true }
+              }
+            ]
+          };
+        }
+
+        if (String(query).includes("SELECT id, email FROM users")) {
+          return { rowCount: 1, rows: [{ id: "user-1", email: "admin@example.test" }] };
+        }
+
+        if (String(query).includes("FROM memberships")) {
+          return { rowCount: 1, rows: [{ role: "club_admin" }] };
+        }
+
+        if (String(query).includes("INSERT INTO club_workflow_policies")) {
+          return { rowCount: 1, rows: [] };
+        }
+
+        if (String(query).includes("INSERT INTO audit_logs")) {
+          return { rowCount: 1, rows: [] };
+        }
+
+        throw new Error(`Unexpected query: ${query}`);
+      }
+    });
+
+  const server = createAppServer({ runInTransaction });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/workflow-policies/clubs/westside`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        actorEmail: "admin@example.test",
+        defaultApproverRole: "club_admin",
+        allowAgentRouting: false,
+        autoApproveInternalLowRisk: true,
+        autoApproveMaxRisk: 0.15,
+        autoApprovalRule: { blockedContentTypes: ["video"] },
+        routingRule: { contentTypeApprovers: { video: "team_manager" } },
+        notificationRule: { push: true },
+        historyContext: {
+          overrideSnapshot: {
+            liveOverrideCount: 0,
+            previewOverrideCount: 7,
+            changedAreas: [
+              "Default Approver",
+              "Agent Routing",
+              "Low-risk Internal Auto-approval",
+              "Auto-approve Max Risk",
+              "Auto-approval Rule",
+              "Routing Rule",
+              "Notification Rule"
+            ],
+            addedAreas: [
+              "Default Approver",
+              "Agent Routing",
+              "Low-risk Internal Auto-approval",
+              "Auto-approve Max Risk",
+              "Auto-approval Rule",
+              "Routing Rule",
+              "Notification Rule"
+            ],
+            removedAreas: [],
+            retainedAreas: []
+          }
+        }
+      })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.clubPolicy.defaultApproverRole, "club_admin");
+    assert.equal(body.effectivePolicy.allowAgentRouting, false);
+    assert.deepEqual(body.effectivePolicy.autoApprovalRule, {
+      blockedContentTypes: ["video"]
+    });
+    assert.deepEqual(body.clubPolicy.routingRule, {
+      contentTypeApprovers: { video: "team_manager" }
+    });
+    assert.deepEqual(body.effectivePolicy.publishingRule, {
+      visibilityDestinations: {
+        internal: ["internal_feed"],
+        public: ["internal_feed"]
+      }
+    });
+
+    const upsert = calls.find(({ query }) =>
+      String(query).includes("INSERT INTO club_workflow_policies")
+    );
+    const auditInsert = calls.find(({ query }) =>
+      String(query).includes("INSERT INTO audit_logs")
+    );
+    assert.ok(upsert);
+    assert.ok(auditInsert);
+    assert.equal(upsert.params[1], "club_admin");
+    assert.equal(upsert.params[4], false);
+    assert.equal(upsert.params[5], true);
+    assert.equal(upsert.params[6], 0.15);
+    assert.equal(
+      upsert.params[7],
+      JSON.stringify({ blockedContentTypes: ["video"] })
+    );
+    assert.equal(
+      upsert.params[8],
+      JSON.stringify({ contentTypeApprovers: { video: "team_manager" } })
+    );
+    const clubAuditMetadata = JSON.parse(auditInsert.params[2]);
+    assert.deepEqual(clubAuditMetadata.changedFields, [
+      "defaultApproverRole",
+      "allowAgentRouting",
+      "autoApproveInternalLowRisk",
+      "autoApproveMaxRisk",
+      "autoApprovalRule",
+      "routingRule",
+      "notificationRule"
+    ]);
+    assert.deepEqual(clubAuditMetadata.changedFieldDetails, [
+      {
+        field: "defaultApproverRole",
+        previousValue: null,
+        nextValue: "club_admin"
+      },
+      {
+        field: "allowAgentRouting",
+        previousValue: null,
+        nextValue: false
+      },
+      {
+        field: "autoApproveInternalLowRisk",
+        previousValue: null,
+        nextValue: true
+      },
+      {
+        field: "autoApproveMaxRisk",
+        previousValue: null,
+        nextValue: 0.15
+      },
+      {
+        field: "autoApprovalRule",
+        previousValue: null,
+        nextValue: { blockedContentTypes: ["video"] }
+      },
+      {
+        field: "routingRule",
+        previousValue: null,
+        nextValue: { contentTypeApprovers: { video: "team_manager" } }
+      },
+      {
+        field: "notificationRule",
+        previousValue: null,
+        nextValue: { push: true }
+      }
+    ]);
+    assert.deepEqual(clubAuditMetadata.overrideSnapshot, {
+      liveOverrideCount: 0,
+      previewOverrideCount: 7,
+      changedAreas: [
+        "Default Approver",
+        "Agent Routing",
+        "Low-risk Internal Auto-approval",
+        "Auto-approve Max Risk",
+        "Auto-approval Rule",
+        "Routing Rule",
+        "Notification Rule"
+      ],
+      addedAreas: [
+        "Default Approver",
+        "Agent Routing",
+        "Low-risk Internal Auto-approval",
+        "Auto-approve Max Risk",
+        "Auto-approval Rule",
+        "Routing Rule",
+        "Notification Rule"
+      ],
+      removedAreas: [],
+      retainedAreas: []
+    });
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("GET /workflow-policies/organizations/:slug returns organization policy detail", async () => {
+  const queries = [];
+  const pool = {
+    async query(query, params) {
+      queries.push({ query, params });
+      return {
+        rows: [
+          {
+            organizationId: "org-1",
+            organizationSlug: "metro",
+            organizationName: "Metro Sports",
+            orgDefaultApproverRole: "team_manager",
+            orgPublicApproverRole: "club_comms",
+            orgMediumRiskApproverRole: "club_admin",
+            orgAllowAgentRouting: true,
+            orgAutoApproveInternalLowRisk: false,
+            orgAutoApproveMaxRisk: "0.35",
+            orgAutoApprovalRule: { allowedContentTypes: ["photo"] },
+            orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
+            orgPublishingRule: { destinations: ["internal_feed"] },
+            orgNotificationRule: { email: true }
+          }
+        ]
+      };
+    }
+  };
+
+  const server = createAppServer({ pool });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/workflow-policies/organizations/metro`);
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.organization.slug, "metro");
+    assert.equal(body.organizationPolicy.mediumRiskApproverRole, "club_admin");
+    assert.deepEqual(body.organizationPolicy.autoApprovalRule, {
+      allowedContentTypes: ["photo"]
+    });
+    assert.deepEqual(body.organizationPolicy.routingRule, {
+      contentTypeApprovers: { video: "club_admin" }
+    });
+    assert.deepEqual(body.organizationPolicy.publishingRule, {
+      destinations: ["internal_feed"]
+    });
+    assert.match(queries[0].query, /FROM organizations o/);
+    assert.deepEqual(queries[0].params, ["metro"]);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("GET /organizations/:slug returns organization directory detail", async () => {
+  const queries = [];
+  const pool = {
+    async query(query, params) {
+      queries.push({ query, params });
+
+      if (String(query).includes("FROM organizations o")) {
+        return {
+          rows: [
+            {
+              organizationId: "org-1",
+              organizationSlug: "metro",
+              organizationName: "Metro Sports",
+              orgDefaultApproverRole: "team_manager",
+              orgPublicApproverRole: "club_comms",
+              orgMediumRiskApproverRole: "club_admin",
+              orgAllowAgentRouting: true,
+              orgAutoApproveInternalLowRisk: false,
+              orgAutoApproveMaxRisk: "0.35",
+              orgAutoApprovalRule: {},
+              orgRoutingRule: {},
+              orgPublishingRule: {},
+              orgNotificationRule: {}
+            }
+          ]
+        };
+      }
+
+      if (String(query).includes("FROM clubs")) {
+        return {
+          rows: [
+            {
+              id: "club-1",
+              slug: "westside",
+              name: "Westside",
+              clubDefaultApproverRole: "club_admin",
+              clubPublicApproverRole: null,
+              clubMediumRiskApproverRole: null,
+              clubAllowAgentRouting: false,
+              clubAutoApproveInternalLowRisk: null,
+              clubAutoApproveMaxRisk: null,
+              clubAutoApprovalRule: {},
+              clubRoutingRule: {},
+              clubApprovalRule: {},
+              clubPublishingRule: {},
+              clubNotificationRule: {}
+            }
+          ]
+        };
+      }
+
+      if (String(query).includes("FROM organization_memberships")) {
+        return {
+          rows: [
+            {
+              role: "organization_admin",
+              email: "org-admin@example.test",
+              fullName: "Org Admin"
+            }
+          ]
+        };
+      }
+
+      throw new Error(`Unexpected query: ${query}`);
+    }
+  };
+
+  const server = createAppServer({ pool });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/organizations/metro`);
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.organization.slug, "metro");
+    assert.equal(body.clubs[0].slug, "westside");
+    assert.equal(body.clubs[0].overrideSummary.overrideCount, 2);
+    assert.deepEqual(body.clubs[0].overrideSummary.overriddenFields, [
+      "Default approver",
+      "Agent routing"
+    ]);
+    assert.equal(body.admins[0].role, "organization_admin");
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("POST /workflow-policies/organizations/:slug updates organization policy through the workflow manager flow", async () => {
+  const calls = [];
+  const runInTransaction = async (fn) =>
+    fn({
+      async query(query, params = []) {
+        calls.push({ query, params });
+
+        if (String(query).includes("FROM organizations o")) {
+          if (!calls.some((entry) => String(entry.query).includes("INSERT INTO organization_workflow_policies"))) {
+            return {
+              rows: [
+                {
+                  organizationId: "org-1",
+                  organizationSlug: "metro",
+                  organizationName: "Metro Sports",
+                  orgDefaultApproverRole: "team_manager",
+                  orgPublicApproverRole: "club_comms",
+                  orgMediumRiskApproverRole: "club_comms",
+                  orgAllowAgentRouting: true,
+                  orgAutoApproveInternalLowRisk: false,
+                  orgAutoApproveMaxRisk: "0.35",
+                  orgAutoApprovalRule: {},
+                  orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
+                  orgPublishingRule: { destinations: ["internal_feed"] },
+                  orgNotificationRule: { email: true }
+                }
+              ]
+            };
+          }
+
+          return {
+            rows: [
+              {
+                organizationId: "org-1",
+                organizationSlug: "metro",
+                organizationName: "Metro Sports",
+                orgDefaultApproverRole: "club_admin",
+                orgPublicApproverRole: "club_comms",
+                orgMediumRiskApproverRole: "club_comms",
+                orgAllowAgentRouting: false,
+                orgAutoApproveInternalLowRisk: true,
+                orgAutoApproveMaxRisk: "0.20",
+                orgAutoApprovalRule: { allowedContentTypes: ["photo"] },
+                orgRoutingRule: { contentTypeApprovers: { video: "club_admin" } },
+                orgPublishingRule: {
+                  visibilityDestinations: {
+                    internal: ["internal_feed"],
+                    public: ["internal_feed"]
+                  }
+                },
+                orgNotificationRule: { email: true, push: false }
+              }
+            ]
+          };
+        }
+
+        if (String(query).includes("SELECT id, email FROM users")) {
+          return { rowCount: 1, rows: [{ id: "user-1", email: "admin@example.test" }] };
+        }
+
+        if (String(query).includes("FROM organization_memberships")) {
+          return { rowCount: 1, rows: [{ role: "organization_admin" }] };
+        }
+
+        if (String(query).includes("INSERT INTO organization_workflow_policies")) {
+          return { rowCount: 1, rows: [] };
+        }
+
+        if (String(query).includes("INSERT INTO audit_logs")) {
+          return { rowCount: 1, rows: [] };
+        }
+
+        throw new Error(`Unexpected query: ${query}`);
+      }
+    });
+
+  const server = createAppServer({ runInTransaction });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/workflow-policies/organizations/metro`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        actorEmail: "admin@example.test",
+        defaultApproverRole: "club_admin",
+        allowAgentRouting: false,
+        autoApproveInternalLowRisk: true,
+        autoApproveMaxRisk: 0.2,
+        autoApprovalRule: { allowedContentTypes: ["photo"] },
+        routingRule: { contentTypeApprovers: { video: "club_admin" } },
+        publishingRule: {
+          visibilityDestinations: {
+            internal: ["internal_feed"],
+            public: ["internal_feed"]
+          }
+        },
+        notificationRule: { email: true, push: false },
+        historyContext: {
+          cleanupSummary: {
+            areaKey: "notificationRule",
+            clubs: [
+              { slug: "eastside", name: "Eastside" },
+              { slug: "westside", name: "Westside" }
+            ]
+          },
+          rolloutSnapshot: {
+            inheritingClubs: [
+              {
+                slug: "westside",
+                name: "Westside",
+                areas: ["Default Approver", "Notification Rule"]
+              }
+            ],
+            insulatedClubs: [
+              {
+                slug: "eastside",
+                name: "Eastside",
+                areas: ["Notification Rule"]
+              }
+            ]
+          },
+          simulationTrace: {
+            scenario: {
+              contentType: "photo",
+              visibilityTarget: "internal",
+              riskScore: 0.19,
+              moderationFlagged: true,
+              agentSuggestedApproverRole: "club_admin"
+            },
+            changedRows: [
+              {
+                key: "publishedEmail",
+                label: "Published email",
+                before: "Enabled",
+                after: "Disabled (Policy Disabled)"
+              }
+            ]
+          }
+        }
+      })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.organizationPolicy.defaultApproverRole, "club_admin");
+    assert.equal(body.organizationPolicy.allowAgentRouting, false);
+    assert.deepEqual(body.organizationPolicy.autoApprovalRule, {
+      allowedContentTypes: ["photo"]
+    });
+    assert.deepEqual(body.organizationPolicy.routingRule, {
+      contentTypeApprovers: { video: "club_admin" }
+    });
+    assert.deepEqual(body.organizationPolicy.publishingRule, {
+      visibilityDestinations: {
+        internal: ["internal_feed"],
+        public: ["internal_feed"]
+      }
+    });
+
+    const upsert = calls.find(({ query }) =>
+      String(query).includes("INSERT INTO organization_workflow_policies")
+    );
+    const auditInsert = calls.find(({ query }) =>
+      String(query).includes("INSERT INTO audit_logs")
+    );
+    assert.ok(upsert);
+    assert.ok(auditInsert);
+    assert.equal(upsert.params[1], "club_admin");
+    assert.equal(upsert.params[4], false);
+    assert.equal(upsert.params[5], true);
+    assert.equal(upsert.params[6], 0.2);
+    assert.equal(
+      upsert.params[7],
+      JSON.stringify({ allowedContentTypes: ["photo"] })
+    );
+    assert.equal(
+      upsert.params[8],
+      JSON.stringify({ contentTypeApprovers: { video: "club_admin" } })
+    );
+    assert.equal(
+      upsert.params[10],
+      JSON.stringify({
+        visibilityDestinations: {
+          internal: ["internal_feed"],
+          public: ["internal_feed"]
+        }
+      })
+    );
+    const organizationAuditMetadata = JSON.parse(auditInsert.params[2]);
+    assert.deepEqual(organizationAuditMetadata.changedFields, [
+      "defaultApproverRole",
+      "allowAgentRouting",
+      "autoApproveInternalLowRisk",
+      "autoApproveMaxRisk",
+      "autoApprovalRule",
+      "publishingRule",
+      "notificationRule"
+    ]);
+    assert.deepEqual(organizationAuditMetadata.changedFieldDetails, [
+      {
+        field: "defaultApproverRole",
+        previousValue: "team_manager",
+        nextValue: "club_admin"
+      },
+      {
+        field: "allowAgentRouting",
+        previousValue: true,
+        nextValue: false
+      },
+      {
+        field: "autoApproveInternalLowRisk",
+        previousValue: false,
+        nextValue: true
+      },
+      {
+        field: "autoApproveMaxRisk",
+        previousValue: 0.35,
+        nextValue: 0.2
+      },
+      {
+        field: "autoApprovalRule",
+        previousValue: {},
+        nextValue: { allowedContentTypes: ["photo"] }
+      },
+      {
+        field: "publishingRule",
+        previousValue: { destinations: ["internal_feed"] },
+        nextValue: {
+          visibilityDestinations: {
+            internal: ["internal_feed"],
+            public: ["internal_feed"]
+          }
+        }
+      },
+      {
+        field: "notificationRule",
+        previousValue: { email: true },
+        nextValue: { email: true, push: false }
+      }
+    ]);
+    assert.deepEqual(organizationAuditMetadata.cleanupSummary, {
+      areaKey: "notificationRule",
+      clubs: [
+        { slug: "eastside", name: "Eastside" },
+        { slug: "westside", name: "Westside" }
+      ]
+    });
+    assert.deepEqual(organizationAuditMetadata.rolloutSnapshot, {
+      inheritingClubs: [
+        {
+          slug: "westside",
+          name: "Westside",
+          areas: ["Default Approver", "Notification Rule"]
+        }
+      ],
+      insulatedClubs: [
+        {
+          slug: "eastside",
+          name: "Eastside",
+          areas: ["Notification Rule"]
+        }
+      ]
+    });
+    assert.deepEqual(organizationAuditMetadata.simulationTrace, {
+      scenario: {
+        contentType: "photo",
+        visibilityTarget: "internal",
+        riskScore: 0.19,
+        moderationFlagged: true,
+        agentSuggestedApproverRole: "club_admin"
+      },
+      changedRows: [
+        {
+          key: "publishedEmail",
+          label: "Published email",
+          before: "Enabled",
+          after: "Disabled (Policy Disabled)"
+        }
+      ]
+    });
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
 test("GET /missing returns not found", async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/missing`);
@@ -789,7 +1660,9 @@ test("POST /approval-requests/:id/actions approves and enqueues the approved eve
     assert.deepEqual(body, {
       approvalRequestId: "approval-1",
       submissionId: "submission-1",
-      action: "approve"
+      action: "approve",
+      stage: "primary",
+      nextStage: null
     });
     assert.deepEqual(approvalActorCalls, [
       {
@@ -803,6 +1676,323 @@ test("POST /approval-requests/:id/actions approves and enqueues the approved eve
     assert.match(calls[2].query, /UPDATE submissions/);
     assert.match(calls[3].query, /INSERT INTO submission_events/);
     assert.match(calls[4].query, /INSERT INTO audit_logs/);
+    assert.equal(notificationCalled, false);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("POST /approval-requests/:id/actions applies club notification policy to submitter updates", async () => {
+  const approvalActorCalls = [];
+  const notificationCalls = [];
+  const approvalActionRunInTransaction = async (fn) =>
+    fn({
+      async query(query, params) {
+        if (String(query).includes("WHERE c.id = $1")) {
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                clubId: "club-1",
+                clubSlug: "westside",
+                clubName: "Westside",
+                organizationId: "org-1",
+                organizationSlug: "metro",
+                organizationName: "Metro",
+                orgDefaultApproverRole: "team_manager",
+                orgPublicApproverRole: "club_comms",
+                orgMediumRiskApproverRole: "club_admin",
+                orgAllowAgentRouting: true,
+                orgAutoApproveInternalLowRisk: false,
+                orgAutoApproveMaxRisk: "0.35",
+                orgPublishingRule: {},
+                orgNotificationRule: { email: true, push: true },
+                clubDefaultApproverRole: null,
+                clubPublicApproverRole: null,
+                clubMediumRiskApproverRole: null,
+                clubAllowAgentRouting: null,
+                clubAutoApproveInternalLowRisk: null,
+                clubAutoApproveMaxRisk: null,
+                clubPublishingRule: {},
+                clubNotificationRule: { email: false, push: false }
+              }
+            ]
+          };
+        }
+
+        return { rowCount: 1, rows: [] };
+      }
+    });
+
+  const loadApprovalActor = async (_client, approvalRequestId, actedByEmail) => {
+    approvalActorCalls.push({ approvalRequestId, actedByEmail });
+    return {
+      found: true,
+      authorized: true,
+      actor: { id: "user-1" },
+      approvalRequest: {
+        submission_id: "submission-1",
+        submitted_by_user_id: "submitter-1",
+        club_id: "club-1"
+      }
+    };
+  };
+
+  const deliverNotification = async (_client, payload) => {
+    notificationCalls.push(payload);
+  };
+
+  const server = createAppServer({
+    approvalActionRunInTransaction,
+    loadApprovalActor,
+    deliverNotification
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/approval-requests/approval-1/actions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "request_changes",
+        actedByEmail: "reviewer@example.test",
+        notes: "Please remove player names."
+      })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      approvalRequestId: "approval-1",
+      submissionId: "submission-1",
+      action: "request_changes",
+      stage: "primary",
+      nextStage: null
+    });
+    assert.deepEqual(approvalActorCalls, [
+      {
+        approvalRequestId: "approval-1",
+        actedByEmail: "reviewer@example.test"
+      }
+    ]);
+    assert.equal(notificationCalls.length, 1);
+    assert.deepEqual(notificationCalls[0].notificationPolicy, {
+      email: false,
+      push: false
+    });
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("POST /approval-requests/:id/actions creates a secondary approval for public submissions when policy requires it", async () => {
+  const calls = [];
+  const approvalActorCalls = [];
+  const approvalRuleCalls = [];
+  const approvalActionRunInTransaction = async (fn) =>
+    fn({
+      async query(query, params = []) {
+        calls.push({ query: String(query), params });
+
+        if (String(query).includes("FROM memberships")) {
+          return {
+            rowCount: 1,
+            rows: [{ id: "user-2", role: "club_admin" }]
+          };
+        }
+
+        return { rowCount: 1, rows: [] };
+      }
+    });
+
+  const loadApprovalActor = async (_client, approvalRequestId, actedByEmail) => {
+    approvalActorCalls.push({ approvalRequestId, actedByEmail });
+    return {
+      found: true,
+      authorized: true,
+      actor: { id: "user-1" },
+      approvalRequest: {
+        submission_id: "submission-2",
+        submitted_by_user_id: "submitter-2",
+        club_id: "club-1",
+        team_id: null,
+        content_type: "video",
+        visibility_target: "public",
+        stage: "primary"
+      }
+    };
+  };
+
+  const loadApprovalRuleForClubId = async (_client, clubId) => {
+    approvalRuleCalls.push(clubId);
+    return {
+      requireSecondApprovalForPublic: true,
+      secondApproverRole: "club_admin",
+      secondApprovalContentTypes: ["video"]
+    };
+  };
+
+  let notificationCalled = false;
+  const deliverNotification = async () => {
+    notificationCalled = true;
+  };
+
+  const server = createAppServer({
+    approvalActionRunInTransaction,
+    loadApprovalActor,
+    loadApprovalRuleForClubId,
+    deliverNotification
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/approval-requests/approval-2/actions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "approve",
+        actedByEmail: "reviewer@example.test",
+        notes: "Primary approval complete"
+      })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      approvalRequestId: "approval-2",
+      submissionId: "submission-2",
+      action: "approve",
+      stage: "primary",
+      nextStage: "secondary"
+    });
+    assert.deepEqual(approvalActorCalls, [
+      {
+        approvalRequestId: "approval-2",
+        actedByEmail: "reviewer@example.test"
+      }
+    ]);
+    assert.deepEqual(approvalRuleCalls, ["club-1"]);
+
+    const submissionUpdate = calls.find(({ query }) =>
+      query.includes("UPDATE submissions")
+    );
+    assert.equal(submissionUpdate.params[1], "needs_human_review");
+
+    const secondaryInsert = calls.find(({ query }) =>
+      query.includes("INSERT INTO approval_requests")
+    );
+    assert.ok(secondaryInsert);
+    assert.deepEqual(secondaryInsert.params, [
+      "submission-2",
+      "user-2",
+      "club_admin"
+    ]);
+
+    const secondaryEvent = calls.find(
+      ({ query, params }) =>
+        query.includes("INSERT INTO submission_events") &&
+        params[1] === "submission.approval.requested"
+    );
+    assert.deepEqual(JSON.parse(secondaryEvent.params[2]), {
+      stage: "secondary",
+      approverRole: "club_admin",
+      originallyRequestedRole: "club_admin",
+      previousApprovalRequestId: "approval-2"
+    });
+    assert.equal(notificationCalled, false);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("POST /approval-requests/:id/actions skips secondary approval when the public content type is not covered", async () => {
+  const calls = [];
+  const approvalActionRunInTransaction = async (fn) =>
+    fn({
+      async query(query, params = []) {
+        calls.push({ query: String(query), params });
+        return { rowCount: 1, rows: [] };
+      }
+    });
+
+  const loadApprovalActor = async () => ({
+    found: true,
+    authorized: true,
+    actor: { id: "user-1" },
+    approvalRequest: {
+      submission_id: "submission-3",
+      submitted_by_user_id: "submitter-3",
+      club_id: "club-1",
+      team_id: null,
+      content_type: "photo",
+      visibility_target: "public",
+      stage: "primary"
+    }
+  });
+
+  const loadApprovalRuleForClubId = async () => ({
+    requireSecondApprovalForPublic: true,
+    secondApproverRole: "club_admin",
+    secondApprovalContentTypes: ["video"]
+  });
+
+  let notificationCalled = false;
+  const deliverNotification = async () => {
+    notificationCalled = true;
+  };
+
+  const server = createAppServer({
+    approvalActionRunInTransaction,
+    loadApprovalActor,
+    loadApprovalRuleForClubId,
+    deliverNotification
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/approval-requests/approval-3/actions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "approve",
+        actedByEmail: "reviewer@example.test",
+        notes: "Photo can publish after primary approval"
+      })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      approvalRequestId: "approval-3",
+      submissionId: "submission-3",
+      action: "approve",
+      stage: "primary",
+      nextStage: null
+    });
+
+    const submissionUpdate = calls.find(({ query }) =>
+      query.includes("UPDATE submissions")
+    );
+    assert.equal(submissionUpdate.params[1], "approved_internal");
+    assert.equal(
+      calls.some(({ query }) => query.includes("INSERT INTO approval_requests")),
+      false
+    );
     assert.equal(notificationCalled, false);
   } finally {
     server.close();

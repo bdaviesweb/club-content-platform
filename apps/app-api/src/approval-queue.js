@@ -2,6 +2,7 @@ const approvalQueueQuery = `
   SELECT
     ar.id,
     ar.state,
+    ar.stage,
     ar.created_at,
     s.id AS submission_id,
     s.status AS submission_status,

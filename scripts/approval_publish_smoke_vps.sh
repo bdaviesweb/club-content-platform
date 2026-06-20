@@ -4,9 +4,12 @@ set -euo pipefail
 REMOTE_HOST="${REMOTE_HOST:-hermes-dev}"
 REMOTE_DIR="${REMOTE_DIR:-/srv/repos/projects/club-content-platform}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.vps.yml}"
+ORGANIZATION_SLUG="${ORGANIZATION_SLUG:-demo-sports-org}"
 CLUB_SLUG="${CLUB_SLUG:-demo-soccer-club}"
 TEAM_SLUG="${TEAM_SLUG:-u14-girls}"
 SUBMITTER_EMAIL="${SUBMITTER_EMAIL:-coach@demo-club.local}"
+ORGANIZATION_ADMIN_EMAIL="${ORGANIZATION_ADMIN_EMAIL:-org-admin@demo-club.local}"
+CLUB_ADMIN_EMAIL="${CLUB_ADMIN_EMAIL:-comms@demo-club.local}"
 REVIEWER_EMAIL="${REVIEWER_EMAIL:-comms@demo-club.local}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-300}"
 POLL_SECONDS="${POLL_SECONDS:-3}"
@@ -34,12 +37,15 @@ if [[ "${CLUB_CONTENT_SMOKE_ON_VPS:-0}" != "1" ]]; then
   if [[ "${current_dir}" != "${REMOTE_DIR}" || ! -f "${COMPOSE_FILE}" ]]; then
     remote_dir_quoted="$(shell_quote "${REMOTE_DIR}")"
     remote_command=$(
-      printf "cd %s && CLUB_CONTENT_SMOKE_ON_VPS=1 COMPOSE_FILE=%s CLUB_SLUG=%s TEAM_SLUG=%s SUBMITTER_EMAIL=%s REVIEWER_EMAIL=%s TIMEOUT_SECONDS=%s POLL_SECONDS=%s SMOKE_MARKER=%s bash -s" \
+      printf "cd %s && CLUB_CONTENT_SMOKE_ON_VPS=1 COMPOSE_FILE=%s ORGANIZATION_SLUG=%s CLUB_SLUG=%s TEAM_SLUG=%s SUBMITTER_EMAIL=%s ORGANIZATION_ADMIN_EMAIL=%s CLUB_ADMIN_EMAIL=%s REVIEWER_EMAIL=%s TIMEOUT_SECONDS=%s POLL_SECONDS=%s SMOKE_MARKER=%s bash -s" \
         "${remote_dir_quoted}" \
         "$(shell_quote "${COMPOSE_FILE}")" \
+        "$(shell_quote "${ORGANIZATION_SLUG}")" \
         "$(shell_quote "${CLUB_SLUG}")" \
         "$(shell_quote "${TEAM_SLUG}")" \
         "$(shell_quote "${SUBMITTER_EMAIL}")" \
+        "$(shell_quote "${ORGANIZATION_ADMIN_EMAIL}")" \
+        "$(shell_quote "${CLUB_ADMIN_EMAIL}")" \
         "$(shell_quote "${REVIEWER_EMAIL}")" \
         "$(shell_quote "${TIMEOUT_SECONDS}")" \
         "$(shell_quote "${POLL_SECONDS}")" \
@@ -63,6 +69,24 @@ query_one() {
 echo "Checking API health..."
 curl -fsS http://localhost:4000/health
 echo
+
+echo "Applying club override for manual review smoke..."
+curl -fsS \
+  -H "content-type: application/json" \
+  -d '{"actorEmail":"'"${REVIEWER_EMAIL}"'","autoApproveInternalLowRisk":false,"autoApproveMaxRisk":0.35,"autoApprovalRule":{}}' \
+  "http://localhost:4000/workflow-policies/clubs/${CLUB_SLUG}" >/dev/null
+
+echo "Applying organization visibility publish rule for internal content..."
+curl -fsS \
+  -H "content-type: application/json" \
+  -d '{"actorEmail":"'"${ORGANIZATION_ADMIN_EMAIL}"'","publishingRule":{"visibilityDestinations":{"internal":["internal_feed"],"public":["internal_feed"]}}}' \
+  "http://localhost:4000/workflow-policies/organizations/${ORGANIZATION_SLUG}" >/dev/null
+
+echo "Clearing club publishing override so the organization publish rule is authoritative..."
+curl -fsS \
+  -H "content-type: application/json" \
+  -d '{"actorEmail":"'"${CLUB_ADMIN_EMAIL}"'","publishingRule":null}' \
+  "http://localhost:4000/workflow-policies/clubs/${CLUB_SLUG}" >/dev/null
 
 initial_queue_rows="$(query_one "
   SELECT
@@ -220,6 +244,14 @@ while (( SECONDS < deadline )); do
 
   if [[ "${status}" == "published" && "${approval_state}" == "approved" && "${publish_state}" == "succeeded" && -n "${external_post_id}" ]]; then
     detail_json="$(curl -fsS "http://localhost:4000/submissions/${submission_id}")"
+    published_event_payload="$(query_one "
+      SELECT COALESCE(payload::text, '')
+      FROM submission_events
+      WHERE submission_id = '${submission_id}'
+        AND event_name = 'submission.published'
+      ORDER BY created_at DESC
+      LIMIT 1;
+    ")"
     DETAIL_JSON="${detail_json}" SUBMISSION_ID="${submission_id}" EXTERNAL_POST_ID="${external_post_id}" node <<'NODE'
 const assert = require("node:assert/strict");
 
@@ -239,6 +271,35 @@ assert.equal(detail.latestApprovalRequest?.state, "approved", "Approval request 
 assert.ok(detail.routing_decision?.reviewMode, "Routing decision review mode missing");
 assert.ok(detail.routing_decision?.routingSource, "Routing decision source missing");
 NODE
+    PUBLISHED_EVENT_PAYLOAD="${published_event_payload}" node <<'NODE'
+const assert = require("node:assert/strict");
+
+const payload = JSON.parse(process.env.PUBLISHED_EVENT_PAYLOAD || "{}");
+
+assert.equal(typeof payload.destinationCount, "number", "Published event destinationCount missing");
+assert.ok(payload.destinationCount >= 1, "Published event destinationCount must be at least 1");
+assert.ok(Array.isArray(payload.destinations), "Published event destinations missing");
+assert.equal(
+  payload.destinations.length,
+  payload.destinationCount,
+  "Published event destination count mismatch"
+);
+assert.equal(
+  payload.policySource,
+  "publishing_rule_visibility_internal",
+  "Published event policy source mismatch"
+);
+assert.equal(
+  payload.destinations[0]?.destinationType,
+  payload.destinationType,
+  "Primary destination type mismatch"
+);
+assert.equal(
+  payload.destinations[0]?.destinationName,
+  payload.destinationName,
+  "Primary destination name mismatch"
+);
+NODE
 
     echo "Approval publish smoke passed."
     echo "submission_id=${submission_id}"
@@ -255,6 +316,14 @@ const detail = JSON.parse(line);
 console.log(`detail_destination=${detail.publishedPost.destinationName}`);
 console.log(`detail_routing_source=${detail.routing_decision.routingSource}`);
 console.log(`detail_review_mode=${detail.routing_decision.reviewMode}`);
+'
+    echo "published_event_destination_count=${published_event_payload}" | node -e '
+const fs = require("node:fs");
+const line = fs.readFileSync(0, "utf8").trim().replace(/^published_event_destination_count=/, "");
+const payload = JSON.parse(line);
+console.log(`published_event_destination_count=${payload.destinationCount}`);
+console.log(`published_event_primary_type=${payload.destinationType}`);
+console.log(`published_event_policy_source=${payload.policySource}`);
 '
     final_queue_count=$(query_one "
       SELECT COUNT(*)

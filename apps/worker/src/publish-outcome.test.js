@@ -31,12 +31,33 @@ test("builds a stable publish failure event payload", () => {
 test("builds published event payloads from publish results", () => {
   assert.deepEqual(
     buildPublishedEventPayload({
-      destinationType: "internal_feed",
-      destinationName: "Internal Club Feed"
+      policySource: "publishing_rule_visibility_public",
+      results: [
+        {
+          destinationType: "internal_feed",
+          destinationName: "Internal Club Feed"
+        },
+        {
+          destinationType: "booster_email",
+          destinationName: "Booster Email"
+        }
+      ]
     }),
     {
+      policySource: "publishing_rule_visibility_public",
       destinationType: "internal_feed",
-      destinationName: "Internal Club Feed"
+      destinationName: "Internal Club Feed",
+      destinationCount: 2,
+      destinations: [
+        {
+          destinationType: "internal_feed",
+          destinationName: "Internal Club Feed"
+        },
+        {
+          destinationType: "booster_email",
+          destinationName: "Booster Email"
+        }
+      ]
     }
   );
 });
@@ -46,15 +67,36 @@ test("builds published notification payloads from publish results", () => {
     buildPublishedNotificationPayload({
       submissionId: "submission-1",
       result: {
-        destinationType: "internal_feed",
-        destinationName: "Internal Club Feed"
+        policySource: "publishing_rule_visibility_public",
+        results: [
+          {
+            destinationType: "internal_feed",
+            destinationName: "Internal Club Feed"
+          },
+          {
+            destinationType: "booster_email",
+            destinationName: "Booster Email"
+          }
+        ]
       }
     }),
     {
       submissionId: "submission-1",
       status: "published",
+      policySource: "publishing_rule_visibility_public",
       destinationType: "internal_feed",
-      destinationName: "Internal Club Feed"
+      destinationName: "Internal Club Feed",
+      destinationCount: 2,
+      destinations: [
+        {
+          destinationType: "internal_feed",
+          destinationName: "Internal Club Feed"
+        },
+        {
+          destinationType: "booster_email",
+          destinationName: "Booster Email"
+        }
+      ]
     }
   );
 });
