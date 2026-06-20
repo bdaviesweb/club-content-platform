@@ -77,6 +77,10 @@ PILOT_SCENARIOS=review_publish,auto_approval_override npm run pilot:vps
 Recommended simulated-pilot command set:
 
 ```bash
+npm run pilot:profiles
+```
+
+```bash
 npm run pilot:profile -- real-club-name
 ```
 
@@ -119,6 +123,7 @@ Use this checklist when setting up the first real club or when rehearsing with t
 9. For the current simulator, use [pilot-onboarding-north-river-youth-sports.md](/Users/robertdavies/Documents/Codex/club-content/docs/pilot-onboarding-north-river-youth-sports.md) as the reference packet.
 10. For a real candidate later, run `npm run pilot:profile -- <candidate>` to scaffold `config/pilot-candidates/<candidate>.local.env`.
 11. Run `bash scripts/validate_pilot_candidate_profile.sh <path-or-profile>` before the first hosted audit.
+12. Use `npm run pilot:profiles` to see available profiles and whether they are template, committed, or local.
 
 ## QA Checklist
 
