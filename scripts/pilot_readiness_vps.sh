@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${script_dir}/load_pilot_candidate_env.sh" "${PILOT_CANDIDATE_PROFILE:-}"
+
 SCENARIOS_INPUT="${PILOT_SCENARIOS:-review_publish,auto_approval_override,approval_override,notification_override}"
 DRY_RUN="${DRY_RUN:-0}"
 
@@ -49,6 +52,15 @@ if [[ "${#SCENARIOS[@]}" -eq 0 ]]; then
 fi
 
 echo "Pilot readiness scenario suite"
+if [[ -n "${PILOT_CANDIDATE_PROFILE:-}" ]]; then
+  echo "Pilot candidate profile: ${PILOT_CANDIDATE_PROFILE}"
+fi
+if [[ -n "${PILOT_ORGANIZATION_SLUG:-}" ]]; then
+  echo "Pilot organization: ${PILOT_ORGANIZATION_SLUG}"
+fi
+if [[ -n "${PILOT_CLUB_SLUG:-${CLUB_SLUG:-}}" ]]; then
+  echo "Pilot club: ${PILOT_CLUB_SLUG:-${CLUB_SLUG:-}}"
+fi
 echo "Selected scenarios: ${SCENARIOS[*]}"
 
 run_scenario() {

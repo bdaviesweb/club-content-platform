@@ -141,6 +141,7 @@ Use the pilot package when you want repeatable proof for customer-facing demos a
 
 Current default simulator candidate:
 
+- profile: `simulated-north-river`
 - organization: `north-river-youth-sports`
 - club: `north-river-soccer-club`
 - team: `u13-girls-blue`
@@ -149,22 +150,16 @@ Current default simulator candidate:
 Recommended rehearsal commands:
 
 ```bash
-npm run pilot:audit
+PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:audit
 ```
 
 ```bash
-ORGANIZATION_SLUG=north-river-youth-sports \
-CLUB_SLUG=north-river-soccer-club \
-TEAM_SLUG=u13-girls-blue \
-SUBMITTER_EMAIL=coach@northriverpilot.local \
-ORGANIZATION_ADMIN_EMAIL=ops@northriverpilot.local \
-CLUB_ADMIN_EMAIL=admin@northriverpilot.local \
-REVIEWER_EMAIL=comms@northriverpilot.local \
-TEAM_MANAGER_REVIEWER_EMAIL=manager@northriverpilot.local \
-npm run pilot:vps
+PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:vps
 ```
 
 This lets the suite keep `club_comms` for the comms lane while automatically using the team manager where a scenario routes video review to `team_manager`.
+
+For a future real pilot handoff, add a private local profile at `config/pilot-candidates/<candidate>.local.env` and run the same commands with `PILOT_CANDIDATE_PROFILE=<candidate>`.
 
 `./scripts/update_vps.sh` now autostashes a dirty VPS checkout before it pulls, so a stray edit on the server no longer blocks the update.
 

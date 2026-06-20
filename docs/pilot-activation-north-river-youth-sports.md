@@ -7,6 +7,7 @@ Scope:
 - Organization: `north-river-youth-sports`
 - Club: `north-river-soccer-club`
 - Team: `u13-girls-blue`
+- Profile: `simulated-north-river`
 - Submitter: `coach@northriverpilot.local`
 - Primary reviewer lane: `manager@northriverpilot.local`
 - Secondary reviewer lanes: `comms@northriverpilot.local`, `admin@northriverpilot.local`
@@ -58,6 +59,7 @@ Scope:
 Hosted activation audit:
 
 - `npm run pilot:audit`
+- `PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:audit`
 - Result: `activation_decision=GO`
 - Candidate: `north-river-youth-sports`
 - Queue state: `approval_queue_count=0`
@@ -68,7 +70,7 @@ Hosted activation audit:
 
 Hosted policy rehearsal:
 
-- `ORGANIZATION_SLUG=north-river-youth-sports CLUB_SLUG=north-river-soccer-club TEAM_SLUG=u13-girls-blue SUBMITTER_EMAIL=coach@northriverpilot.local ORGANIZATION_ADMIN_EMAIL=ops@northriverpilot.local CLUB_ADMIN_EMAIL=admin@northriverpilot.local REVIEWER_EMAIL=comms@northriverpilot.local TEAM_MANAGER_REVIEWER_EMAIL=manager@northriverpilot.local npm run pilot:vps`
+- `PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:vps`
 - Baseline review/publish submission: `9aa02f3b-1d66-445f-b3bf-d02b7d6e6790`
 - Baseline approval request: `85591020-4c27-4a65-aa6e-33571a6c1136`
 - Organization auto-approval submission: `691f7c79-0a14-4ddd-adf8-0edc71345be8`
@@ -102,7 +104,7 @@ This candidate is suitable for operator onboarding, launch-packet walkthroughs, 
 Run these before the next activation decision:
 
 1. `npm run demo:operator`
-2. `npm run pilot:audit`
-3. `ORGANIZATION_SLUG=north-river-youth-sports CLUB_SLUG=north-river-soccer-club TEAM_SLUG=u13-girls-blue SUBMITTER_EMAIL=coach@northriverpilot.local ORGANIZATION_ADMIN_EMAIL=ops@northriverpilot.local CLUB_ADMIN_EMAIL=admin@northriverpilot.local REVIEWER_EMAIL=comms@northriverpilot.local TEAM_MANAGER_REVIEWER_EMAIL=manager@northriverpilot.local npm run pilot:vps`
+2. `PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:audit`
+3. `PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:vps`
 
 Only change this record to real-pilot `GO` after those checks pass with real identities and the delivery-provider decisions above are resolved.

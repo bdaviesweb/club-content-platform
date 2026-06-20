@@ -39,3 +39,19 @@ test("pilot readiness suite allows selecting a subset of scenarios", () => {
   assert.match(output, /DRY_RUN scripts\/auto_approval_override_smoke_vps\.sh/);
   assert.match(output, /DRY_RUN scripts\/event_notification_rule_smoke_vps\.sh/);
 });
+
+test("pilot readiness suite loads a named pilot candidate profile", () => {
+  const output = execFileSync("bash", [scriptPath], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      DRY_RUN: "1",
+      PILOT_CANDIDATE_PROFILE: "simulated-north-river"
+    }
+  });
+
+  assert.match(output, /Pilot candidate profile: simulated-north-river/);
+  assert.match(output, /Pilot organization: north-river-youth-sports/);
+  assert.match(output, /Pilot club: north-river-soccer-club/);
+});

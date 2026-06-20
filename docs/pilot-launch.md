@@ -7,6 +7,7 @@ Current default pilot candidate:
 - Organization: `north-river-youth-sports`
 - Club: `north-river-soccer-club`
 - Team: `u13-girls-blue`
+- Profile: `simulated-north-river`
 - Activation record: [pilot-activation-north-river-youth-sports.md](/Users/robertdavies/Documents/Codex/club-content/docs/pilot-activation-north-river-youth-sports.md)
 - Onboarding packet: [pilot-onboarding-north-river-youth-sports.md](/Users/robertdavies/Documents/Codex/club-content/docs/pilot-onboarding-north-river-youth-sports.md)
 
@@ -76,15 +77,11 @@ PILOT_SCENARIOS=review_publish,auto_approval_override npm run pilot:vps
 Recommended simulated-pilot command set:
 
 ```bash
-ORGANIZATION_SLUG=north-river-youth-sports \
-CLUB_SLUG=north-river-soccer-club \
-TEAM_SLUG=u13-girls-blue \
-SUBMITTER_EMAIL=coach@northriverpilot.local \
-ORGANIZATION_ADMIN_EMAIL=ops@northriverpilot.local \
-CLUB_ADMIN_EMAIL=admin@northriverpilot.local \
-REVIEWER_EMAIL=comms@northriverpilot.local \
-TEAM_MANAGER_REVIEWER_EMAIL=manager@northriverpilot.local \
-npm run pilot:vps
+PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:audit
+```
+
+```bash
+PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:vps
 ```
 
 Reviewer-role note:
@@ -112,6 +109,7 @@ Use this checklist when setting up the first real club or when rehearsing with t
 7. Run the VPS scenario suite against the hosted dev lane before enabling the pilot in production-like use.
 8. Fill out `docs/pilot-onboarding-template.md` and save the chosen pilot posture before enabling real users.
 9. For the current simulator, use [pilot-onboarding-north-river-youth-sports.md](/Users/robertdavies/Documents/Codex/club-content/docs/pilot-onboarding-north-river-youth-sports.md) as the reference packet.
+10. For a real candidate later, create `config/pilot-candidates/<candidate>.local.env` and run the same commands with `PILOT_CANDIDATE_PROFILE=<candidate>`.
 
 ## QA Checklist
 

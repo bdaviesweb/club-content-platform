@@ -12,3 +12,4 @@ apps/mobile/.expo
 apps/mobile/.expo-shared
 tmp
 data
+config/pilot-candidates/*.local.env
