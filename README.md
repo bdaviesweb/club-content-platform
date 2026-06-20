@@ -118,6 +118,17 @@ From that page you can:
 
 Run `bash scripts/mobile_demo_review_smoke.sh` when you want to verify the live demo loop. The smoke now resumes a single pending `mobile-demo-post-*` review item if one is already in the queue, so a half-finished demo does not require manual cleanup before you continue.
 
+## Pilot Launch
+
+Use the pilot package when you want repeatable proof for customer-facing demos and first-club rollout work.
+
+- `npm run pilot:vps`
+  Runs the hosted multi-organization pilot scenario suite across baseline review/publish, auto-approval overrides, approval overrides, and notification overrides.
+- `PILOT_SCENARIOS=review_publish,auto_approval_override npm run pilot:vps`
+  Runs only a named subset of pilot scenarios.
+- [Pilot launch playbook](docs/pilot-launch.md)
+  Pulls together the operator demo flow, scenario suite, onboarding checklist, QA gate, and rollout guardrails.
+
 `./scripts/update_vps.sh` now autostashes a dirty VPS checkout before it pulls, so a stray edit on the server no longer blocks the update.
 
 For hosted dev work, prefer `npm run dev:vps`. It syncs the current checkout to the verified hermes-dev VPS, restarts the stack there, and prints the live URLs up front. Use `npm run dev:stack` only when you need a local fallback.
