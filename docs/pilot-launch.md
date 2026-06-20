@@ -21,6 +21,8 @@ Use these three entry points:
    Verifies the live submitter-to-reviewer-to-publish mobile flow. It can resume a pending `mobile-demo-post-*` item.
 3. `npm run pilot:vps`
    Runs the hosted multi-organization workflow-policy scenario suite.
+4. `npm run pilot:audit`
+   Runs the live activation audit and returns a go/no-go decision with explicit blockers.
 4. `docs/pilot-onboarding-template.md`
    Captures the first-club role map, policy choices, and signoff fields.
 5. `docs/pilot-activation-checklist.md`
@@ -90,7 +92,8 @@ Use this before each pilot milestone:
 2. `npm --workspace @club/mobile test`
 3. `bash scripts/mobile_demo_review_smoke.sh`
 4. `npm run pilot:vps`
-5. Review `docs/pilot-activation-checklist.md` and confirm every blocker is still false.
+5. `npm run pilot:audit`
+6. Review `docs/pilot-activation-checklist.md` and confirm every blocker is still false.
 
 Expected evidence:
 

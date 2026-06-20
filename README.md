@@ -124,6 +124,8 @@ Use the pilot package when you want repeatable proof for customer-facing demos a
 
 - `npm run pilot:vps`
   Runs the hosted multi-organization pilot scenario suite across baseline review/publish, auto-approval overrides, approval overrides, and notification overrides.
+- `npm run pilot:audit`
+  Runs a live activation audit against the current pilot candidate and returns a `GO` or `NO_GO` decision with concrete blockers.
 - `PILOT_SCENARIOS=review_publish,auto_approval_override npm run pilot:vps`
   Runs only a named subset of pilot scenarios.
 - [Pilot launch playbook](docs/pilot-launch.md)

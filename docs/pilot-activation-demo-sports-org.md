@@ -74,6 +74,18 @@ Hosted policy rehearsal:
 - Organization notification submission: `cf181950-7ec4-4e46-a3ab-dd0fe6f4f909`
 - Club notification override submission: `35dee5bd-6724-4fe1-aa51-3cc90c0e266d`
 
+Live activation audit:
+
+- `npm run pilot:audit`
+- Result: `activation_decision=NO_GO`
+- Current blocker output:
+  - `Club demo-soccer-club routes to team_manager but no team_manager membership is assigned.`
+  - `Demo identities are still assigned: admin@demo-club.local, admin@demo-workspace.local, coach@demo-club.local, comms@demo-club.local, org-admin@demo-club.local.`
+  - `Approval queue is not clean. Pending items=5.`
+- Current warnings:
+  - `Email delivery is not enabled. Current mode=log-only reason=missing_resend_api_key.`
+  - `Push delivery is not enabled. Current mode=disabled reason=push_disabled.`
+
 ## Go / No-Go Decision
 
 Current status: `NO-GO for real user traffic`
