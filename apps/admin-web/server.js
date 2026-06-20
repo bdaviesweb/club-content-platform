@@ -1086,8 +1086,17 @@ function layout(content, title = "Club Content Ops") {
 </html>`;
 }
 
-function buildExpoDemoActionUrl(action) {
-  return `${expoUrl}${expoUrl.includes("?") ? "&" : "?"}demoAction=${encodeURIComponent(action)}`;
+function buildExpoDemoActionUrl(action, params = {}) {
+  const searchParams = new URLSearchParams({
+    demoAction: action
+  });
+
+  for (const [key, value] of Object.entries(params || {})) {
+    if (value === null || value === undefined || value === "") continue;
+    searchParams.set(key, String(value));
+  }
+
+  return `${expoUrl}${expoUrl.includes("?") ? "&" : "?"}${searchParams.toString()}`;
 }
 
 function renderDemoLauncher({ label, href, helper }) {
@@ -1142,6 +1151,35 @@ function renderDemoScenarioCard({ title, copy, posture, outcome }) {
         <p class="subtle" style="margin-top:6px;">Published push ${escapeHtml(describeNotificationResult(outcome.publishedNotifications?.push))}</p>
       </div>
     </div>
+  </div>`;
+}
+
+function renderPilotScenarioCard({ title, copy, command, links = [] }) {
+  const renderedLinks = Array.isArray(links)
+    ? links
+        .map(
+          (link) =>
+            `<a class="quick-link" href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a>`
+        )
+        .join(" · ")
+    : "";
+
+  return `<div class="summary-item">
+    <div class="badge-row" style="justify-content:space-between; align-items:flex-start;">
+      <strong>${escapeHtml(title)}</strong>
+      ${renderStatusBadge("Pilot preset", "info")}
+    </div>
+    <p class="subtle" style="margin-top:8px; line-height:1.45;">${escapeHtml(copy)}</p>
+    ${
+      command
+        ? `<pre style="margin-top:10px;">${escapeHtml(command)}</pre>`
+        : ""
+    }
+    ${
+      renderedLinks
+        ? `<p class="subtle" style="margin-top:10px;">${renderedLinks}</p>`
+        : ""
+    }
   </div>`;
 }
 
@@ -2425,6 +2463,55 @@ async function renderDemoPage() {
           copy: "Close on the recent submissions, feed output, and notifications so people can see the completed workflow, not just the admin screens.",
           links: [
             { label: "Open internal feed API", href: `${apiBase}/feed/internal?includeSmoke=1` }
+          ]
+        })}
+      </div>
+    </section>
+
+    <section class="panel" style="margin-bottom:18px;">
+      <div class="section-header">
+        <div>
+          <div class="eyebrow">Pilot presets</div>
+          <h2>Named pilot scenarios to show or verify</h2>
+          <p class="subtle" style="margin-top:8px;">Use these presets when you want the demo story and the hosted policy proof to line up with the same first-club rollout cases.</p>
+        </div>
+        <a class="quick-link" href="/workflow-settings?clubSlug=${escapeHtml(demoClubSlug)}">Open workflow settings</a>
+      </div>
+      <div class="summary-stack" style="margin-top:12px;">
+        ${renderPilotScenarioCard({
+          title: "Baseline review to publish",
+          copy: "Use this when you want to prove the straightforward poster to reviewer to internal-feed flow before adding organization-level exceptions.",
+          command: "PILOT_SCENARIOS=review_publish npm run pilot:vps",
+          links: [
+            { label: "Create demo post", href: buildExpoDemoActionUrl("post") },
+            { label: "Open reviewer workspace", href: "/" }
+          ]
+        })}
+        ${renderPilotScenarioCard({
+          title: "Organization default auto-approval",
+          copy: "Use this to show that low-risk internal photo content can publish automatically under the organization rule set, then fall back to manual review when a club disables the default. Pair it with docs/pilot-activation-checklist.md during first-club setup.",
+          command: "PILOT_SCENARIOS=auto_approval_override npm run pilot:vps",
+          links: [
+            { label: "Inspect workflow settings", href: workflowSettingsUrl },
+            { label: "Preview inherited club", href: organizationBaselineUrl }
+          ]
+        })}
+        ${renderPilotScenarioCard({
+          title: "Second approval on public content",
+          copy: "Use this when pilot reviewers need proof that public video can require a second approver at the organization level while a club exception simplifies the path. Pair it with docs/pilot-onboarding-template.md for role assignment decisions.",
+          command: "PILOT_SCENARIOS=approval_override npm run pilot:vps",
+          links: [
+            { label: "Preview inherited club", href: organizationBaselineUrl },
+            { label: "Open reviewer workspace", href: "/" }
+          ]
+        })}
+        ${renderPilotScenarioCard({
+          title: "Notification override posture",
+          copy: "Use this to explain which notifications come from organization defaults, what a club replaces, and what delivery gaps still count as rollout blockers. The rollout criteria live in docs/pilot-launch.md.",
+          command: "PILOT_SCENARIOS=notification_override npm run pilot:vps",
+          links: [
+            { label: "Delivery status", href: `${apiBase}/notification-delivery/status` },
+            { label: "Open quick review", href: "/quick-review" }
           ]
         })}
       </div>

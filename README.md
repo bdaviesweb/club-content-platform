@@ -128,6 +128,10 @@ Use the pilot package when you want repeatable proof for customer-facing demos a
   Runs only a named subset of pilot scenarios.
 - [Pilot launch playbook](docs/pilot-launch.md)
   Pulls together the operator demo flow, scenario suite, onboarding checklist, QA gate, and rollout guardrails.
+- [Pilot onboarding template](docs/pilot-onboarding-template.md)
+  Captures the real club, role, policy, and signoff details for the first pilot.
+- [Pilot activation checklist](docs/pilot-activation-checklist.md)
+  Defines the go-live evidence, blockers, and recovery steps for first customer use.
 
 `./scripts/update_vps.sh` now autostashes a dirty VPS checkout before it pulls, so a stray edit on the server no longer blocks the update.
 

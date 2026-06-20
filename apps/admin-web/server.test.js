@@ -233,6 +233,8 @@ test("GET /demo renders the multi-role walkthrough", async () => {
     assert.equal(response.status, 200);
     assert.match(html, /Demo command center/);
     assert.match(html, /Launch the mobile app in demo mode/);
+    assert.match(html, /Named pilot scenarios to show or verify/);
+    assert.match(html, /PILOT_SCENARIOS=review_publish npm run pilot:vps/);
     assert.match(html, /Human decision surfaces/);
     assert.match(html, /Policy outcomes for different scenarios/);
     assert.match(html, /What people see after the backend is done/);

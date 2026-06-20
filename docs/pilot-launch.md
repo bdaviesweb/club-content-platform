@@ -21,6 +21,10 @@ Use these three entry points:
    Verifies the live submitter-to-reviewer-to-publish mobile flow. It can resume a pending `mobile-demo-post-*` item.
 3. `npm run pilot:vps`
    Runs the hosted multi-organization workflow-policy scenario suite.
+4. `docs/pilot-onboarding-template.md`
+   Captures the first-club role map, policy choices, and signoff fields.
+5. `docs/pilot-activation-checklist.md`
+   Defines the go-live gate, evidence to save, and recovery steps.
 
 ## Operator Demo Flow
 
@@ -76,6 +80,7 @@ Use this checklist when setting up the first real club.
 5. Confirm notification channels for submitters and reviewers.
 6. Run the operator demo once with the pilot accounts and preserve the evidence.
 7. Run the VPS scenario suite against the hosted dev lane before enabling the pilot in production-like use.
+8. Fill out `docs/pilot-onboarding-template.md` and save the chosen pilot posture before enabling real users.
 
 ## QA Checklist
 
@@ -85,6 +90,7 @@ Use this before each pilot milestone:
 2. `npm --workspace @club/mobile test`
 3. `bash scripts/mobile_demo_review_smoke.sh`
 4. `npm run pilot:vps`
+5. Review `docs/pilot-activation-checklist.md` and confirm every blocker is still false.
 
 Expected evidence:
 
