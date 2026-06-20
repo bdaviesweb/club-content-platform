@@ -14,6 +14,7 @@
     "dev:stack": "node scripts/dev-stack.mjs",
     "dev:vps": "bash scripts/dev_vps.sh",
     "demo:operator": "bash scripts/start_demo_operator.sh",
+    "pilot:profile": "bash scripts/create_pilot_candidate_profile.sh",
     "pilot:audit": "bash scripts/pilot_activation_audit.sh",
     "pilot:vps": "bash scripts/pilot_readiness_vps.sh",
     "qa:vps": "bash scripts/qa_vps.sh",
