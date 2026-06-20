@@ -2,6 +2,14 @@
 
 This playbook packages the current Club Content demo and workflow-policy checks into a repeatable pilot-readiness flow.
 
+Current default pilot candidate:
+
+- Organization: `north-river-youth-sports`
+- Club: `north-river-soccer-club`
+- Team: `u13-girls-blue`
+- Activation record: [pilot-activation-north-river-youth-sports.md](/Users/robertdavies/Documents/Codex/club-content/docs/pilot-activation-north-river-youth-sports.md)
+- Onboarding packet: [pilot-onboarding-north-river-youth-sports.md](/Users/robertdavies/Documents/Codex/club-content/docs/pilot-onboarding-north-river-youth-sports.md)
+
 ## What This Proves
 
 The pilot package is meant to prove four things before first customer use:
@@ -23,9 +31,9 @@ Use these three entry points:
    Runs the hosted multi-organization workflow-policy scenario suite.
 4. `npm run pilot:audit`
    Runs the live activation audit and returns a go/no-go decision with explicit blockers.
-4. `docs/pilot-onboarding-template.md`
+5. `docs/pilot-onboarding-template.md`
    Captures the first-club role map, policy choices, and signoff fields.
-5. `docs/pilot-activation-checklist.md`
+6. `docs/pilot-activation-checklist.md`
    Defines the go-live gate, evidence to save, and recovery steps.
 
 ## Operator Demo Flow
@@ -65,9 +73,29 @@ Use `PILOT_SCENARIOS` to narrow the suite when needed:
 PILOT_SCENARIOS=review_publish,auto_approval_override npm run pilot:vps
 ```
 
+Recommended simulated-pilot command set:
+
+```bash
+ORGANIZATION_SLUG=north-river-youth-sports \
+CLUB_SLUG=north-river-soccer-club \
+TEAM_SLUG=u13-girls-blue \
+SUBMITTER_EMAIL=coach@northriverpilot.local \
+ORGANIZATION_ADMIN_EMAIL=ops@northriverpilot.local \
+CLUB_ADMIN_EMAIL=admin@northriverpilot.local \
+REVIEWER_EMAIL=comms@northriverpilot.local \
+TEAM_MANAGER_REVIEWER_EMAIL=manager@northriverpilot.local \
+npm run pilot:vps
+```
+
+Reviewer-role note:
+
+1. `review_publish` and `auto_approval_override` use `REVIEWER_EMAIL=comms@northriverpilot.local`.
+2. `approval_override` now prefers `TEAM_MANAGER_REVIEWER_EMAIL` for the primary action and `CLUB_ADMIN_EMAIL` for the second-approval cleanup.
+3. `notification_override` now prefers `TEAM_MANAGER_REVIEWER_EMAIL` because the simulated club routes video review to `team_manager`.
+
 ## Pilot Onboarding
 
-Use this checklist when setting up the first real club.
+Use this checklist when setting up the first real club or when rehearsing with the simulated pilot.
 
 1. Confirm the pilot organization slug, club slug, and pilot reviewer accounts.
 2. Confirm who owns each approval role:
@@ -83,6 +111,7 @@ Use this checklist when setting up the first real club.
 6. Run the operator demo once with the pilot accounts and preserve the evidence.
 7. Run the VPS scenario suite against the hosted dev lane before enabling the pilot in production-like use.
 8. Fill out `docs/pilot-onboarding-template.md` and save the chosen pilot posture before enabling real users.
+9. For the current simulator, use [pilot-onboarding-north-river-youth-sports.md](/Users/robertdavies/Documents/Codex/club-content/docs/pilot-onboarding-north-river-youth-sports.md) as the reference packet.
 
 ## QA Checklist
 
@@ -101,6 +130,7 @@ Expected evidence:
 2. A mobile-created demo post reaches review and then publishes.
 3. The hosted scenario suite shows both organization-default and club-override phases for each selected policy case.
 4. The approval queue is not left with unexpected smoke residue after the chosen flow.
+5. The reviewer identity used in each smoke step matches the routed approver role for that scenario.
 
 ## Rollout Guardrails
 

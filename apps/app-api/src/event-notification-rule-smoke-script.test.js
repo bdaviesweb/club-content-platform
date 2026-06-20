@@ -208,3 +208,32 @@ test("event notification smoke proves club overrides replace organization event-
     fakeBin.cleanup();
   }
 });
+
+test("event notification smoke prefers the explicit scenario reviewer", () => {
+  const fakeBin = createFakeBin();
+
+  try {
+    execFileSync("bash", [scriptPath], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${fakeBin.tempDir}:${process.env.PATH}`,
+        FAKE_STATE_PATH: fakeBin.statePath,
+        CLUB_CONTENT_SMOKE_ON_VPS: "1",
+        SMOKE_MARKER: "event-notification-test",
+        TEAM_MANAGER_REVIEWER_EMAIL: "manager@example.test"
+      }
+    });
+
+    const state = JSON.parse(fs.readFileSync(fakeBin.statePath, "utf8"));
+    const cleanupBodies = state.curlCalls
+      .filter((call) => call.url?.startsWith("http://localhost:4000/approval-requests/"))
+      .map((call) => call.body);
+
+    assert.equal(cleanupBodies.length, 2);
+    assert.ok(cleanupBodies.every((body) => body.includes('"actedByEmail":"manager@example.test"')));
+  } finally {
+    fakeBin.cleanup();
+  }
+});

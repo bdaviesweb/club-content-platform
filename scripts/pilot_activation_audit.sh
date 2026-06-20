@@ -8,6 +8,7 @@ REQUIRE_PUSH_DELIVERY="${REQUIRE_PUSH_DELIVERY:-0}"
 REQUIRE_CLEAN_QUEUE="${REQUIRE_CLEAN_QUEUE:-1}"
 ALLOW_DEMO_IDENTITIES="${ALLOW_DEMO_IDENTITIES:-0}"
 API_BASE_URL="${API_BASE_URL:-https://clubcontent-api.davmn.net}"
+PILOT_CANDIDATE="${PILOT_CANDIDATE:-simulated_pilot}"
 
 request_json() {
   curl -fsS "${API_BASE_URL}$1"
@@ -18,25 +19,45 @@ notification_delivery_status="$(request_json "/notification-delivery/status")"
 approval_queue="$(request_json "/approvals/queue")"
 workflow_failed_events="$(request_json "/workflow-events")"
 
-demo_org_slug="$(APP_READINESS="${app_readiness}" node -e 'const readiness = JSON.parse(process.env.APP_READINESS); process.stdout.write(readiness.demo?.organizationSlug || "demo-sports-org");')"
-demo_club_slug="$(APP_READINESS="${app_readiness}" node -e 'const readiness = JSON.parse(process.env.APP_READINESS); process.stdout.write(readiness.demo?.clubSlug || "");')"
-demo_team_slug="$(APP_READINESS="${app_readiness}" node -e 'const readiness = JSON.parse(process.env.APP_READINESS); process.stdout.write(readiness.demo?.teamSlug || "");')"
+resolve_candidate_field() {
+  local field="$1"
+  APP_READINESS="${app_readiness}" PILOT_CANDIDATE="${PILOT_CANDIDATE}" node -e '
+    const readiness = JSON.parse(process.env.APP_READINESS);
+    const field = process.argv[1];
+    const key = process.env.PILOT_CANDIDATE;
+    const candidate = key === "demo" ? readiness.demo : readiness.pilotCandidate;
+    process.stdout.write(candidate?.[field] || "");
+  ' "${field}"
+}
 
-if [[ -z "${demo_club_slug}" ]]; then
+pilot_org_slug="${PILOT_ORGANIZATION_SLUG:-$(resolve_candidate_field "organizationSlug")}"
+pilot_club_slug="${PILOT_CLUB_SLUG:-$(resolve_candidate_field "clubSlug")}"
+pilot_team_slug="${PILOT_TEAM_SLUG:-$(resolve_candidate_field "teamSlug")}"
+
+if [[ -z "${pilot_org_slug}" && "${PILOT_CANDIDATE}" == "demo" ]]; then
+  pilot_org_slug="demo-sports-org"
+fi
+
+if [[ -z "${pilot_org_slug}" ]]; then
+  echo "Could not determine organization slug from app readiness." >&2
+  exit 1
+fi
+
+if [[ -z "${pilot_club_slug}" ]]; then
   echo "Could not determine club slug from app readiness." >&2
   exit 1
 fi
 
-organization_directory="$(request_json "/organizations/${demo_org_slug}")"
-organization_policy="$(request_json "/workflow-policies/organizations/${demo_org_slug}")"
-club_policy="$(request_json "/workflow-policies/clubs/${demo_club_slug}")"
+organization_directory="$(request_json "/organizations/${pilot_org_slug}")"
+organization_policy="$(request_json "/workflow-policies/organizations/${pilot_org_slug}")"
+club_policy="$(request_json "/workflow-policies/clubs/${pilot_club_slug}")"
 
 club_memberships="$(
-  ssh "${REMOTE_HOST}" "cd '${REMOTE_DIR}' && docker compose -f docker-compose.vps.yml exec -T postgres psql -U club -d club_content -At -F '|' -c \"select u.email, m.role from memberships m join users u on u.id=m.user_id where m.club_id=(select id from clubs where slug='${demo_club_slug}') order by u.email, m.role;\""
+  ssh "${REMOTE_HOST}" "cd '${REMOTE_DIR}' && docker compose -f docker-compose.vps.yml exec -T postgres psql -U club -d club_content -At -F '|' -c \"select u.email, m.role from memberships m join users u on u.id=m.user_id where m.club_id=(select id from clubs where slug='${pilot_club_slug}') order by u.email, m.role;\""
 )"
 
 organization_memberships="$(
-  ssh "${REMOTE_HOST}" "cd '${REMOTE_DIR}' && docker compose -f docker-compose.vps.yml exec -T postgres psql -U club -d club_content -At -F '|' -c \"select u.email, om.role from organization_memberships om join users u on u.id=om.user_id where om.organization_id=(select id from organizations where slug='${demo_org_slug}') order by u.email, om.role;\""
+  ssh "${REMOTE_HOST}" "cd '${REMOTE_DIR}' && docker compose -f docker-compose.vps.yml exec -T postgres psql -U club -d club_content -At -F '|' -c \"select u.email, om.role from organization_memberships om join users u on u.id=om.user_id where om.organization_id=(select id from organizations where slug='${pilot_org_slug}') order by u.email, om.role;\""
 )"
 
 payload_dir="$(mktemp -d)"
@@ -63,6 +84,7 @@ const requireEmailDelivery = process.env.REQUIRE_EMAIL_DELIVERY === "1";
 const requirePushDelivery = process.env.REQUIRE_PUSH_DELIVERY === "1";
 const requireCleanQueue = process.env.REQUIRE_CLEAN_QUEUE !== "0";
 const allowDemoIdentities = process.env.ALLOW_DEMO_IDENTITIES === "1";
+const pilotCandidateKey = process.env.PILOT_CANDIDATE || "simulated_pilot";
 
 const readJson = (name) =>
   JSON.parse(fs.readFileSync(`${payloadDir}/${name}`, "utf8"));
@@ -85,16 +107,20 @@ const organizationPolicy = readJson("organization_policy.json");
 const clubPolicy = readJson("club_policy.json");
 const clubMemberships = readTsv("club_memberships.tsv");
 const organizationMemberships = readTsv("organization_memberships.tsv");
+const readinessCandidate =
+  pilotCandidateKey === "demo" ? readiness?.demo : readiness?.pilotCandidate;
 
 const blockers = [];
 const warnings = [];
 
-const clubSlug = clubPolicy?.club?.slug || readiness?.demo?.clubSlug || "unknown";
+const clubSlug =
+  clubPolicy?.club?.slug || readinessCandidate?.clubSlug || "unknown";
 const orgSlug =
   organizationPolicy?.organization?.slug ||
   clubPolicy?.organization?.slug ||
+  readinessCandidate?.organizationSlug ||
   "unknown";
-const teamSlug = readiness?.demo?.teamSlug || "unknown";
+const teamSlug = readinessCandidate?.teamSlug || "unknown";
 
 const effectivePolicy = clubPolicy?.effectivePolicy || {};
 const defaultApproverRole = effectivePolicy.defaultApproverRole || null;

@@ -134,6 +134,37 @@ Use the pilot package when you want repeatable proof for customer-facing demos a
   Captures the real club, role, policy, and signoff details for the first pilot.
 - [Pilot activation checklist](docs/pilot-activation-checklist.md)
   Defines the go-live evidence, blockers, and recovery steps for first customer use.
+- [North River onboarding packet](docs/pilot-onboarding-north-river-youth-sports.md)
+  Captures the current simulated pilot org, role map, policy choices, and launch risks.
+- [North River activation record](docs/pilot-activation-north-river-youth-sports.md)
+  Captures the current hosted audit result and rehearsal evidence for the simulated pilot.
+
+Current default simulator candidate:
+
+- organization: `north-river-youth-sports`
+- club: `north-river-soccer-club`
+- team: `u13-girls-blue`
+- submitter: `coach@northriverpilot.local`
+
+Recommended rehearsal commands:
+
+```bash
+npm run pilot:audit
+```
+
+```bash
+ORGANIZATION_SLUG=north-river-youth-sports \
+CLUB_SLUG=north-river-soccer-club \
+TEAM_SLUG=u13-girls-blue \
+SUBMITTER_EMAIL=coach@northriverpilot.local \
+ORGANIZATION_ADMIN_EMAIL=ops@northriverpilot.local \
+CLUB_ADMIN_EMAIL=admin@northriverpilot.local \
+REVIEWER_EMAIL=comms@northriverpilot.local \
+TEAM_MANAGER_REVIEWER_EMAIL=manager@northriverpilot.local \
+npm run pilot:vps
+```
+
+This lets the suite keep `club_comms` for the comms lane while automatically using the team manager where a scenario routes video review to `team_manager`.
 
 `./scripts/update_vps.sh` now autostashes a dirty VPS checkout before it pulls, so a stray edit on the server no longer blocks the update.
 

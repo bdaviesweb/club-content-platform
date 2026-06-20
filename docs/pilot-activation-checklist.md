@@ -1,11 +1,12 @@
 # Pilot Activation Checklist
 
-Use this checklist before turning on the first real pilot club.
+Use this checklist before turning on the first real pilot club or declaring the simulated pilot package launch-ready.
 
 ## Before Activation
 
 - Confirm the organization slug, club slug, and team slugs.
 - Confirm every required reviewer account exists and has the expected role.
+- Confirm each scripted approval action uses the identity that matches the routed approver role.
 - Confirm the club should inherit organization defaults everywhere except explicitly approved exceptions.
 - Confirm publishing destinations for internal and public content.
 - Confirm whether email and push delivery are expected, optional, or intentionally disabled for the pilot.
@@ -16,6 +17,7 @@ Use this checklist before turning on the first real pilot club.
 - `npm --workspace @club/mobile test`
 - `bash scripts/mobile_demo_review_smoke.sh`
 - `npm run pilot:vps`
+- `npm run pilot:audit`
 
 ## Evidence to Capture
 
@@ -34,6 +36,7 @@ Do not activate if any of these are unresolved:
 - Workflow events are failing or repeatedly staying pending without explanation.
 - Notification delivery behavior does not match the chosen pilot posture.
 - Reviewer roles are ambiguous or mapped to the wrong people.
+- Scripted cleanup or approval actions use a reviewer identity that is not authorized for the routed role.
 
 ## First-Day Monitoring
 

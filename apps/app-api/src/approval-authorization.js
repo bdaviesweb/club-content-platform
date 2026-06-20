@@ -1,4 +1,4 @@
-export const reviewerRoles = ["club_comms", "club_admin"];
+export const reviewerRoles = ["team_manager", "club_comms", "club_admin"];
 
 export function isReviewerRole(role) {
   return reviewerRoles.includes(String(role || "").trim());
