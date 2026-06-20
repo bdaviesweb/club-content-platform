@@ -113,6 +113,23 @@ Live admin validation on 2026-06-19:
 - Found and fixed a real browser-side regression during this pass: the client save flow referenced `parseSimulationTrace` without defining it in the page script, which broke policy saves after submit
 - Added a regression assertion in `apps/admin-web/server.test.js` so the client helper remains present in rendered workflow settings markup
 
+Hosted verification on 2026-06-20:
+
+- Ran `npm run qa:vps` against `hermes-dev`
+- Initial hosted run exposed a real deployment regression: `apps/admin-web/Dockerfile` only copied `apps/admin-web`, but the runtime imports now also require `apps/worker/src` and `packages/shared/src`
+- Fixed the admin-web image build to copy those runtime dependencies, then reran the hosted verification from the top
+- Baseline VPS route smoke passed after the image fix
+- Routing rule smoke passed with live evidence that the club override beat the organization default
+- Auto-approval rule smoke passed with organization-driven auto-approval
+- Auto-approval override smoke passed with a club override disabling organization auto-approval
+- Approval publish smoke passed through live review, approval, and worker publish
+- Publishing override smoke passed for both organization-default and club-override paths
+- Public second approval smoke passed with both approval stages and final publish
+- Approval override smoke passed with a club rule disabling organization second approval
+- Event notification rule smoke passed for organization event disables and club replacement behavior
+- Notification status, readback, and webhook smokes passed
+- Final result: `VPS weekly loop verification passed.`
+
 ## Admin End-to-End Validation Checklist
 
 Run this pass in the admin UI before opening the release lane:
