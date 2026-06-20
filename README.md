@@ -162,6 +162,10 @@ PILOT_CANDIDATE_PROFILE=simulated-north-river bash scripts/validate_pilot_candid
 ```
 
 ```bash
+npm run pilot:inspect -- simulated-north-river
+```
+
+```bash
 PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:audit
 ```
 
@@ -173,6 +177,7 @@ This lets the suite keep `club_comms` for the comms lane while automatically usi
 
 For a future real pilot handoff, run `npm run pilot:profile -- <candidate>` to scaffold `config/pilot-candidates/<candidate>.local.env`, then validate and rehearse with `PILOT_CANDIDATE_PROFILE=<candidate>`.
 Use `npm run pilot:profiles` to see what candidate profiles already exist.
+Use `npm run pilot:inspect -- <candidate>` to review a candidate before validation.
 
 `./scripts/update_vps.sh` now autostashes a dirty VPS checkout before it pulls, so a stray edit on the server no longer blocks the update.
 

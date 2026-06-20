@@ -89,6 +89,10 @@ PILOT_CANDIDATE_PROFILE=simulated-north-river bash scripts/validate_pilot_candid
 ```
 
 ```bash
+npm run pilot:inspect -- simulated-north-river
+```
+
+```bash
 PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:audit
 ```
 
@@ -124,6 +128,7 @@ Use this checklist when setting up the first real club or when rehearsing with t
 10. For a real candidate later, run `npm run pilot:profile -- <candidate>` to scaffold `config/pilot-candidates/<candidate>.local.env`.
 11. Run `bash scripts/validate_pilot_candidate_profile.sh <path-or-profile>` before the first hosted audit.
 12. Use `npm run pilot:profiles` to see available profiles and whether they are template, committed, or local.
+13. Use `npm run pilot:inspect -- <candidate>` to review the full profile summary before validation.
 
 ## QA Checklist
 

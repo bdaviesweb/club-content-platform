@@ -15,6 +15,7 @@
     "dev:vps": "bash scripts/dev_vps.sh",
     "demo:operator": "bash scripts/start_demo_operator.sh",
     "pilot:profile": "bash scripts/create_pilot_candidate_profile.sh",
+    "pilot:inspect": "bash scripts/inspect_pilot_candidate_profile.sh",
     "pilot:profiles": "bash scripts/list_pilot_candidate_profiles.sh",
     "pilot:audit": "bash scripts/pilot_activation_audit.sh",
     "pilot:vps": "bash scripts/pilot_readiness_vps.sh",
