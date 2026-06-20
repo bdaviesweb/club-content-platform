@@ -82,29 +82,42 @@ organization_workflow_policy="$(curl -fsS "http://localhost:4000/workflow-polici
 organization_directory="$(curl -fsS "http://localhost:4000/organizations/${organization_slug}")"
 workflow_settings_html="$(admin_curl "http://localhost:3002/workflow-settings?clubSlug=${demo_club_slug}")"
 
-API_HEALTH="${api_health}" \
-APP_READINESS="${app_readiness}" \
-ADMIN_HEALTH="${admin_health}" \
-APPROVAL_QUEUE="${approval_queue}" \
-WORKFLOW_EVENTS="${workflow_events}" \
-NOTIFICATION_DELIVERY_STATUS="${notification_delivery_status}" \
-CLUB_WORKFLOW_POLICY="${club_workflow_policy}" \
-ORGANIZATION_WORKFLOW_POLICY="${organization_workflow_policy}" \
-ORGANIZATION_DIRECTORY="${organization_directory}" \
-WORKFLOW_SETTINGS_HTML="${workflow_settings_html}" \
-node <<'NODE'
-const assert = require('node:assert/strict');
+payload_dir="$(mktemp -d)"
+cleanup_payload_dir() {
+  rm -rf "${payload_dir}"
+}
+trap cleanup_payload_dir EXIT
 
-const apiHealth = JSON.parse(process.env.API_HEALTH);
-const appReadiness = JSON.parse(process.env.APP_READINESS);
-const adminHealth = JSON.parse(process.env.ADMIN_HEALTH);
-const approvalQueue = JSON.parse(process.env.APPROVAL_QUEUE);
-const workflowEvents = JSON.parse(process.env.WORKFLOW_EVENTS);
-const notificationDeliveryStatus = JSON.parse(process.env.NOTIFICATION_DELIVERY_STATUS);
-const clubWorkflowPolicy = JSON.parse(process.env.CLUB_WORKFLOW_POLICY);
-const organizationWorkflowPolicy = JSON.parse(process.env.ORGANIZATION_WORKFLOW_POLICY);
-const organizationDirectory = JSON.parse(process.env.ORGANIZATION_DIRECTORY);
-const workflowSettingsHtml = process.env.WORKFLOW_SETTINGS_HTML;
+printf '%s' "${api_health}" > "${payload_dir}/api_health.json"
+printf '%s' "${app_readiness}" > "${payload_dir}/app_readiness.json"
+printf '%s' "${admin_health}" > "${payload_dir}/admin_health.json"
+printf '%s' "${approval_queue}" > "${payload_dir}/approval_queue.json"
+printf '%s' "${workflow_events}" > "${payload_dir}/workflow_events.json"
+printf '%s' "${notification_delivery_status}" > "${payload_dir}/notification_delivery_status.json"
+printf '%s' "${club_workflow_policy}" > "${payload_dir}/club_workflow_policy.json"
+printf '%s' "${organization_workflow_policy}" > "${payload_dir}/organization_workflow_policy.json"
+printf '%s' "${organization_directory}" > "${payload_dir}/organization_directory.json"
+printf '%s' "${workflow_settings_html}" > "${payload_dir}/workflow_settings.html"
+
+node - "${payload_dir}" <<'NODE'
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+
+const payloadDir = process.argv[2];
+const readJson = (name) =>
+  JSON.parse(fs.readFileSync(`${payloadDir}/${name}`, 'utf8'));
+const readText = (name) => fs.readFileSync(`${payloadDir}/${name}`, 'utf8');
+
+const apiHealth = readJson('api_health.json');
+const appReadiness = readJson('app_readiness.json');
+const adminHealth = readJson('admin_health.json');
+const approvalQueue = readJson('approval_queue.json');
+const workflowEvents = readJson('workflow_events.json');
+const notificationDeliveryStatus = readJson('notification_delivery_status.json');
+const clubWorkflowPolicy = readJson('club_workflow_policy.json');
+const organizationWorkflowPolicy = readJson('organization_workflow_policy.json');
+const organizationDirectory = readJson('organization_directory.json');
+const workflowSettingsHtml = readText('workflow_settings.html');
 
 assert.equal(apiHealth.service, 'app-api');
 assert.equal(apiHealth.status, 'ok');
