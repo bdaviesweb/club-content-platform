@@ -18,10 +18,13 @@ Use this checklist before turning on the first real pilot club or declaring the 
 - `bash scripts/mobile_demo_review_smoke.sh`
 - `npm run pilot:vps`
 - `npm run pilot:audit`
+- `npm run pilot:rehearse`
 
 ## Evidence to Capture
 
 - Demo command center URL used:
+- Rehearsal bundle path:
+- Rehearsal go/no-go summary:
 - Mobile submission id verified:
 - Published post id verified:
 - Pilot VPS scenarios run:

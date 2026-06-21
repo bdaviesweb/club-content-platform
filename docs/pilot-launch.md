@@ -29,7 +29,7 @@ Use these entry points:
 2. `bash scripts/mobile_demo_review_smoke.sh`
    Verifies the live submitter-to-reviewer-to-publish mobile flow. It can resume a pending `mobile-demo-post-*` item.
 3. `npm run pilot:rehearse`
-   Runs the simulator profile inspection, validation, hosted audit, hosted VPS rehearsal, and demo UI check in one pass.
+   Runs the simulator profile inspection, validation, hosted audit, hosted VPS rehearsal, and demo UI check in one pass. It writes an evidence bundle under `tmp/pilot-rehearsal/<timestamp>-<profile>/` with `summary.txt`, command logs, step logs, and a go/no-go decision.
 4. `docs/pilot-onboarding-template.md`
    Captures the first-club role map, policy choices, and signoff fields.
 5. `docs/pilot-activation-checklist.md`
@@ -128,6 +128,7 @@ Use this checklist when setting up the first real club or when rehearsing with t
 12. Use `npm run pilot:profiles` to see available profiles and whether they are template, committed, or local.
 13. Use `npm run pilot:inspect -- <candidate>` to review the full profile summary before validation.
 14. Use `npm run pilot:rehearse` to run the whole simulator rehearsal in one pass.
+15. Review the generated bundle under `tmp/pilot-rehearsal/<timestamp>-<profile>/` and preserve `summary.txt` for handoff.
 
 ## QA Checklist
 
