@@ -173,11 +173,16 @@ PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:audit
 PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:vps
 ```
 
+```bash
+npm run pilot:rehearse
+```
+
 This lets the suite keep `club_comms` for the comms lane while automatically using the team manager where a scenario routes video review to `team_manager`.
 
 For a future real pilot handoff, run `npm run pilot:profile -- <candidate>` to scaffold `config/pilot-candidates/<candidate>.local.env`, then validate and rehearse with `PILOT_CANDIDATE_PROFILE=<candidate>`.
 Use `npm run pilot:profiles` to see what candidate profiles already exist.
 Use `npm run pilot:inspect -- <candidate>` to review a candidate before validation.
+Use `npm run pilot:rehearse` to run the full simulator rehearsal in one pass.
 
 `./scripts/update_vps.sh` now autostashes a dirty VPS checkout before it pulls, so a stray edit on the server no longer blocks the update.
 

@@ -22,19 +22,17 @@ The pilot package is meant to prove four things before first customer use:
 
 ## Pilot Package
 
-Use these three entry points:
+Use these entry points:
 
 1. `npm run demo:operator`
    Starts the local operator-facing demo command center and Expo runtime.
 2. `bash scripts/mobile_demo_review_smoke.sh`
    Verifies the live submitter-to-reviewer-to-publish mobile flow. It can resume a pending `mobile-demo-post-*` item.
-3. `npm run pilot:vps`
-   Runs the hosted multi-organization workflow-policy scenario suite.
-4. `npm run pilot:audit`
-   Runs the live activation audit and returns a go/no-go decision with explicit blockers.
-5. `docs/pilot-onboarding-template.md`
+3. `npm run pilot:rehearse`
+   Runs the simulator profile inspection, validation, hosted audit, hosted VPS rehearsal, and demo UI check in one pass.
+4. `docs/pilot-onboarding-template.md`
    Captures the first-club role map, policy choices, and signoff fields.
-6. `docs/pilot-activation-checklist.md`
+5. `docs/pilot-activation-checklist.md`
    Defines the go-live gate, evidence to save, and recovery steps.
 
 ## Operator Demo Flow
@@ -129,6 +127,7 @@ Use this checklist when setting up the first real club or when rehearsing with t
 11. Run `bash scripts/validate_pilot_candidate_profile.sh <path-or-profile>` before the first hosted audit.
 12. Use `npm run pilot:profiles` to see available profiles and whether they are template, committed, or local.
 13. Use `npm run pilot:inspect -- <candidate>` to review the full profile summary before validation.
+14. Use `npm run pilot:rehearse` to run the whole simulator rehearsal in one pass.
 
 ## QA Checklist
 
@@ -137,9 +136,8 @@ Use this before each pilot milestone:
 1. `node --test apps/admin-web/server.test.js`
 2. `npm --workspace @club/mobile test`
 3. `bash scripts/mobile_demo_review_smoke.sh`
-4. `npm run pilot:vps`
-5. `npm run pilot:audit`
-6. Review `docs/pilot-activation-checklist.md` and confirm every blocker is still false.
+4. `npm run pilot:rehearse`
+5. Review `docs/pilot-activation-checklist.md` and confirm every blocker is still false.
 
 Expected evidence:
 
