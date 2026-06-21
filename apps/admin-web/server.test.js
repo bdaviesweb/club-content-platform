@@ -235,6 +235,12 @@ test("GET /demo renders the multi-role walkthrough", async () => {
     assert.match(html, /Launch the mobile app in demo mode/);
     assert.match(html, /Named pilot scenarios to show or verify/);
     assert.match(html, /PILOT_SCENARIOS=review_publish npm run pilot:vps/);
+    assert.match(html, /Simulator organization/);
+    assert.match(html, /Prove the org-level workflow before creating real candidates/);
+    assert.match(html, /npm run pilot:profiles/);
+    assert.match(html, /npm run pilot:inspect -- simulated-north-river/);
+    assert.match(html, /PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:audit/);
+    assert.match(html, /npm run pilot:profile -- &lt;candidate-name&gt;/);
     assert.match(html, /Human decision surfaces/);
     assert.match(html, /Policy outcomes for different scenarios/);
     assert.match(html, /What people see after the backend is done/);

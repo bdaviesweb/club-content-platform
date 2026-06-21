@@ -2520,6 +2520,39 @@ async function renderDemoPage() {
     <section class="panel" style="margin-bottom:18px;">
       <div class="section-header">
         <div>
+          <div class="eyebrow">Simulator organization</div>
+          <h2>Prove the org-level workflow before creating real candidates</h2>
+          <p class="subtle" style="margin-top:8px;">Use the committed simulator profile to rehearse organization defaults, club exceptions, routing rules, and auto-approvals without adding any new candidate data yet.</p>
+        </div>
+        ${renderStatusBadge("No live candidate required", "good")}
+      </div>
+      <div class="summary-stack" style="margin-top:12px;">
+        ${renderPilotScenarioCard({
+          title: "Inventory the available profiles",
+          copy: "Start here when you want to see the committed simulator org and any local profile files that already exist.",
+          command: "npm run pilot:profiles"
+        })}
+        ${renderPilotScenarioCard({
+          title: "Inspect the simulator org",
+          copy: "Use this to print the organization, club, team, and reviewer values for the committed simulator profile.",
+          command: "npm run pilot:inspect -- simulated-north-river"
+        })}
+        ${renderPilotScenarioCard({
+          title: "Run the simulator workflow",
+          copy: "Use the simulator profile with the audit or VPS rehearsal commands when you want to prove routing behavior end to end without creating a real candidate.",
+          command: "PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:audit"
+        })}
+        ${renderPilotScenarioCard({
+          title: "Promote a local candidate later",
+          copy: "When we are ready for a real org, scaffold a private local profile from the template instead of editing the committed simulator profile.",
+          command: "npm run pilot:profile -- <candidate-name>"
+        })}
+      </div>
+    </section>
+
+    <section class="panel" style="margin-bottom:18px;">
+      <div class="section-header">
+        <div>
           <div class="eyebrow">Poster</div>
           <h2>Launch the mobile app in demo mode</h2>
           <p class="subtle" style="margin-top:8px;">These links target the Expo client. Use them to load the demo workspace, create a post, open review, or approve the first review from the mobile side.</p>
