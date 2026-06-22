@@ -35,6 +35,44 @@ if [[ "${#missing[@]}" -gt 0 ]]; then
   exit 1
 fi
 
+placeholder_checks=(
+  "PILOT_CANDIDATE_PROFILE_NAME:replace-with-candidate-name"
+  "PILOT_ORGANIZATION_NAME:Replace With Organization Name"
+  "PILOT_ORGANIZATION_SLUG:replace-with-organization-slug"
+  "ORGANIZATION_SLUG:replace-with-organization-slug"
+  "PILOT_CLUB_NAME:Replace With Club Name"
+  "PILOT_CLUB_SLUG:replace-with-club-slug"
+  "CLUB_SLUG:replace-with-club-slug"
+  "PILOT_TEAM_NAME:Replace With Team Name"
+  "PILOT_TEAM_SLUG:replace-with-team-slug"
+  "TEAM_SLUG:replace-with-team-slug"
+  "SUBMITTER_EMAIL:submitter@example.com"
+  "ORGANIZATION_ADMIN_EMAIL:org-admin@example.com"
+  "CLUB_ADMIN_EMAIL:club-admin@example.com"
+  "REVIEWER_EMAIL:club-comms@example.com"
+  "TEAM_MANAGER_REVIEWER_EMAIL:team-manager@example.com"
+  "PRIMARY_REVIEWER_EMAIL:team-manager@example.com"
+  "SECOND_REVIEWER_EMAIL:club-admin@example.com"
+)
+
+template_values=()
+for placeholder_check in "${placeholder_checks[@]}"; do
+  var_name="${placeholder_check%%:*}"
+  expected_value="${placeholder_check#*:}"
+  actual_value="${!var_name:-}"
+  if [[ "${actual_value}" == "${expected_value}" ]]; then
+    template_values+=("${var_name}=${actual_value}")
+  fi
+done
+
+if [[ "${#template_values[@]}" -gt 0 ]]; then
+  echo "Pilot candidate profile still contains template placeholder values:" >&2
+  printf ' - %s\n' "${template_values[@]}" >&2
+  echo "Run: npm run pilot:inspect -- ${PILOT_CANDIDATE_PROFILE_NAME:-${1:-candidate}}" >&2
+  echo "Replace the placeholder values before treating this profile as candidate-ready." >&2
+  exit 1
+fi
+
 if [[ "${PILOT_ORGANIZATION_SLUG}" != "${ORGANIZATION_SLUG}" ]]; then
   echo "PILOT_ORGANIZATION_SLUG must match ORGANIZATION_SLUG" >&2
   exit 1
@@ -67,4 +105,5 @@ echo "team_slug=${TEAM_SLUG}"
 echo "submitter_email=${SUBMITTER_EMAIL}"
 echo "reviewer_email=${REVIEWER_EMAIL}"
 echo "team_manager_reviewer_email=${TEAM_MANAGER_REVIEWER_EMAIL}"
+echo "preflight_result=ok"
 echo "validation_result=ok"

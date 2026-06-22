@@ -45,8 +45,11 @@ test("create pilot candidate profile scaffolds a local env file", () => {
 
   const createdPath = path.join(repoRoot, "config", "pilot-candidates", "real-pilot.local.env");
   assert.equal(fs.existsSync(createdPath), true);
+  assert.match(fs.readFileSync(createdPath, "utf8"), /PILOT_CANDIDATE_PROFILE_NAME=real-pilot/);
   assert.match(output, /created_profile=.*real-pilot\.local\.env/);
+  assert.match(output, /inspect_command=npm run pilot:inspect -- real-pilot/);
   assert.match(output, /validate_command=PILOT_CANDIDATE_PROFILE=real-pilot bash scripts\/validate_pilot_candidate_profile\.sh/);
+  assert.match(output, /preflight_note=validation should fail until template placeholder values are replaced/);
 });
 
 test("create pilot candidate profile rejects invalid names", () => {

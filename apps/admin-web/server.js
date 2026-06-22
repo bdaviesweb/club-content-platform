@@ -2471,6 +2471,37 @@ async function renderDemoPage() {
     <section class="panel" style="margin-bottom:18px;">
       <div class="section-header">
         <div>
+          <div class="eyebrow">Demo storyline</div>
+          <h2>Happy path, then two exception paths</h2>
+          <p class="subtle" style="margin-top:8px;">Use this sequence when you want to explain the product from poster to publish and then show how the backend changes when the organization or club policy shifts.</p>
+        </div>
+        ${renderStatusBadge("3-part walkthrough", "info")}
+      </div>
+      <div class="summary-stack" style="margin-top:12px;">
+        ${renderDemoScenarioCard({
+          title: "Happy path: live club review and publish",
+          copy: "Start with the live demo club so the audience sees the standard poster-to-publish loop before any policy exceptions.",
+          posture: "Club override active",
+          outcome: currentClubVideoScenario
+        })}
+        ${renderDemoScenarioCard({
+          title: "Exception path: organization auto-approval",
+          copy: "Switch to the organization default for low-risk internal photo content, then show how the club exception can force the same content back into manual review.",
+          posture: "Organization default",
+          outcome: organizationPhotoScenario
+        })}
+        ${renderDemoScenarioCard({
+          title: "Exception path: second approval on public video",
+          copy: "Use public video to show the extra approval gate at the organization layer, then compare it to the club override that removes the second approval step.",
+          posture: "Organization vs club",
+          outcome: organizationVideoScenario
+        })}
+      </div>
+    </section>
+
+    <section class="panel" style="margin-bottom:18px;">
+      <div class="section-header">
+        <div>
           <div class="eyebrow">Pilot presets</div>
           <h2>Named pilot scenarios to show or verify</h2>
           <p class="subtle" style="margin-top:8px;">Use these presets when you want the demo story and the hosted policy proof to line up with the same first-club rollout cases.</p>

@@ -22,6 +22,7 @@ test("pilot candidate validator accepts the simulated north river profile", () =
 
   assert.match(output, /pilot_candidate_profile=simulated-north-river/);
   assert.match(output, /organization_slug=north-river-youth-sports/);
+  assert.match(output, /preflight_result=ok/);
   assert.match(output, /validation_result=ok/);
 });
 
@@ -48,6 +49,46 @@ test("pilot candidate validator rejects an incomplete profile", () => {
           stdio: ["ignore", "pipe", "pipe"]
         }),
       /missing required values/i
+    );
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("pilot candidate validator rejects untouched template placeholder values", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "club-content-pilot-template-"));
+  const profilePath = path.join(tempDir, "template-profile.local.env");
+  fs.writeFileSync(
+    profilePath,
+    [
+      "PILOT_CANDIDATE_PROFILE_NAME=replace-with-candidate-name",
+      'PILOT_ORGANIZATION_NAME="Replace With Organization Name"',
+      "PILOT_ORGANIZATION_SLUG=replace-with-organization-slug",
+      "ORGANIZATION_SLUG=replace-with-organization-slug",
+      'PILOT_CLUB_NAME="Replace With Club Name"',
+      "PILOT_CLUB_SLUG=replace-with-club-slug",
+      "CLUB_SLUG=replace-with-club-slug",
+      'PILOT_TEAM_NAME="Replace With Team Name"',
+      "PILOT_TEAM_SLUG=replace-with-team-slug",
+      "TEAM_SLUG=replace-with-team-slug",
+      "SUBMITTER_EMAIL=submitter@example.com",
+      "ORGANIZATION_ADMIN_EMAIL=org-admin@example.com",
+      "CLUB_ADMIN_EMAIL=club-admin@example.com",
+      "REVIEWER_EMAIL=club-comms@example.com",
+      "TEAM_MANAGER_REVIEWER_EMAIL=team-manager@example.com"
+    ].join("\n")
+  );
+
+  try {
+    assert.throws(
+      () =>
+        execFileSync("bash", [validateScriptPath, profilePath], {
+          cwd: repoRoot,
+          encoding: "utf8",
+          env: process.env,
+          stdio: ["ignore", "pipe", "pipe"]
+        }),
+      /template placeholder values/i
     );
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });

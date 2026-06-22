@@ -247,6 +247,9 @@ test("GET /demo renders the multi-role walkthrough", async () => {
     assert.match(html, /Policy outcomes for different scenarios/);
     assert.match(html, /What people see after the backend is done/);
     assert.match(html, /demoAction=post/);
+    assert.match(html, /Happy path: live club review and publish/);
+    assert.match(html, /Exception path: organization auto-approval/);
+    assert.match(html, /Exception path: second approval on public video/);
     assert.match(html, /Live demo club: public video/);
     assert.match(html, /Organization default: public video/);
     assert.match(html, /Published win recap/);

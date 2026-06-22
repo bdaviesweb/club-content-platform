@@ -15,16 +15,27 @@ Use this worksheet when preparing the first real club for Club Content.
 
 - Executive sponsor:
 - Day-to-day club lead:
+- Launch decision owner:
+- Day-one operator:
 - Submitter accounts:
 - Reviewer accounts:
 - Escalation contact:
 
 Map real people to the workflow roles:
 
+- `organization_admin`:
 - `team_manager`:
 - `club_comms`:
 - `club_admin`:
 - Optional second approver:
+
+Record the real names used to create the first pilot users:
+
+- Submitter name and email:
+- Organization admin name and email:
+- Club admin name and email:
+- Club comms reviewer name and email:
+- Team manager reviewer name and email:
 
 ## Workflow Policy Decisions
 
@@ -59,3 +70,11 @@ Map real people to the workflow roles:
 - Pilot VPS scenario suite completed:
 - Open rollout blockers:
 - Go-live owner signoff:
+
+## Rollback Plan
+
+- Rollback owner:
+- Rollback trigger:
+- First override to remove if pilot behavior is wrong:
+- Scenarios to rerun after rollback:
+- Pilot-club communication owner:

@@ -59,8 +59,10 @@ test("inspect pilot candidate profile prints readable summary", () => {
   });
 
   assert.match(output, /pilot_candidate_profile_inspection/);
+  assert.match(output, /profile_source=local/);
   assert.match(output, /profile_name=real-candidate/);
   assert.match(output, /organization_slug=real-org/);
   assert.match(output, /club_slug=real-club/);
+  assert.match(output, /preflight_command=PILOT_CANDIDATE_PROFILE=real-candidate bash scripts\/validate_pilot_candidate_profile\.sh/);
   assert.match(output, /validation_command=PILOT_CANDIDATE_PROFILE=real-candidate bash scripts\/validate_pilot_candidate_profile\.sh/);
 });

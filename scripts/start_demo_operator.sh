@@ -7,7 +7,9 @@ MOBILE_PORT="${MOBILE_PORT:-8082}"
 API_BASE_URL="${API_BASE_URL:-https://clubcontent-api.davmn.net}"
 LOG_DIR="${LOG_DIR:-${ROOT_DIR}/.demo-logs}"
 DETACH="${DETACH:-0}"
+OPEN_MOBILE_ON_DETACH="${OPEN_MOBILE_ON_DETACH:-1}"
 SIMULATOR_DEVICE_NAME="${SIMULATOR_DEVICE_NAME:-Club Content iPhone 17 Pro}"
+XCRUN_BIN="${XCRUN_BIN:-xcrun}"
 
 mkdir -p "${LOG_DIR}"
 
@@ -85,18 +87,18 @@ start_mobile() {
 }
 
 resolve_simulator_udid() {
-  xcrun simctl list devices available |
+  "${XCRUN_BIN}" simctl list devices available |
     sed -n "s/^[[:space:]]*${SIMULATOR_DEVICE_NAME//\//\\/} (\\([0-9A-F-]\\{36\\}\\)).*/\\1/p" |
     head -n 1
 }
 
 find_existing_expo_go_app() {
   local device_udids
-  device_udids="$(xcrun simctl list devices available | sed -n 's/.*(\([0-9A-F-]\{36\}\)).*/\1/p')"
+  device_udids="$("${XCRUN_BIN}" simctl list devices available | sed -n 's/.*(\([0-9A-F-]\{36\}\)).*/\1/p')"
 
   while IFS= read -r device_udid; do
     [[ -z "${device_udid}" ]] && continue
-    if app_path="$(xcrun simctl get_app_container "${device_udid}" host.exp.Exponent app 2>/dev/null)"; then
+    if app_path="$("${XCRUN_BIN}" simctl get_app_container "${device_udid}" host.exp.Exponent app 2>/dev/null)"; then
       if [[ -n "${app_path}" ]]; then
         printf '%s' "${app_path}"
         return 0
@@ -115,10 +117,10 @@ open_mobile_demo() {
     return 1
   fi
 
-  xcrun simctl boot "${simulator_udid}" >/dev/null 2>&1 || true
-  xcrun simctl bootstatus "${simulator_udid}" -b >/dev/null
+  "${XCRUN_BIN}" simctl boot "${simulator_udid}" >/dev/null 2>&1 || true
+  "${XCRUN_BIN}" simctl bootstatus "${simulator_udid}" -b >/dev/null
 
-  if ! xcrun simctl get_app_container "${simulator_udid}" host.exp.Exponent app >/dev/null 2>&1; then
+  if ! "${XCRUN_BIN}" simctl get_app_container "${simulator_udid}" host.exp.Exponent app >/dev/null 2>&1; then
     local expo_go_app=""
     expo_go_app="$(find_existing_expo_go_app || true)"
     if [[ -z "${expo_go_app}" ]]; then
@@ -126,11 +128,21 @@ open_mobile_demo() {
       echo "Install it once on a simulator, then rerun npm run demo:operator." >&2
       return 1
     fi
-    xcrun simctl install "${simulator_udid}" "${expo_go_app}" >/dev/null
+    "${XCRUN_BIN}" simctl install "${simulator_udid}" "${expo_go_app}" >/dev/null
   fi
 
-  xcrun simctl launch "${simulator_udid}" host.exp.Exponent >/dev/null 2>&1 || true
-  xcrun simctl openurl "${simulator_udid}" "${EXPO_URL}?demoAction=load"
+  "${XCRUN_BIN}" simctl launch "${simulator_udid}" host.exp.Exponent >/dev/null 2>&1 || true
+  "${XCRUN_BIN}" simctl openurl "${simulator_udid}" "${EXPO_URL}?demoAction=load"
+}
+
+open_mobile_demo_if_available() {
+  if ! command -v "${XCRUN_BIN}" >/dev/null 2>&1; then
+    echo "Simulator launch skipped because ${XCRUN_BIN} is unavailable."
+    return 0
+  fi
+
+  echo "Mobile runtime is ready. Opening the demo app on ${SIMULATOR_DEVICE_NAME}..."
+  open_mobile_demo || true
 }
 
 start_admin
@@ -160,6 +172,9 @@ if [[ "${DETACH}" == "1" ]]; then
     echo "Check ${LOG_DIR}/mobile-demo.log" >&2
     exit 1
   fi
+  if [[ "${OPEN_MOBILE_ON_DETACH}" == "1" ]]; then
+    open_mobile_demo_if_available
+  fi
   exit 0
 fi
 
@@ -173,7 +188,6 @@ if ! wait_for_http "${MOBILE_STATUS_URL}" 90 1; then
   exit 1
 fi
 
-echo "Mobile runtime is ready. Opening the demo app on ${SIMULATOR_DEVICE_NAME}..."
-open_mobile_demo || true
+open_mobile_demo_if_available
 
 wait "${MOBILE_PID}"
