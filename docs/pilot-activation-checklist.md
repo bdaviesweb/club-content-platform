@@ -1,6 +1,6 @@
 # Pilot Activation Checklist
 
-Use this checklist before turning on the first real pilot club or declaring the simulated pilot package launch-ready.
+Use this checklist before turning on the first real pilot club or declaring the test-tenant package launch-ready.
 
 ## Before Activation
 
@@ -23,7 +23,7 @@ Use this checklist before turning on the first real pilot club or declaring the 
 - Fill out `docs/pilot-onboarding-template.md`.
 - Run `npm run pilot:intake-from-onboarding -- /absolute/path/to/pilot-onboarding.md` and save the generated intake block.
 - Record the rollback trigger, rollback owner, and first override to remove if day-one behavior is wrong.
-- Keep hosted audit, VPS checks, and full rehearsal on the simulator profile until the real organization records exist.
+- Keep hosted audit, VPS checks, and full rehearsal on the test-tenant profile until the real organization records exist.
 
 ## Verification Gates
 
@@ -58,7 +58,7 @@ Use this checklist before turning on the first real pilot club or declaring the 
 - Rehearsal share packet:
 - Rehearsal share message:
 - Rehearsal delivery target:
-- Simulator organization mode URL used:
+- Test-tenant organization mode URL used:
 - Rehearsal go/no-go summary:
 - Mobile submission id verified:
 - Published post id verified:

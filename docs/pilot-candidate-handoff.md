@@ -19,7 +19,7 @@ These steps are safe before any real candidate records are created:
 6. Run `npm run pilot:create-plan -- <candidate-name>` to generate the exact create and rollback SQL without mutating anything yet.
 7. Run `npm run pilot:readiness -- <candidate-name>` to confirm the intake, profile, handoff packet, and creation bundle all agree.
 8. Fill out the ownership and rollback plan in [pilot-activation-checklist.md](/Users/robertdavies/Documents/Codex/club-content/docs/pilot-activation-checklist.md).
-9. Keep using the simulator operator kit for demos, policy walkthroughs, and rehearsal storytelling.
+9. Keep using the test-tenant operator kit for demos, policy walkthroughs, and rehearsal storytelling.
 
 ## Not Safe Before Real Data Exists
 
@@ -30,7 +30,7 @@ Do not treat these as candidate-ready pre-creation steps:
 3. `PILOT_CANDIDATE_PROFILE=<candidate-name> npm run pilot:rehearse`
 4. Any hosted smoke that expects the real organization, club, team, or reviewer accounts to exist already
 
-Until those records exist, keep running the simulator candidate for proof:
+Until those records exist, keep running the test-tenant candidate for proof:
 
 1. `PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:audit`
 2. `PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:vps`
@@ -83,5 +83,5 @@ The candidate handoff is ready for the next stage only when:
 2. The candidate creation plan has both create and rollback SQL.
 3. The onboarding worksheet is filled out.
 4. The activation checklist has named owners and rollback decisions.
-5. The simulator demo and simulator rehearsal remain green.
-6. Everyone agrees that the next step is real data creation, not more simulator prep.
+5. The test-tenant demo and test-tenant rehearsal remain green.
+6. Everyone agrees that the next step is real data creation, not more test-tenant prep.
