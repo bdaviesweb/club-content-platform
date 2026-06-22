@@ -18,20 +18,21 @@ Before running anything hosted, confirm all of these exist:
 
 ## Execution Order
 
-1. Fill `docs/pilot-real-candidate-intake.md` or edit `docs/pilot-real-candidate-intake.txt`
-2. Fast path: run `npm run pilot:prepare-from-intake -- /absolute/path/to/intake.txt` to generate the profile, handoff packet, creation plan, and readiness result in one pass
-3. Manual path: run `npm run pilot:profile-from-intake` or `npm run pilot:profile-from-intake -- /absolute/path/to/intake.txt`
-4. Run `npm run pilot:inspect -- <candidate>`
-5. Run `PILOT_CANDIDATE_PROFILE=<candidate> bash scripts/validate_pilot_candidate_profile.sh`
-6. Run `npm run pilot:handoff-packet -- <candidate>`
-7. Run `npm run pilot:create-plan -- <candidate>`
-8. Run `npm run pilot:readiness -- <candidate>` or `npm run pilot:readiness -- /absolute/path/to/intake.txt`
-9. Review the generated `create.sql` and `rollback.sql`
-10. Apply the `create.sql` on the hosted pilot database with an operator present
-11. Immediately run `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:audit`
-12. If audit is `GO`, run `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:vps`
-13. If the hosted scenarios pass, run the operator demo and capture evidence
-14. If anything fails, stop and use the generated `rollback.sql` before making more changes
+1. Fill `docs/pilot-onboarding-template.md` or a copied onboarding worksheet for the real club
+2. Fastest onboarding path: run `npm run pilot:prepare-from-onboarding -- /absolute/path/to/pilot-onboarding.md` to generate the intake block, profile, handoff packet, creation plan, and readiness result in one pass
+3. Intake-first fast path: run `npm run pilot:prepare-from-intake -- /absolute/path/to/intake.txt` to generate the profile, handoff packet, creation plan, and readiness result in one pass
+4. Manual path: run `npm run pilot:intake-from-onboarding -- /absolute/path/to/pilot-onboarding.md`, save the block, then run `npm run pilot:profile-from-intake` or `npm run pilot:profile-from-intake -- /absolute/path/to/intake.txt`
+5. Run `npm run pilot:inspect -- <candidate>`
+6. Run `PILOT_CANDIDATE_PROFILE=<candidate> bash scripts/validate_pilot_candidate_profile.sh`
+7. Run `npm run pilot:handoff-packet -- <candidate>`
+8. Run `npm run pilot:create-plan -- <candidate>`
+9. Run `npm run pilot:readiness -- <candidate>` or `npm run pilot:readiness -- /absolute/path/to/intake.txt`
+10. Review the generated `create.sql` and `rollback.sql`
+11. Apply the `create.sql` on the hosted pilot database with an operator present
+12. Immediately run `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:audit`
+13. If audit is `GO`, run `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:vps`
+14. If the hosted scenarios pass, run the operator demo and capture evidence
+15. If anything fails, stop and use the generated `rollback.sql` before making more changes
 
 ## Stop Conditions
 

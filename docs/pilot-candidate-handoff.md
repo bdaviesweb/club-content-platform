@@ -12,8 +12,8 @@ Start with [pilot-real-candidate-intake.md](/Users/robertdavies/Documents/Codex/
 These steps are safe before any real candidate records are created:
 
 1. Fill out `docs/pilot-onboarding-template.md`.
-2. Run `npm run pilot:intake-from-onboarding -- /absolute/path/to/pilot-onboarding.md` and save the output as the candidate intake block.
-3. Run `npm run pilot:profile-from-intake`.
+2. Run `npm run pilot:intake-from-onboarding -- /absolute/path/to/pilot-onboarding.md` and save the output as the candidate intake block, or use `npm run pilot:prepare-from-onboarding -- /absolute/path/to/pilot-onboarding.md` for the full local prep path.
+3. Run `npm run pilot:profile-from-intake` if you did not use the full onboarding prep path.
 4. Run `npm run pilot:inspect -- <candidate-name>` to review the resolved values.
 5. Run `PILOT_CANDIDATE_PROFILE=<candidate-name> bash scripts/validate_pilot_candidate_profile.sh` as the profile preflight gate.
 6. Run `npm run pilot:create-plan -- <candidate-name>` to generate the exact create and rollback SQL without mutating anything yet.

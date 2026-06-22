@@ -94,3 +94,7 @@ When the worksheet is filled, convert it into the real-candidate intake block wi
 1. `npm run pilot:intake-from-onboarding -- /absolute/path/to/pilot-onboarding.md`
 2. Save that output to `docs/pilot-real-candidate-intake.txt` or another local text file
 3. Run `npm run pilot:prepare-from-intake -- /absolute/path/to/intake.txt`
+
+Or run the whole local prep sequence in one command:
+
+1. `npm run pilot:prepare-from-onboarding -- /absolute/path/to/pilot-onboarding.md`
