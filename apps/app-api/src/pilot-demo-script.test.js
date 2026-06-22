@@ -376,6 +376,9 @@ printf '%s\\n' "$@" > ${JSON.stringify(path.join(fixtureDir, "open.txt"))}
   assert.match(output, /operator=ok/);
   assert.match(output, /open=ok/);
   assert.match(output, /artifacts=ok/);
+  assert.match(output, /api_liveness=ok/);
+  assert.match(output, /operator_liveness=ok/);
+  assert.match(output, /worker_liveness=ok/);
   assert.match(output, /pilot_demo_decision=GO/);
   assert.match(output, /pilot_demo_result=ok/);
 
@@ -389,6 +392,9 @@ printf '%s\\n' "$@" > ${JSON.stringify(path.join(fixtureDir, "open.txt"))}
   assert.match(status, /operator=ok/);
   assert.match(status, /open=ok/);
   assert.match(status, /artifacts=ok/);
+  assert.match(status, /api_liveness=ok/);
+  assert.match(status, /operator_liveness=ok/);
+  assert.match(status, /worker_liveness=ok/);
 
   const artifactsDir = path.join(bundleDir, "artifacts");
   assert.equal(fs.existsSync(path.join(artifactsDir, "demo-command-center.html")), true);
@@ -414,4 +420,159 @@ printf '%s\\n' "$@" > ${JSON.stringify(path.join(fixtureDir, "open.txt"))}
 
   const openLog = fs.readFileSync(path.join(fixtureDir, "open.txt"), "utf8");
   assert.match(openLog, /http:\/\/127\.0\.0\.1:3013\/demo/);
+});
+
+test("pilot demo script returns no-go when services do not stay alive after artifact capture", () => {
+  const outputDir = path.join(tempRoot, "bundle-d");
+  const fixtureDir = fs.mkdtempSync(path.join(tempRoot, "fixture-d-"));
+  const helpersDir = path.join(fixtureDir, "helpers");
+  fs.mkdirSync(helpersDir, { recursive: true });
+
+  const helper = (name, content) => {
+    const helperPath = path.join(helpersDir, name);
+    fs.writeFileSync(helperPath, content, { mode: 0o755 });
+    return helperPath;
+  };
+
+  const servicesScript = helper(
+    "services.sh",
+    `#!/usr/bin/env bash
+set -euo pipefail
+echo services_ready
+`
+  );
+
+  const apiScript = helper(
+    "api.js",
+    `#!/usr/bin/env node
+const http = require("node:http");
+const port = Number(process.env.API_PORT || 4000);
+let requestCount = 0;
+const server = http.createServer((req, res) => {
+  requestCount += 1;
+  if (req.url === "/health") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ ok: true }));
+  } else if (req.url === "/feed/internal?includeSmoke=1") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ items: [{ id: "demo-post", status: "published" }] }));
+  } else {
+    res.writeHead(200, { "content-type": "text/plain" });
+    res.end("ok");
+  }
+
+  if (requestCount >= 4) {
+    setTimeout(() => server.close(() => process.exit(0)), 50);
+  }
+});
+server.listen(port, "127.0.0.1");
+`
+  );
+
+  const workerScript = helper(
+    "worker.js",
+    `#!/usr/bin/env node
+setInterval(() => {}, 1000);
+`
+  );
+
+  const simulatorScript = helper(
+    "simulator.sh",
+    `#!/usr/bin/env bash
+set -euo pipefail
+echo simulator_reset_complete
+`
+  );
+
+  const operatorScript = helper(
+    "operator.sh",
+    `#!/usr/bin/env bash
+set -euo pipefail
+: "\${LOG_DIR:?}"
+: "\${ADMIN_PORT:=3013}"
+mkdir -p "\${LOG_DIR}"
+printf 'fake admin log\\n' > "\${LOG_DIR}/admin-demo.log"
+printf 'fake mobile log\\n' > "\${LOG_DIR}/mobile-demo.log"
+nohup node -e '
+  const http = require("node:http");
+  const port = Number(process.env.ADMIN_PORT || 3013);
+  let requestCount = 0;
+  const server = http.createServer((req, res) => {
+    requestCount += 1;
+    res.writeHead(200, { "content-type": "text/html" });
+    if (req.url.startsWith("/workflow-settings")) {
+      res.end("<html><body>workflow settings " + req.url + "</body></html>");
+    } else if (req.url === "/quick-review") {
+      res.end("<html><body>quick review</body></html>");
+    } else if (req.url === "/demo") {
+      res.end("<html><body>demo command center</body></html>");
+    } else {
+      res.end("<html><body>ok</body></html>");
+    }
+
+    if (requestCount >= 5) {
+      setTimeout(() => server.close(() => process.exit(0)), 50);
+    }
+  });
+  server.listen(port, "127.0.0.1");
+' </dev/null > "\${LOG_DIR}/operator-server.log" 2>&1 &
+echo $! > "\${LOG_DIR}/operator-server.pid"
+echo operator_ready
+`
+  );
+
+  let output = "";
+  let bundleDir = "";
+  try {
+    output = execFileSync("bash", [scriptPath], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PILOT_CANDIDATE_PROFILE: "simulated-north-river",
+        PILOT_DEMO_OUTPUT_DIR: outputDir,
+        PILOT_DEMO_RUNTIME_MODE: "force_available",
+        PILOT_DEMO_SERVICES_COMMAND: `bash ${JSON.stringify(servicesScript)}`,
+        PILOT_DEMO_API_COMMAND: `node ${JSON.stringify(apiScript)}`,
+        PILOT_DEMO_WORKER_COMMAND: `node ${JSON.stringify(workerScript)}`,
+        PILOT_DEMO_SIMULATOR_COMMAND: `bash ${JSON.stringify(simulatorScript)}`,
+        PILOT_DEMO_OPERATOR_COMMAND: `bash ${JSON.stringify(operatorScript)}`,
+        ADMIN_PORT: "3013",
+        API_PORT: "4000",
+        OPEN_SURFACES: "0"
+      },
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    assert.fail("expected pilot_demo.sh to return non-zero when liveness checks fail");
+  } catch (error) {
+    assert.equal(error.status, 1);
+    output = String(error.stdout || "");
+  } finally {
+    const runtimeDir = path.join(outputDir, "runtime");
+    for (const pidName of ["pilot-demo-api.pid", "pilot-demo-worker.pid"]) {
+      const pidPath = path.join(runtimeDir, pidName);
+      if (fs.existsSync(pidPath)) {
+        try {
+          process.kill(Number(fs.readFileSync(pidPath, "utf8").trim()), "SIGTERM");
+        } catch {}
+      }
+    }
+    const bundleName = fs
+      .readdirSync(outputDir, { withFileTypes: true })
+      .find((entry) => entry.isDirectory())?.name;
+    bundleDir = bundleName ? path.join(outputDir, bundleName) : "";
+    const operatorPidPath = bundleDir ? path.join(bundleDir, "logs", "operator-server.pid") : "";
+    if (operatorPidPath && fs.existsSync(operatorPidPath)) {
+      try {
+        process.kill(Number(fs.readFileSync(operatorPidPath, "utf8").trim()), "SIGTERM");
+      } catch {}
+    }
+  }
+
+  assert.match(output, /artifacts=ok/);
+  assert.match(output, /api_liveness=failed/);
+  assert.match(output, /pilot_demo_decision=NO_GO/);
+
+  const status = fs.readFileSync(path.join(bundleDir, "status.txt"), "utf8");
+  assert.match(status, /api_liveness=failed/);
 });

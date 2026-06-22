@@ -153,6 +153,18 @@ port_is_listening() {
   lsof -iTCP:"${port}" -sTCP:LISTEN -n -P >/dev/null 2>&1
 }
 
+pid_file_is_running() {
+  local pid_file="$1"
+  if [[ ! -f "${pid_file}" ]]; then
+    return 1
+  fi
+
+  local pid
+  pid="$(cat "${pid_file}")"
+  [[ -n "${pid}" ]] || return 1
+  kill -0 "${pid}" 2>/dev/null
+}
+
 shell_escape() {
   printf '%q' "$1"
 }
@@ -637,6 +649,40 @@ else
     record_status "artifacts=failed"
     log_line "artifacts=failed"
     overall_status=1
+  fi
+fi
+
+if [[ "${DRY_RUN}" != "1" && "${can_launch_operator}" == "1" ]]; then
+  if wait_for_stable_http "${local_api_base}/health" 5 1 2; then
+    record_status "api_liveness=ok"
+    log_line "api_liveness=ok"
+  else
+    record_status "api_liveness=failed"
+    log_line "api_liveness=failed"
+    overall_status=1
+  fi
+
+  if wait_for_stable_http "${demo_url}" 5 1 2; then
+    record_status "operator_liveness=ok"
+    log_line "operator_liveness=ok"
+  else
+    record_status "operator_liveness=failed"
+    log_line "operator_liveness=failed"
+    overall_status=1
+  fi
+
+  if [[ -f "${worker_pid_file}" ]]; then
+    if pid_file_is_running "${worker_pid_file}"; then
+      record_status "worker_liveness=ok"
+      log_line "worker_liveness=ok"
+    else
+      record_status "worker_liveness=failed"
+      log_line "worker_liveness=failed"
+      overall_status=1
+    fi
+  else
+    record_status "worker_liveness=skipped"
+    log_line "worker_liveness=skipped"
   fi
 fi
 
