@@ -20,6 +20,7 @@
     "pilot:rehearse": "bash scripts/pilot_rehearsal.sh",
     "pilot:packet": "bash scripts/pilot_launch_packet.sh",
     "pilot:share": "bash scripts/pilot_share_launch_packet.sh",
+    "pilot:deliver": "bash scripts/pilot_deliver_launch_packet.sh",
     "pilot:audit": "bash scripts/pilot_activation_audit.sh",
     "pilot:vps": "bash scripts/pilot_readiness_vps.sh",
     "qa:vps": "bash scripts/qa_vps.sh",

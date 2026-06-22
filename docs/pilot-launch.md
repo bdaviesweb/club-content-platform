@@ -34,9 +34,11 @@ Use these entry points:
    Turns the latest rehearsal bundle into a single portable markdown packet at `tmp/pilot-launch-packet.md`.
 5. `npm run pilot:share`
    Copies the portable packet to `tmp/pilot-launch-packet-share.md`, writes a ready-to-forward message body, and copies it to the clipboard when `pbcopy` is available.
-6. `docs/pilot-onboarding-template.md`
+6. `npm run pilot:deliver`
+   Opens the ready-to-forward message body and shared packet together so the operator can hand it off without assembling anything manually.
+7. `docs/pilot-onboarding-template.md`
    Captures the first-club role map, policy choices, and signoff fields.
-7. `docs/pilot-activation-checklist.md`
+8. `docs/pilot-activation-checklist.md`
    Defines the go-live gate, evidence to save, and recovery steps.
 
 ## Operator Demo Flow
@@ -135,7 +137,8 @@ Use this checklist when setting up the first real club or when rehearsing with t
 15. Review the generated bundle under `tmp/pilot-rehearsal/<timestamp>-<profile>/` and preserve `handoff.md` for handoff.
 16. Run `npm run pilot:packet` to turn the latest rehearsal bundle into a single portable launch packet.
 17. Run `npm run pilot:share` to copy the packet to `tmp/pilot-launch-packet-share.md` for one-step handoff.
-18. Use the generated `tmp/pilot-launch-packet-share-message.txt` as the fallback message body when clipboard copy is unavailable.
+18. Run `npm run pilot:deliver` to open the ready-to-forward message body and shared packet together.
+19. Use the generated `tmp/pilot-launch-packet-share-message.txt` as the fallback message body when clipboard copy is unavailable.
 
 ## QA Checklist
 

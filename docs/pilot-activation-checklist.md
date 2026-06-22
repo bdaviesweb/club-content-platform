@@ -21,6 +21,7 @@ Use this checklist before turning on the first real pilot club or declaring the 
 - `npm run pilot:rehearse`
 - `npm run pilot:packet`
 - `npm run pilot:share`
+- `npm run pilot:deliver`
 
 ## Evidence to Capture
 
@@ -30,6 +31,7 @@ Use this checklist before turning on the first real pilot club or declaring the 
 - Rehearsal launch packet:
 - Rehearsal share packet:
 - Rehearsal share message:
+- Rehearsal delivery target:
 - Rehearsal go/no-go summary:
 - Mobile submission id verified:
 - Published post id verified:

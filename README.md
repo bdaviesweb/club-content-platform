@@ -181,6 +181,7 @@ The rehearsal writes an evidence bundle under `tmp/pilot-rehearsal/<timestamp>-<
 Run `npm run pilot:packet` afterward to generate a single portable packet at `tmp/pilot-launch-packet.md`.
 Run `npm run pilot:share` to copy that packet to `tmp/pilot-launch-packet-share.md` for handoff.
 It also writes `tmp/pilot-launch-packet-share-message.txt` and copies that message body to the clipboard when `pbcopy` is available.
+Run `npm run pilot:deliver` to open the ready-to-forward message body and the shared packet together.
 
 This lets the suite keep `club_comms` for the comms lane while automatically using the team manager where a scenario routes video review to `team_manager`.
 
