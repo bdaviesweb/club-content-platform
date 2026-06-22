@@ -11,6 +11,7 @@ SUBMITTER_EMAIL="${SUBMITTER_EMAIL:-coach@demo-club.local}"
 ORGANIZATION_ADMIN_EMAIL="${ORGANIZATION_ADMIN_EMAIL:-org-admin@demo-club.local}"
 CLUB_ADMIN_EMAIL="${CLUB_ADMIN_EMAIL:-comms@demo-club.local}"
 REVIEWER_EMAIL="${REVIEWER_EMAIL:-comms@demo-club.local}"
+TEAM_MANAGER_REVIEWER_EMAIL="${TEAM_MANAGER_REVIEWER_EMAIL:-${REVIEWER_EMAIL}}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-300}"
 POLL_SECONDS="${POLL_SECONDS:-3}"
 SMOKE_MARKER="${SMOKE_MARKER:-approval-publish-smoke-$(date -u +%Y%m%dT%H%M%SZ)-${RANDOM}}"
@@ -193,9 +194,31 @@ if [[ -z "${approval_request_id}" ]]; then
 fi
 
 echo "Approving smoke submission..."
+acted_by_email="${REVIEWER_EMAIL}"
+case "${review_mode:-}" in
+  hermes)
+    case "${approval_request_id:+$(query_one "
+      SELECT COALESCE(approver_role::text, '')
+      FROM approval_requests
+      WHERE id = '${approval_request_id}'
+      LIMIT 1;
+    ")}" in
+      team_manager)
+        acted_by_email="${TEAM_MANAGER_REVIEWER_EMAIL}"
+        ;;
+      club_admin)
+        acted_by_email="${CLUB_ADMIN_EMAIL}"
+        ;;
+      club_comms|"")
+        acted_by_email="${REVIEWER_EMAIL}"
+        ;;
+    esac
+    ;;
+esac
+
 curl -fsS \
   -H "content-type: application/json" \
-  -d '{"action":"approve","actedByEmail":"'"${REVIEWER_EMAIL}"'","notes":"Approval publish smoke."}' \
+  -d '{"action":"approve","actedByEmail":"'"${acted_by_email}"'","notes":"Approval publish smoke."}' \
   "http://localhost:4000/approval-requests/${approval_request_id}/actions" >/dev/null
 
 deadline=$((SECONDS + TIMEOUT_SECONDS))
