@@ -31,6 +31,14 @@ handoff_file="${source_bundle_dir}/handoff.md"
 summary_file="${source_bundle_dir}/summary.txt"
 status_file="${source_bundle_dir}/status.txt"
 
+audit_blockers=()
+if [[ -f "${summary_file}" ]]; then
+  while IFS= read -r blocker_line; do
+    [[ -n "${blocker_line}" ]] || continue
+    audit_blockers+=("${blocker_line#blocker=}")
+  done < <(grep '^blocker=' "${summary_file}" || true)
+fi
+
 if [[ ! -f "${handoff_file}" ]]; then
   echo "Missing handoff file: ${handoff_file}" >&2
   exit 1
@@ -43,6 +51,7 @@ packet_title="Pilot Launch Packet"
 {
   echo "# ${packet_title}"
   echo
+  echo "- Evidence path: \`${source_bundle_dir}\`"
   echo "- Source bundle: \`${source_bundle_dir}\`"
   echo "- Handoff file: \`${handoff_file}\`"
   echo "- Summary file: \`${summary_file}\`"
@@ -57,6 +66,11 @@ packet_title="Pilot Launch Packet"
   echo
   echo "- Share this file as the single launch packet."
   echo "- The bundle path above points to the preserved evidence behind the packet."
+  if [[ "${#audit_blockers[@]}" -gt 0 ]]; then
+    echo "- Blockers: see the Portable Handoff section above."
+  else
+    echo "- Blockers: none."
+  fi
 } > "${packet_path}"
 
 echo "pilot_launch_packet_path=${packet_path}"
