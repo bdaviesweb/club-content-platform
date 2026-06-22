@@ -48,6 +48,7 @@ Use this checklist before turning on the first real pilot club or declaring the 
 - Candidate creation plan:
 - Candidate create SQL:
 - Candidate rollback SQL:
+- Candidate SQL apply bundle:
 - Post-creation verification bundle:
 - Demo command center URL used:
 - Demo bundle path:

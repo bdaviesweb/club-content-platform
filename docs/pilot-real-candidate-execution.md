@@ -29,12 +29,12 @@ Before running anything hosted, confirm all of these exist:
 9. Run `npm run pilot:create-plan -- <candidate>`
 10. Run `npm run pilot:readiness -- <candidate>` or `npm run pilot:readiness -- /absolute/path/to/intake.txt`
 11. Review the generated `create.sql` and `rollback.sql`
-12. Apply the `create.sql` on the hosted pilot database with an operator present
+12. Apply the `create.sql` on the hosted pilot database with an operator present, or use `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:apply-sql -- <candidate> create`
 13. Fastest hosted verification path: run `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:post-create-verify`
 14. Manual hosted verification path: run `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:audit`
 15. If audit is `GO`, run `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:vps`
 16. If the hosted scenarios pass, run the operator demo and capture evidence
-17. If anything fails, stop and use the generated `rollback.sql` before making more changes
+17. If anything fails, stop and use the generated `rollback.sql` before making more changes, or use `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:apply-sql -- <candidate> rollback`
 
 ## Stop Conditions
 
