@@ -64,6 +64,167 @@ sql_escape() {
   printf "%s" "${1}" | sed "s/'/''/g"
 }
 
+build_policy_json() {
+  local scope="$1"
+  env \
+    SCOPE="${scope}" \
+    ORG_DEFAULT_APPROVER_ROLE="${PILOT_ORG_DEFAULT_APPROVER_ROLE:-}" \
+    ORG_PUBLIC_APPROVER_ROLE="${PILOT_ORG_PUBLIC_APPROVER_ROLE:-}" \
+    ORG_MEDIUM_RISK_APPROVER_ROLE="${PILOT_ORG_MEDIUM_RISK_APPROVER_ROLE:-}" \
+    ORG_ALLOW_AGENT_ROUTING="${PILOT_ORG_ALLOW_AGENT_ROUTING:-}" \
+    ORG_AUTO_APPROVE_INTERNAL_LOW_RISK="${PILOT_ORG_AUTO_APPROVE_INTERNAL_LOW_RISK:-}" \
+    ORG_AUTO_APPROVE_MAX_RISK="${PILOT_ORG_AUTO_APPROVE_MAX_RISK:-}" \
+    ORG_AUTO_APPROVAL_ALLOWED_CONTENT_TYPES="${PILOT_ORG_AUTO_APPROVAL_ALLOWED_CONTENT_TYPES:-}" \
+    ORG_ROUTING_VIDEO_APPROVER_ROLE="${PILOT_ORG_ROUTING_VIDEO_APPROVER_ROLE:-}" \
+    ORG_REQUIRE_SECOND_APPROVAL_PUBLIC="${PILOT_ORG_REQUIRE_SECOND_APPROVAL_PUBLIC:-}" \
+    ORG_SECOND_APPROVER_ROLE="${PILOT_ORG_SECOND_APPROVER_ROLE:-}" \
+    ORG_SECOND_APPROVAL_CONTENT_TYPES="${PILOT_ORG_SECOND_APPROVAL_CONTENT_TYPES:-}" \
+    ORG_NOTIFICATION_EMAIL="${PILOT_ORG_NOTIFICATION_EMAIL:-}" \
+    ORG_NOTIFICATION_PUSH="${PILOT_ORG_NOTIFICATION_PUSH:-}" \
+    CLUB_POLICY_INHERITS_ORG_DEFAULTS="${PILOT_CLUB_POLICY_INHERITS_ORG_DEFAULTS:-}" \
+    CLUB_OVERRIDE_AUTO_APPROVE_INTERNAL_LOW_RISK="${PILOT_CLUB_OVERRIDE_AUTO_APPROVE_INTERNAL_LOW_RISK:-}" \
+    CLUB_OVERRIDE_ROUTING_VIDEO_APPROVER_ROLE="${PILOT_CLUB_OVERRIDE_ROUTING_VIDEO_APPROVER_ROLE:-}" \
+    CLUB_OVERRIDE_REQUIRE_SECOND_APPROVAL_PUBLIC="${PILOT_CLUB_OVERRIDE_REQUIRE_SECOND_APPROVAL_PUBLIC:-}" \
+    CLUB_OVERRIDE_NOTIFICATION_EMAIL="${PILOT_CLUB_OVERRIDE_NOTIFICATION_EMAIL:-}" \
+    CLUB_OVERRIDE_NOTIFICATION_PUSH="${PILOT_CLUB_OVERRIDE_NOTIFICATION_PUSH:-}" \
+    node <<'EOF'
+const scope = process.env.SCOPE;
+
+function yesNo(value) {
+  if (value === "yes") return true;
+  if (value === "no") return false;
+  return null;
+}
+
+function csvList(value) {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function notificationRule(emailValue, pushValue) {
+  const rule = {};
+  const email = yesNo(emailValue);
+  const push = yesNo(pushValue);
+  if (email !== null) rule.email = email;
+  if (push !== null) rule.push = push;
+  return rule;
+}
+
+function orgPolicy() {
+  const autoApprovalAllowed = csvList(process.env.ORG_AUTO_APPROVAL_ALLOWED_CONTENT_TYPES);
+  const secondApprovalTypes = csvList(process.env.ORG_SECOND_APPROVAL_CONTENT_TYPES);
+  const routingVideoRole = process.env.ORG_ROUTING_VIDEO_APPROVER_ROLE || "";
+  const secondApproverRole = process.env.ORG_SECOND_APPROVER_ROLE || "";
+  const publicSecondApproval = yesNo(process.env.ORG_REQUIRE_SECOND_APPROVAL_PUBLIC);
+  const autoApproveMaxRisk = process.env.ORG_AUTO_APPROVE_MAX_RISK
+    ? Number(process.env.ORG_AUTO_APPROVE_MAX_RISK)
+    : null;
+
+  const autoApprovalRule = {};
+  if (autoApprovalAllowed.length > 0) {
+    autoApprovalRule.allowedContentTypes = autoApprovalAllowed;
+  }
+
+  const routingRule = {};
+  if (routingVideoRole) {
+    routingRule.contentTypeApprovers = { video: routingVideoRole };
+  }
+
+  const approvalRule = {};
+  if (publicSecondApproval !== null) {
+    approvalRule.requireSecondApprovalForPublic = publicSecondApproval;
+  }
+  if (secondApproverRole) {
+    approvalRule.secondApproverRole = secondApproverRole;
+  }
+  if (secondApprovalTypes.length > 0) {
+    approvalRule.secondApprovalContentTypes = secondApprovalTypes;
+  }
+
+  return {
+    enabled: true,
+    defaultApproverRole: process.env.ORG_DEFAULT_APPROVER_ROLE || "",
+    publicApproverRole: process.env.ORG_PUBLIC_APPROVER_ROLE || "",
+    mediumRiskApproverRole: process.env.ORG_MEDIUM_RISK_APPROVER_ROLE || "",
+    allowAgentRouting: yesNo(process.env.ORG_ALLOW_AGENT_ROUTING) ?? true,
+    autoApproveInternalLowRisk:
+      yesNo(process.env.ORG_AUTO_APPROVE_INTERNAL_LOW_RISK) ?? false,
+    autoApproveMaxRisk,
+    autoApprovalRule,
+    routingRule,
+    approvalRule,
+    publishingRule: {
+      visibilityDestinations: {
+        internal: ["internal_feed"],
+        public: ["internal_feed"]
+      }
+    },
+    notificationRule: notificationRule(
+      process.env.ORG_NOTIFICATION_EMAIL,
+      process.env.ORG_NOTIFICATION_PUSH
+    )
+  };
+}
+
+function clubPolicy(org) {
+  const inherits = process.env.CLUB_POLICY_INHERITS_ORG_DEFAULTS || "";
+  const overrideAutoApprove = yesNo(process.env.CLUB_OVERRIDE_AUTO_APPROVE_INTERNAL_LOW_RISK);
+  const overridePublicSecondApproval = yesNo(
+    process.env.CLUB_OVERRIDE_REQUIRE_SECOND_APPROVAL_PUBLIC
+  );
+  const overrideRoutingVideoRole =
+    process.env.CLUB_OVERRIDE_ROUTING_VIDEO_APPROVER_ROLE || "";
+  const notification = notificationRule(
+    process.env.CLUB_OVERRIDE_NOTIFICATION_EMAIL,
+    process.env.CLUB_OVERRIDE_NOTIFICATION_PUSH
+  );
+  const hasExplicitOverride =
+    overrideAutoApprove !== null ||
+    overridePublicSecondApproval !== null ||
+    Boolean(overrideRoutingVideoRole) ||
+    Object.keys(notification).length > 0;
+
+  if (inherits === "yes" && !hasExplicitOverride) {
+    return { enabled: false };
+  }
+
+  const routingRule = {};
+  if (overrideRoutingVideoRole) {
+    routingRule.contentTypeApprovers = { video: overrideRoutingVideoRole };
+  }
+
+  const approvalRule = {};
+  if (overridePublicSecondApproval !== null) {
+    approvalRule.requireSecondApprovalForPublic = overridePublicSecondApproval;
+  } else if (inherits === "no" && org.approvalRule?.requireSecondApprovalForPublic !== undefined) {
+    approvalRule.requireSecondApprovalForPublic = org.approvalRule.requireSecondApprovalForPublic;
+  }
+
+  return {
+    enabled: inherits === "no" || hasExplicitOverride,
+    defaultApproverRole: inherits === "no" ? org.defaultApproverRole : "",
+    publicApproverRole: inherits === "no" ? org.publicApproverRole : "",
+    mediumRiskApproverRole: inherits === "no" ? org.mediumRiskApproverRole : "",
+    allowAgentRouting: null,
+    autoApproveInternalLowRisk: overrideAutoApprove,
+    autoApproveMaxRisk: null,
+    autoApprovalRule: {},
+    routingRule,
+    approvalRule,
+    publishingRule: {},
+    notificationRule: notification
+  };
+}
+
+const org = orgPolicy();
+const club = clubPolicy(org);
+process.stdout.write(JSON.stringify(scope === "club" ? club : org));
+EOF
+}
+
 org_name_sql="$(sql_escape "${PILOT_ORGANIZATION_NAME:-}")"
 org_slug_sql="$(sql_escape "${PILOT_ORGANIZATION_SLUG:-}")"
 club_name_sql="$(sql_escape "${PILOT_CLUB_NAME:-}")"
@@ -81,6 +242,139 @@ reviewer_name_sql="$(sql_escape "${REVIEWER_NAME:-}")"
 reviewer_email_sql="$(sql_escape "${REVIEWER_EMAIL:-}")"
 team_manager_name_sql="$(sql_escape "${TEAM_MANAGER_REVIEWER_NAME:-}")"
 team_manager_email_sql="$(sql_escape "${TEAM_MANAGER_REVIEWER_EMAIL:-}")"
+
+organization_policy_json="$(build_policy_json organization)"
+club_policy_json="$(build_policy_json club)"
+
+policy_sql_lines="$(
+  env \
+    ORG_POLICY_JSON="${organization_policy_json}" \
+    CLUB_POLICY_JSON="${club_policy_json}" \
+    ORG_SLUG_SQL="${org_slug_sql}" \
+    CLUB_SLUG_SQL="${club_slug_sql}" \
+    node <<'EOF'
+const org = JSON.parse(process.env.ORG_POLICY_JSON || "{}");
+const club = JSON.parse(process.env.CLUB_POLICY_JSON || "{}");
+
+function sqlBool(value) {
+  if (value === true) return "TRUE";
+  if (value === false) return "FALSE";
+  return "NULL";
+}
+
+function sqlNumber(value) {
+  return value === null || value === undefined || Number.isNaN(value) ? "NULL" : String(value);
+}
+
+function sqlRole(value) {
+  if (value === null || value === undefined || value === "") return "NULL";
+  return `'${String(value).replace(/'/g, "''")}'::membership_role`;
+}
+
+function sqlJson(value) {
+  return `'${JSON.stringify(value || {}).replace(/'/g, "''")}'::jsonb`;
+}
+
+const lines = [];
+if (org.enabled) {
+  lines.push(`INSERT INTO organization_workflow_policies (
+  organization_id,
+  default_approver_role,
+  public_approver_role,
+  medium_risk_approver_role,
+  allow_agent_routing,
+  auto_approve_internal_low_risk,
+  auto_approve_max_risk,
+  auto_approval_rule,
+  routing_rule,
+  approval_rule,
+  publishing_rule,
+  notification_rule
+)
+SELECT o.id,
+  ${sqlRole(org.defaultApproverRole)},
+  ${sqlRole(org.publicApproverRole)},
+  ${sqlRole(org.mediumRiskApproverRole)},
+  ${sqlBool(org.allowAgentRouting)},
+  ${sqlBool(org.autoApproveInternalLowRisk)},
+  ${sqlNumber(org.autoApproveMaxRisk)},
+  ${sqlJson(org.autoApprovalRule)},
+  ${sqlJson(org.routingRule)},
+  ${sqlJson(org.approvalRule)},
+  ${sqlJson(org.publishingRule)},
+  ${sqlJson(org.notificationRule)}
+FROM organizations o
+WHERE o.slug = '${process.env.ORG_SLUG_SQL}'
+ON CONFLICT (organization_id) DO UPDATE SET
+  default_approver_role = EXCLUDED.default_approver_role,
+  public_approver_role = EXCLUDED.public_approver_role,
+  medium_risk_approver_role = EXCLUDED.medium_risk_approver_role,
+  allow_agent_routing = EXCLUDED.allow_agent_routing,
+  auto_approve_internal_low_risk = EXCLUDED.auto_approve_internal_low_risk,
+  auto_approve_max_risk = EXCLUDED.auto_approve_max_risk,
+  auto_approval_rule = EXCLUDED.auto_approval_rule,
+  routing_rule = EXCLUDED.routing_rule,
+  approval_rule = EXCLUDED.approval_rule,
+  publishing_rule = EXCLUDED.publishing_rule,
+  notification_rule = EXCLUDED.notification_rule;`);
+  lines.push("");
+}
+
+if (club.enabled) {
+  lines.push(`INSERT INTO club_workflow_policies (
+  club_id,
+  default_approver_role,
+  public_approver_role,
+  medium_risk_approver_role,
+  allow_agent_routing,
+  auto_approve_internal_low_risk,
+  auto_approve_max_risk,
+  auto_approval_rule,
+  routing_rule,
+  approval_rule,
+  publishing_rule,
+  notification_rule
+)
+SELECT c.id,
+  ${sqlRole(club.defaultApproverRole)},
+  ${sqlRole(club.publicApproverRole)},
+  ${sqlRole(club.mediumRiskApproverRole)},
+  ${sqlBool(club.allowAgentRouting)},
+  ${sqlBool(club.autoApproveInternalLowRisk)},
+  ${sqlNumber(club.autoApproveMaxRisk)},
+  ${sqlJson(club.autoApprovalRule)},
+  ${sqlJson(club.routingRule)},
+  ${sqlJson(club.approvalRule)},
+  ${sqlJson(club.publishingRule)},
+  ${sqlJson(club.notificationRule)}
+FROM clubs c
+WHERE c.slug = '${process.env.CLUB_SLUG_SQL}'
+ON CONFLICT (club_id) DO UPDATE SET
+  default_approver_role = EXCLUDED.default_approver_role,
+  public_approver_role = EXCLUDED.public_approver_role,
+  medium_risk_approver_role = EXCLUDED.medium_risk_approver_role,
+  allow_agent_routing = EXCLUDED.allow_agent_routing,
+  auto_approve_internal_low_risk = EXCLUDED.auto_approve_internal_low_risk,
+  auto_approve_max_risk = EXCLUDED.auto_approve_max_risk,
+  auto_approval_rule = EXCLUDED.auto_approval_rule,
+  routing_rule = EXCLUDED.routing_rule,
+  approval_rule = EXCLUDED.approval_rule,
+  publishing_rule = EXCLUDED.publishing_rule,
+  notification_rule = EXCLUDED.notification_rule;`);
+}
+
+process.stdout.write(lines.join("\n"));
+EOF
+)"
+
+organization_policy_mode="disabled"
+club_policy_mode="inherit"
+if [[ "${organization_policy_json}" == *'"enabled":true'* ]]; then
+  organization_policy_mode="configured"
+fi
+if [[ "${club_policy_json}" == *'"enabled":true'* ]]; then
+  club_policy_mode="override"
+fi
 
 cat > "${create_sql_file}" <<EOF
 BEGIN;
@@ -204,6 +498,8 @@ WHERE c.slug = '${club_slug_sql}'
       AND pd.name = 'Internal Club Feed'
   );
 
+${policy_sql_lines}
+
 COMMIT;
 EOF
 
@@ -241,6 +537,12 @@ WHERE club_id = (SELECT id FROM clubs WHERE slug = '${club_slug_sql}')
   AND name = 'Internal Club Feed'
   AND config = '{"mode":"internal"}'::jsonb;
 
+DELETE FROM club_workflow_policies
+WHERE club_id = (SELECT id FROM clubs WHERE slug = '${club_slug_sql}');
+
+DELETE FROM organization_workflow_policies
+WHERE organization_id = (SELECT id FROM organizations WHERE slug = '${org_slug_sql}');
+
 -- Optional manual cleanup after review:
 -- DELETE FROM teams WHERE club_id = (SELECT id FROM clubs WHERE slug = '${club_slug_sql}') AND slug = '${team_slug_sql}';
 -- DELETE FROM clubs WHERE slug = '${club_slug_sql}';
@@ -265,6 +567,8 @@ EOF
   echo "pilot_candidate_creation_rollback_sql=${rollback_sql_file}"
   echo "pilot_candidate_creation_preflight=${preflight_output_file}"
   echo "pilot_candidate_creation_decision=${decision}"
+  echo "pilot_candidate_creation_org_policy_mode=${organization_policy_mode}"
+  echo "pilot_candidate_creation_club_policy_mode=${club_policy_mode}"
   echo "pilot_candidate_creation_preflight_status=${preflight_status}"
   if [[ "${#missing[@]}" -gt 0 ]]; then
     for item in "${missing[@]}"; do
@@ -294,6 +598,7 @@ EOF
   echo "- organization admin user and membership"
   echo "- club reviewer roles: club_comms, club_admin, team_manager"
   echo "- internal publishing destination"
+  echo "- workflow policy defaults and optional club overrides"
   echo
   echo "## Execution Guardrails"
   echo
@@ -327,6 +632,30 @@ EOF
   echo "- Club admin: \`${CLUB_ADMIN_NAME:-<unset>}\` <\`${CLUB_ADMIN_EMAIL:-<unset>}\`>"
   echo "- Club comms reviewer: \`${REVIEWER_NAME:-<unset>}\` <\`${REVIEWER_EMAIL:-<unset>}\`>"
   echo "- Team manager reviewer: \`${TEAM_MANAGER_REVIEWER_NAME:-<unset>}\` <\`${TEAM_MANAGER_REVIEWER_EMAIL:-<unset>}\`>"
+  echo
+  echo "## Workflow Policy Summary"
+  echo
+  echo "- Organization policy SQL: \`${organization_policy_mode}\`"
+  echo "- Club policy SQL: \`${club_policy_mode}\`"
+  echo "- Default approver role: \`${PILOT_ORG_DEFAULT_APPROVER_ROLE:-<unset>}\`"
+  echo "- Public-content approver role: \`${PILOT_ORG_PUBLIC_APPROVER_ROLE:-<unset>}\`"
+  echo "- Medium-risk approver role: \`${PILOT_ORG_MEDIUM_RISK_APPROVER_ROLE:-<unset>}\`"
+  echo "- Allow agent routing: \`${PILOT_ORG_ALLOW_AGENT_ROUTING:-<unset>}\`"
+  echo "- Auto-approve low-risk internal: \`${PILOT_ORG_AUTO_APPROVE_INTERNAL_LOW_RISK:-<unset>}\`"
+  echo "- Auto-approve max risk: \`${PILOT_ORG_AUTO_APPROVE_MAX_RISK:-<unset>}\`"
+  echo "- Auto-approval content types: \`${PILOT_ORG_AUTO_APPROVAL_ALLOWED_CONTENT_TYPES:-<unset>}\`"
+  echo "- Routing role for video: \`${PILOT_ORG_ROUTING_VIDEO_APPROVER_ROLE:-<unset>}\`"
+  echo "- Public second approval: \`${PILOT_ORG_REQUIRE_SECOND_APPROVAL_PUBLIC:-<unset>}\`"
+  echo "- Second approver role: \`${PILOT_ORG_SECOND_APPROVER_ROLE:-<unset>}\`"
+  echo "- Second approval content types: \`${PILOT_ORG_SECOND_APPROVAL_CONTENT_TYPES:-<unset>}\`"
+  echo "- Organization notification email: \`${PILOT_ORG_NOTIFICATION_EMAIL:-<unset>}\`"
+  echo "- Organization notification push: \`${PILOT_ORG_NOTIFICATION_PUSH:-<unset>}\`"
+  echo "- Club inherits org defaults: \`${PILOT_CLUB_POLICY_INHERITS_ORG_DEFAULTS:-<unset>}\`"
+  echo "- Club override auto-approve low-risk internal: \`${PILOT_CLUB_OVERRIDE_AUTO_APPROVE_INTERNAL_LOW_RISK:-<unset>}\`"
+  echo "- Club override routing role for video: \`${PILOT_CLUB_OVERRIDE_ROUTING_VIDEO_APPROVER_ROLE:-<unset>}\`"
+  echo "- Club override public second approval: \`${PILOT_CLUB_OVERRIDE_REQUIRE_SECOND_APPROVAL_PUBLIC:-<unset>}\`"
+  echo "- Club override notification email: \`${PILOT_CLUB_OVERRIDE_NOTIFICATION_EMAIL:-<unset>}\`"
+  echo "- Club override notification push: \`${PILOT_CLUB_OVERRIDE_NOTIFICATION_PUSH:-<unset>}\`"
 } > "${plan_file}"
 
 echo "pilot_candidate_creation_plan=${plan_file}"

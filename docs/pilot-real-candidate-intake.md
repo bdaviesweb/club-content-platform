@@ -52,9 +52,23 @@ This document is the single source of truth for:
 - Default approver role:
 - Public-content approver role:
 - Medium-risk approver role:
+- Allow Hermes agent routing: yes / no
+- Auto-approve low-risk internal content at organization level: yes / no
+- Auto-approve max risk threshold:
+- Allowed auto-approval content types:
+- Organization routing rule for video:
 - Should the club inherit org defaults unless explicitly noted: yes / no
 - Planned club exceptions:
 - Public-content second approval required: yes / no
+- Organization second approver role:
+- Organization second-approval content types:
+- Organization notification default email: yes / no
+- Organization notification default push: yes / no
+- Club effective auto-approve low-risk internal content: yes / no
+- Club effective routing rule for video:
+- Club effective public-content second approval: yes / no
+- Club effective notification baseline email: yes / no
+- Club effective notification baseline push: yes / no
 - Notification posture on day one:
 
 ## Rollback Notes
@@ -107,8 +121,22 @@ require_push_delivery=yes|no
 default_approver_role=
 public_content_approver_role=
 medium_risk_approver_role=
+allow_agent_routing=yes|no
+auto_approve_internal_low_risk=yes|no
+auto_approve_max_risk=
+auto_approval_content_types=
+routing_video_approver_role=
 inherit_org_defaults=yes|no
 public_second_approval=yes|no
+second_approver_role=
+second_approval_content_types=
+org_notification_email=yes|no
+org_notification_push=yes|no
+club_auto_approve_internal_low_risk=yes|no
+club_routing_video_approver_role=
+club_public_second_approval=yes|no
+club_notification_email=yes|no
+club_notification_push=yes|no
 notification_posture=
 rollback_trigger=
 first_override=

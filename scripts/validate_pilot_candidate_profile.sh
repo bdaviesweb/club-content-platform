@@ -55,6 +55,27 @@ placeholder_checks=(
   "SECOND_REVIEWER_EMAIL:club-admin@example.com"
 )
 
+yes_no_optional_vars=(
+  PILOT_ORG_ALLOW_AGENT_ROUTING
+  PILOT_ORG_AUTO_APPROVE_INTERNAL_LOW_RISK
+  PILOT_ORG_REQUIRE_SECOND_APPROVAL_PUBLIC
+  PILOT_ORG_NOTIFICATION_EMAIL
+  PILOT_ORG_NOTIFICATION_PUSH
+  PILOT_CLUB_POLICY_INHERITS_ORG_DEFAULTS
+  PILOT_CLUB_OVERRIDE_AUTO_APPROVE_INTERNAL_LOW_RISK
+  PILOT_CLUB_OVERRIDE_REQUIRE_SECOND_APPROVAL_PUBLIC
+  PILOT_CLUB_OVERRIDE_NOTIFICATION_EMAIL
+  PILOT_CLUB_OVERRIDE_NOTIFICATION_PUSH
+)
+
+role_optional_vars=(
+  PILOT_ORG_DEFAULT_APPROVER_ROLE
+  PILOT_ORG_PUBLIC_APPROVER_ROLE
+  PILOT_ORG_MEDIUM_RISK_APPROVER_ROLE
+  PILOT_ORG_ROUTING_VIDEO_APPROVER_ROLE
+  PILOT_ORG_SECOND_APPROVER_ROLE
+)
+
 template_values=()
 for placeholder_check in "${placeholder_checks[@]}"; do
   var_name="${placeholder_check%%:*}"
@@ -96,6 +117,29 @@ for email_var in SUBMITTER_EMAIL ORGANIZATION_ADMIN_EMAIL CLUB_ADMIN_EMAIL REVIE
     exit 1
   fi
 done
+
+for yes_no_var in "${yes_no_optional_vars[@]}"; do
+  yes_no_value="${!yes_no_var:-}"
+  [[ -z "${yes_no_value}" ]] && continue
+  if [[ "${yes_no_value}" != "yes" && "${yes_no_value}" != "no" ]]; then
+    echo "${yes_no_var} must be yes or no: ${yes_no_value}" >&2
+    exit 1
+  fi
+done
+
+for role_var in "${role_optional_vars[@]}"; do
+  role_value="${!role_var:-}"
+  [[ -z "${role_value}" ]] && continue
+  if [[ ! "${role_value}" =~ ^(submitter_coach|team_manager|club_comms|club_admin)$ ]]; then
+    echo "${role_var} must be a valid membership role: ${role_value}" >&2
+    exit 1
+  fi
+done
+
+if [[ -n "${PILOT_ORG_AUTO_APPROVE_MAX_RISK:-}" ]] && [[ ! "${PILOT_ORG_AUTO_APPROVE_MAX_RISK}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+  echo "PILOT_ORG_AUTO_APPROVE_MAX_RISK must be numeric: ${PILOT_ORG_AUTO_APPROVE_MAX_RISK}" >&2
+  exit 1
+fi
 
 echo "pilot_candidate_profile=${PILOT_CANDIDATE_PROFILE_NAME}"
 echo "profile_path=${PILOT_CANDIDATE_PROFILE_PATH:-unknown}"

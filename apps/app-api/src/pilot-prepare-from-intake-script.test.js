@@ -101,8 +101,22 @@ test("prepare from intake creates all pre-creation artifacts from one intake fil
       "default_approver_role=club_comms",
       "public_content_approver_role=club_admin",
       "medium_risk_approver_role=team_manager",
+      "allow_agent_routing=yes",
+      "auto_approve_internal_low_risk=yes",
+      "auto_approve_max_risk=0.35",
+      "auto_approval_content_types=photo",
+      "routing_video_approver_role=club_admin",
       "inherit_org_defaults=yes",
       "public_second_approval=yes",
+      "second_approver_role=club_admin",
+      "second_approval_content_types=video",
+      "org_notification_email=yes",
+      "org_notification_push=yes",
+      "club_auto_approve_internal_low_risk=no",
+      "club_routing_video_approver_role=team_manager",
+      "club_public_second_approval=no",
+      "club_notification_email=no",
+      "club_notification_push=no",
       "notification_posture=log-only with manual review",
       "rollback_trigger=wrong reviewers or routing behavior",
       "first_override=org default auto-approval",
@@ -143,4 +157,15 @@ test("prepare from intake creates all pre-creation artifacts from one intake fil
   assert.ok(bundleName);
   assert.equal(fs.existsSync(path.join(creationRoot, bundleName, "create.sql")), true);
   assert.equal(fs.existsSync(path.join(creationRoot, bundleName, "rollback.sql")), true);
+
+  const profile = fs.readFileSync(
+    path.join(repoRoot, "config", "pilot-candidates", "block-club.local.env"),
+    "utf8"
+  );
+  assert.match(profile, /PILOT_ORG_AUTO_APPROVE_MAX_RISK=0\.35/);
+  assert.match(profile, /PILOT_CLUB_OVERRIDE_ROUTING_VIDEO_APPROVER_ROLE=team_manager/);
+
+  const createSql = fs.readFileSync(path.join(creationRoot, bundleName, "create.sql"), "utf8");
+  assert.match(createSql, /INSERT INTO organization_workflow_policies/);
+  assert.match(createSql, /INSERT INTO club_workflow_policies/);
 });
