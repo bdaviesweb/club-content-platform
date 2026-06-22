@@ -11,7 +11,7 @@ Start with [pilot-real-candidate-intake.md](/Users/robertdavies/Documents/Codex/
 
 These steps are safe before any real candidate records are created:
 
-1. Fill out `docs/pilot-onboarding-template.md`.
+1. Start from `npm run pilot:scaffold-onboarding -- /absolute/path/to/validated-simulator-onboarding.md /absolute/path/to/real-pilot-onboarding.md` if you want a near-filled worksheet with carried-forward policy defaults, then finish the real blanks.
 2. Run `npm run pilot:intake-from-onboarding -- /absolute/path/to/pilot-onboarding.md` and save the output as the candidate intake block, or use `npm run pilot:prepare-from-onboarding -- /absolute/path/to/pilot-onboarding.md` for the full local prep path.
 3. Run `npm run pilot:profile-from-intake` if you did not use the full onboarding prep path.
 4. Run `npm run pilot:inspect -- <candidate-name>` to review the resolved values.
@@ -42,17 +42,18 @@ Until those records exist, keep running the test-tenant candidate for proof:
 Use this exact order for the handoff:
 
 1. Scaffold the candidate profile.
-2. Replace every template placeholder value.
-3. Inspect the resolved profile.
-4. Run the profile preflight validator.
-5. Generate the creation plan and review both the create SQL and rollback SQL.
-6. Capture the real people behind `team_manager`, `club_comms`, `club_admin`, submitter, and escalation owner.
-7. Record the initial policy posture:
+2. Scaffold or copy the onboarding worksheet from a validated simulator packet if that is the fastest path.
+3. Replace every template or blank real-world value.
+4. Inspect the resolved profile.
+5. Run the profile preflight validator.
+6. Generate the creation plan and review both the create SQL and rollback SQL.
+7. Capture the real people behind `team_manager`, `club_comms`, `club_admin`, submitter, and escalation owner.
+8. Record the initial policy posture:
    - inherit organization defaults
    - planned club exceptions
    - notification posture
    - public-content second approval posture
-8. Record the rollback owner and the exact rollback trigger.
+9. Record the rollback owner and the exact rollback trigger.
 
 The validator is expected to fail until the template placeholders are replaced. That failure is the safeguard, not a bug.
 
