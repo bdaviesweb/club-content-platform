@@ -2551,35 +2551,35 @@ async function renderDemoPage() {
     <section class="panel" style="margin-bottom:18px;">
       <div class="section-header">
         <div>
-          <div class="eyebrow">Simulator organization</div>
-          <h2>Prove the org-level workflow before creating real candidates</h2>
-          <p class="subtle" style="margin-top:8px;">Use the committed simulator profile to rehearse organization defaults, club exceptions, routing rules, and auto-approvals without adding any new candidate data yet.</p>
+          <div class="eyebrow">Test tenant</div>
+          <h2>Prove the org-level workflow before you have a real club</h2>
+          <p class="subtle" style="margin-top:8px;">Use the committed Demo Sports Organization test tenant to rehearse organization defaults, club exceptions, routing rules, and auto-approvals without adding any real customer data yet.</p>
         </div>
         ${renderStatusBadge("No live candidate required", "good")}
       </div>
       <div class="summary-stack" style="margin-top:12px;">
         ${renderPilotScenarioCard({
           title: "Inventory the available profiles",
-          copy: "Start here when you want to see the committed simulator org and any local profile files that already exist.",
+          copy: "Start here when you want to see the committed test tenant and any local profile files that already exist.",
           command: "npm run pilot:profiles"
         })}
         ${renderPilotScenarioCard({
-          title: "Inspect the simulator org",
-          copy: "Use this to print the organization, club, team, and reviewer values for the committed simulator profile.",
+          title: "Inspect the test tenant",
+          copy: "Use this to print the organization, club, team, and reviewer values for the committed Demo Sports Organization test tenant.",
           command: "npm run pilot:inspect -- simulated-north-river"
         })}
         ${renderPilotScenarioCard({
-          title: "Run the simulator workflow",
-          copy: "Use the simulator profile with the audit or VPS rehearsal commands when you want to prove routing behavior end to end without creating a real candidate.",
+          title: "Run the test-tenant workflow",
+          copy: "Use the committed test-tenant profile with the audit or VPS rehearsal commands when you want to prove routing behavior end to end without creating a real candidate.",
           command: "PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:audit"
         })}
         ${renderPilotScenarioCard({
-          title: "Open simulator organization mode",
-          copy: "Jump straight into workflow settings using the committed simulator organization so you can review org defaults and club exceptions without real club data.",
+          title: "Open test-tenant organization mode",
+          copy: "Jump straight into workflow settings using the committed Demo Sports Organization test tenant so you can review org defaults and club exceptions without real club data.",
           command: "open /workflow-settings?organizationMode=simulator&clubSlug=north-river-soccer-club",
           links: [
             {
-              label: "Open simulator mode",
+              label: "Open test-tenant mode",
               href: buildWorkflowSettingsLink({
                 clubSlug: "north-river-soccer-club",
                 organizationMode: "simulator",
@@ -8350,7 +8350,7 @@ async function renderWorkflowSettingsPage(
           clubSlug: simulatorOrganization?.clubSlug || selectedClubSlug,
           organizationMode: "simulator",
           simulationInput: normalizedSimulationInput
-        })}">Open simulator organization mode</a>
+        })}">Open test-tenant organization mode</a>
         <a class="quick-link" href="/">Open review workspace</a>
       </div>
     </section>
@@ -8360,9 +8360,9 @@ async function renderWorkflowSettingsPage(
         ? `<section class="panel" style="margin-bottom:18px; border:1px solid rgba(37, 99, 235, 0.20); background: linear-gradient(180deg, rgba(239, 246, 255, 0.94), rgba(255,255,255,0.98));">
             <div class="section-header">
               <div>
-                <div class="eyebrow">Simulator organization mode</div>
-                <h2>${escapeHtml(simulatorOrganization.label || "Simulated pilot organization")}</h2>
-                <p class="subtle" style="margin-top:8px;">Use this committed simulator profile to rehearse organization defaults, club exceptions, reviewer roles, routing rules, and auto-approvals without real club data.</p>
+                <div class="eyebrow">Test tenant organization mode</div>
+                <h2>Demo Sports Organization test tenant</h2>
+                <p class="subtle" style="margin-top:8px;">Use this committed test tenant to rehearse organization defaults, club exceptions, reviewer roles, routing rules, and auto-approvals without real club data.</p>
               </div>
               ${renderStatusBadge("No real candidate required", "good")}
             </div>
@@ -8370,7 +8370,7 @@ async function renderWorkflowSettingsPage(
               <div class="metric-card">
                 <span class="metric-label">Organization</span>
                 <strong>${escapeHtml(simulatorOrganization.organizationSlug || "n/a")}</strong>
-                <span class="subtle">${escapeHtml(simulatorOrganization.label || "Simulated pilot organization")}</span>
+                <span class="subtle">Demo Sports Organization test tenant</span>
               </div>
               <div class="metric-card">
                 <span class="metric-label">Club</span>

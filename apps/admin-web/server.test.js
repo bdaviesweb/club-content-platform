@@ -235,12 +235,13 @@ test("GET /demo renders the multi-role walkthrough", async () => {
     assert.match(html, /Launch the mobile app in demo mode/);
     assert.match(html, /Named pilot scenarios to show or verify/);
     assert.match(html, /PILOT_SCENARIOS=review_publish npm run pilot:vps/);
-    assert.match(html, /Simulator organization/);
-    assert.match(html, /Prove the org-level workflow before creating real candidates/);
+    assert.match(html, /Test tenant/);
+    assert.match(html, /Prove the org-level workflow before you have a real club/);
     assert.match(html, /npm run pilot:profiles/);
     assert.match(html, /npm run pilot:inspect -- simulated-north-river/);
     assert.match(html, /PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:audit/);
-    assert.match(html, /Open simulator organization mode/);
+    assert.match(html, /Demo Sports Organization test tenant/);
+    assert.match(html, /Open test-tenant organization mode/);
     assert.match(html, /organizationMode=simulator/);
     assert.match(html, /npm run pilot:profile -- &lt;candidate-name&gt;/);
     assert.match(html, /Human decision surfaces/);
@@ -864,8 +865,8 @@ test("GET /workflow-settings opens simulator organization mode by default", asyn
     const html = await response.text();
 
     assert.equal(response.status, 200);
-    assert.match(html, /Simulator organization mode/);
-    assert.match(html, /Simulated pilot organization/);
+    assert.match(html, /Test tenant organization mode/);
+    assert.match(html, /Demo Sports Organization test tenant/);
     assert.match(html, /north-river-youth-sports/);
     assert.match(html, /north-river-soccer-club/);
     assert.match(html, /manager@northriverpilot.local/);
