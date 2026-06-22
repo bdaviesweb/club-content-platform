@@ -19,6 +19,7 @@
     "demo:runtime:stop": "bash scripts/stop_pilot_demo_runtime.sh",
     "demo:runtime:reset": "bash scripts/reset_pilot_demo_runtime.sh",
     "pilot:profile": "bash scripts/create_pilot_candidate_profile.sh",
+    "pilot:prep-real-kit": "bash scripts/pilot_prepare_real_candidate_kit.sh",
     "pilot:scaffold-onboarding": "bash scripts/pilot_scaffold_real_onboarding.sh",
     "pilot:validate-onboarding": "bash scripts/pilot_validate_onboarding.sh",
     "pilot:onboarding-gaps": "bash scripts/pilot_real_onboarding_gaps.sh",
