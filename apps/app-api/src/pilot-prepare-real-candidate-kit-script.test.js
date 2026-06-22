@@ -100,9 +100,14 @@ test("prepare real candidate kit bundles the scaffold, gap report, request packe
   assert.equal(fs.existsSync(path.join(bundlePath, "onboarding-gaps.txt")), true);
   assert.equal(fs.existsSync(path.join(bundlePath, "pilot-real-data-request.md")), true);
   assert.equal(fs.existsSync(path.join(bundlePath, "pilot-real-data-request-message.txt")), true);
+  assert.equal(fs.existsSync(path.join(bundlePath, "pilot-real-data-reply-template.txt")), true);
   assert.equal(fs.existsSync(path.join(bundlePath, "README.md")), true);
 
   const readme = fs.readFileSync(path.join(bundlePath, "README.md"), "utf8");
   assert.match(readme, /# Real Candidate Prep Kit/);
   assert.match(readme, /How To Use/);
+  const replyTemplate = fs.readFileSync(path.join(bundlePath, "pilot-real-data-reply-template.txt"), "utf8");
+  assert.match(replyTemplate, /Candidate identity/);
+  assert.match(replyTemplate, /- Candidate profile name:/);
+  assert.match(replyTemplate, /Live launch gate/);
 });

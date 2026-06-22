@@ -13,6 +13,7 @@ scaffolded_onboarding_path="${bundle_dir}/pilot-onboarding-real-candidate.md"
 gap_report_path="${bundle_dir}/onboarding-gaps.txt"
 request_packet_path="${bundle_dir}/pilot-real-data-request.md"
 share_message_path="${bundle_dir}/pilot-real-data-request-message.txt"
+reply_template_path="${bundle_dir}/pilot-real-data-reply-template.txt"
 summary_path="${bundle_dir}/summary.txt"
 readme_path="${bundle_dir}/README.md"
 
@@ -43,6 +44,48 @@ if [[ -z "${gap_count}" ]]; then
   gap_count="0"
 fi
 
+cat > "${reply_template_path}" <<'EOF'
+Candidate identity
+- Candidate profile name:
+- Organization name:
+- Organization slug:
+- Club name:
+- Club slug:
+- Team names and slugs:
+- Age group:
+
+People and ownership
+- Executive sponsor:
+- Day-to-day club lead:
+- Launch decision owner:
+- Day-one operator:
+- Escalation contact:
+- Submitter name and email:
+- Organization admin name and email:
+- Club admin name and email:
+- Club comms reviewer name and email:
+- Team manager reviewer name and email:
+
+Delivery and destinations
+- Require real email delivery for launch: yes/no
+- Require real push delivery for launch: yes/no
+- Notification posture on day one:
+
+Rollback
+- Rollback owner:
+- Rollback trigger:
+- First override to remove if pilot behavior is wrong:
+- Scenarios to rerun after rollback:
+- Pilot-club communication owner:
+
+Live launch gate
+- Go-live owner signoff:
+- Operator demo completed: yes/no
+- Mobile review smoke completed: yes/no
+- Pilot VPS scenario suite completed: yes/no
+- Open rollout blockers: none/clear or list them
+EOF
+
 {
   echo "pilot_real_candidate_kit_source=${source_onboarding_path}"
   echo "pilot_real_candidate_kit_bundle=${bundle_dir}"
@@ -50,6 +93,7 @@ fi
   echo "pilot_real_candidate_kit_gap_report=${gap_report_path}"
   echo "pilot_real_candidate_kit_request_packet=${request_packet_path}"
   echo "pilot_real_candidate_kit_share_message=${share_message_path}"
+  echo "pilot_real_candidate_kit_reply_template=${reply_template_path}"
   echo "pilot_real_candidate_kit_gap_count=${gap_count}"
   if [[ "${gap_status}" -eq 0 ]]; then
     echo "pilot_real_candidate_kit_status=ready"
@@ -66,6 +110,7 @@ fi
   echo "- Gap report: \`${gap_report_path}\`"
   echo "- Request packet: \`${request_packet_path}\`"
   echo "- Share message: \`${share_message_path}\`"
+  echo "- Reply template: \`${reply_template_path}\`"
   echo "- Remaining gap count: \`${gap_count}\`"
   echo
   echo "## How To Use"
@@ -73,7 +118,8 @@ fi
   echo "1. Fill the scaffolded onboarding worksheet with the real club details."
   echo "2. Review the grouped gap report to confirm what is still missing."
   echo "3. Send the share message if someone else needs to provide the missing inputs."
-  echo "4. Rerun the gap check and request-packet commands after updates."
+  echo "4. Use the reply template if you want one paste-back block of answers."
+  echo "5. Rerun the gap check and request-packet commands after updates."
   echo
   echo "## Commands"
   echo
