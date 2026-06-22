@@ -19,12 +19,14 @@ Use this checklist before turning on the first real pilot club or declaring the 
 - `npm run pilot:vps`
 - `npm run pilot:audit`
 - `npm run pilot:rehearse`
+- `npm run pilot:packet`
 
 ## Evidence to Capture
 
 - Demo command center URL used:
 - Rehearsal bundle path:
 - Rehearsal handoff file:
+- Rehearsal launch packet:
 - Rehearsal go/no-go summary:
 - Mobile submission id verified:
 - Published post id verified:

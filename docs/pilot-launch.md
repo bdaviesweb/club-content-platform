@@ -30,9 +30,11 @@ Use these entry points:
    Verifies the live submitter-to-reviewer-to-publish mobile flow. It can resume a pending `mobile-demo-post-*` item.
 3. `npm run pilot:rehearse`
    Runs the simulator profile inspection, validation, hosted audit, hosted VPS rehearsal, and demo UI check in one pass. It writes an evidence bundle under `tmp/pilot-rehearsal/<timestamp>-<profile>/` with `summary.txt`, `handoff.md`, command logs, step logs, and a go/no-go decision.
-4. `docs/pilot-onboarding-template.md`
+4. `npm run pilot:packet`
+   Turns the latest rehearsal bundle into a single portable markdown packet at `tmp/pilot-launch-packet.md`.
+5. `docs/pilot-onboarding-template.md`
    Captures the first-club role map, policy choices, and signoff fields.
-5. `docs/pilot-activation-checklist.md`
+6. `docs/pilot-activation-checklist.md`
    Defines the go-live gate, evidence to save, and recovery steps.
 
 ## Operator Demo Flow
@@ -129,6 +131,7 @@ Use this checklist when setting up the first real club or when rehearsing with t
 13. Use `npm run pilot:inspect -- <candidate>` to review the full profile summary before validation.
 14. Use `npm run pilot:rehearse` to run the whole simulator rehearsal in one pass.
 15. Review the generated bundle under `tmp/pilot-rehearsal/<timestamp>-<profile>/` and preserve `handoff.md` for handoff.
+16. Run `npm run pilot:packet` to turn the latest rehearsal bundle into a single portable launch packet.
 
 ## QA Checklist
 
