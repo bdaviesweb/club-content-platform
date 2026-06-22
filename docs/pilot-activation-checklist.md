@@ -29,6 +29,7 @@ Use this checklist before turning on the first real pilot club or declaring the 
 - Rehearsal handoff file:
 - Rehearsal launch packet:
 - Rehearsal share packet:
+- Rehearsal share message:
 - Rehearsal go/no-go summary:
 - Mobile submission id verified:
 - Published post id verified:
