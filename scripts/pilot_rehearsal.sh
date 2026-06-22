@@ -7,6 +7,8 @@ repo_root="$(cd "${script_dir}/.." && pwd)"
 pilot_profile="${1:-${PILOT_CANDIDATE_PROFILE:-simulated-north-river}}"
 DRY_RUN="${DRY_RUN:-0}"
 rehearsal_output_dir="${PILOT_REHEARSAL_OUTPUT_DIR:-${repo_root}/tmp/pilot-rehearsal}"
+audit_retry_attempts="${PILOT_REHEARSAL_AUDIT_RETRY_ATTEMPTS:-5}"
+audit_retry_sleep_seconds="${PILOT_REHEARSAL_AUDIT_RETRY_SLEEP_SECONDS:-3}"
 
 source "${script_dir}/load_pilot_candidate_env.sh" "${pilot_profile}"
 
@@ -82,6 +84,35 @@ run_step() {
   fi
 }
 
+run_audit_with_retry() {
+  local output_file="$1"
+  local attempt=1
+  local max_attempts="${audit_retry_attempts}"
+
+  while true; do
+    if run_step "audit" "Run backend audit" "${output_file}" env PILOT_CANDIDATE_PROFILE="${pilot_profile}" npm run pilot:audit; then
+      return 0
+    fi
+
+    if [[ "${DRY_RUN}" == "1" ]]; then
+      return 1
+    fi
+
+    if (( attempt >= max_attempts )); then
+      return 1
+    fi
+
+    if grep -q '^blocker=Pending workflow events are present\.' "${output_file}" 2>/dev/null; then
+      attempt=$((attempt + 1))
+      log_line "audit_retry=waiting_for_pending_workflow attempt=${attempt}/${max_attempts}"
+      sleep "${audit_retry_sleep_seconds}"
+      continue
+    fi
+
+    return 1
+  done
+}
+
 inspect_output="${logs_dir}/inspect.log"
 validate_output="${logs_dir}/validate.log"
 audit_output="${logs_dir}/audit.log"
@@ -104,15 +135,15 @@ if ! run_step "validate" "Validate test-tenant profile" "${validate_output}" env
   overall_status=1
 fi
 
-if ! run_step "audit" "Run backend audit" "${audit_output}" env PILOT_CANDIDATE_PROFILE="${pilot_profile}" npm run pilot:audit; then
-  overall_status=1
-fi
-
 if ! run_step "vps" "Run VPS rehearsal" "${vps_output}" env PILOT_CANDIDATE_PROFILE="${pilot_profile}" npm run pilot:vps; then
   overall_status=1
 fi
 
 if ! run_step "ui" "Verify demo UI contract" "${ui_output}" node --test "${repo_root}/apps/admin-web/server.test.js"; then
+  overall_status=1
+fi
+
+if ! run_audit_with_retry "${audit_output}"; then
   overall_status=1
 fi
 

@@ -40,12 +40,12 @@ test("pilot rehearsal script runs the full test-tenant flow in order", () => {
     output,
     /DRY_RUN env PILOT_CANDIDATE_PROFILE=simulated-north-river bash scripts\/validate_pilot_candidate_profile\.sh/
   );
-  assert.match(output, /==> Run backend audit/);
-  assert.match(output, /DRY_RUN env PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:audit/);
   assert.match(output, /==> Run VPS rehearsal/);
   assert.match(output, /DRY_RUN env PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:vps/);
   assert.match(output, /==> Verify demo UI contract/);
   assert.match(output, /DRY_RUN node --test .*apps\/admin-web\/server\.test\.js/);
+  assert.match(output, /==> Run backend audit/);
+  assert.match(output, /DRY_RUN env PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:audit/);
   assert.match(output, /pilot_rehearsal_decision=GO/);
   assert.match(output, /pilot_rehearsal_result=ok/);
 
@@ -66,14 +66,15 @@ test("pilot rehearsal script runs the full test-tenant flow in order", () => {
   assert.match(summary, /pilot_rehearsal_decision=GO/);
   assert.match(summary, /inspect=skipped/);
   assert.match(summary, /validate=skipped/);
-  assert.match(summary, /audit=skipped/);
   assert.match(summary, /vps=skipped/);
   assert.match(summary, /ui=skipped/);
+  assert.match(summary, /audit=skipped/);
 
   const commands = fs.readFileSync(path.join(bundleDir, "commands.txt"), "utf8");
   assert.match(commands, /npm run pilot:inspect -- simulated-north-river/);
-  assert.match(commands, /env PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:audit/);
+  assert.match(commands, /env PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:vps/);
   assert.match(commands, /node --test /);
+  assert.match(commands, /env PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:audit/);
 
   const handoff = fs.readFileSync(path.join(bundleDir, "handoff.md"), "utf8");
   assert.match(handoff, /# Pilot Rehearsal Handoff/);
