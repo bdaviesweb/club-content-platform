@@ -111,8 +111,17 @@ require_push_delivery="$(load_value "Require real push delivery for launch" "req
 default_approver_role="$(load_value "Default approver role" "default_approver_role")"
 public_content_approver_role="$(load_value "Public-content approver role" "public_content_approver_role")"
 medium_risk_approver_role="$(load_value "Medium-risk approver role" "medium_risk_approver_role")"
+allow_agent_routing="$(load_value "Allow Hermes agent routing" "allow_agent_routing")"
+auto_approve_internal_low_risk="$(load_value "Auto-approve low-risk internal content at organization level" "auto_approve_internal_low_risk")"
+auto_approve_max_risk="$(load_value "Auto-approve max risk threshold" "auto_approve_max_risk")"
+auto_approval_content_types="$(load_value "Allowed auto-approval content types" "auto_approval_content_types")"
+routing_video_approver_role="$(load_value "Organization routing rule for video" "routing_video_approver_role")"
 inherit_org_defaults="$(load_value "Should the club inherit org defaults unless explicitly noted" "inherit_org_defaults")"
 public_second_approval="$(load_value "Public-content second approval required" "public_second_approval")"
+second_approver_role="$(load_value "Organization second approver role" "second_approver_role")"
+second_approval_content_types="$(load_value "Organization second-approval content types" "second_approval_content_types")"
+org_notification_email="$(load_value "Organization notification default email" "org_notification_email")"
+org_notification_push="$(load_value "Organization notification default push" "org_notification_push")"
 notification_posture="$(load_value "Notification posture on day one" "notification_posture")"
 rollback_trigger="$(load_value "Rollback trigger" "rollback_trigger")"
 first_override="$(load_value "First override to remove if day-one behavior is wrong" "first_override")"
@@ -151,8 +160,17 @@ required_intake_fields=(
   default_approver_role
   public_content_approver_role
   medium_risk_approver_role
+  allow_agent_routing
+  auto_approve_internal_low_risk
+  auto_approve_max_risk
+  auto_approval_content_types
+  routing_video_approver_role
   inherit_org_defaults
   public_second_approval
+  second_approver_role
+  second_approval_content_types
+  org_notification_email
+  org_notification_push
   notification_posture
   rollback_trigger
   first_override

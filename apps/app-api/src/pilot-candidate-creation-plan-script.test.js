@@ -43,7 +43,26 @@ test("pilot candidate creation plan generates create and rollback SQL for a comp
     'REVIEWER_NAME="Real Reviewer"',
     "REVIEWER_EMAIL=reviewer@real.local",
     'TEAM_MANAGER_REVIEWER_NAME="Real Team Manager"',
-    "TEAM_MANAGER_REVIEWER_EMAIL=manager@real.local"
+    "TEAM_MANAGER_REVIEWER_EMAIL=manager@real.local",
+    "PILOT_ORG_DEFAULT_APPROVER_ROLE=team_manager",
+    "PILOT_ORG_PUBLIC_APPROVER_ROLE=club_comms",
+    "PILOT_ORG_MEDIUM_RISK_APPROVER_ROLE=club_comms",
+    "PILOT_ORG_ALLOW_AGENT_ROUTING=yes",
+    "PILOT_ORG_AUTO_APPROVE_INTERNAL_LOW_RISK=yes",
+    "PILOT_ORG_AUTO_APPROVE_MAX_RISK=0.35",
+    'PILOT_ORG_AUTO_APPROVAL_ALLOWED_CONTENT_TYPES="photo"',
+    "PILOT_ORG_ROUTING_VIDEO_APPROVER_ROLE=club_admin",
+    "PILOT_ORG_REQUIRE_SECOND_APPROVAL_PUBLIC=yes",
+    "PILOT_ORG_SECOND_APPROVER_ROLE=club_admin",
+    'PILOT_ORG_SECOND_APPROVAL_CONTENT_TYPES="video"',
+    "PILOT_ORG_NOTIFICATION_EMAIL=yes",
+    "PILOT_ORG_NOTIFICATION_PUSH=yes",
+    "PILOT_CLUB_POLICY_INHERITS_ORG_DEFAULTS=yes",
+    "PILOT_CLUB_OVERRIDE_AUTO_APPROVE_INTERNAL_LOW_RISK=no",
+    "PILOT_CLUB_OVERRIDE_ROUTING_VIDEO_APPROVER_ROLE=team_manager",
+    "PILOT_CLUB_OVERRIDE_REQUIRE_SECOND_APPROVAL_PUBLIC=no",
+    "PILOT_CLUB_OVERRIDE_NOTIFICATION_EMAIL=no",
+    "PILOT_CLUB_OVERRIDE_NOTIFICATION_PUSH=no"
   ]);
   const outputDir = path.join(tempRoot, "output");
 
@@ -73,11 +92,74 @@ test("pilot candidate creation plan generates create and rollback SQL for a comp
   assert.match(plan, /Create SQL:/);
   assert.match(plan, /Rollback SQL:/);
   assert.match(plan, /Real Submitter/);
+  assert.match(plan, /Organization policy SQL: `configured`/);
+  assert.match(plan, /Club policy SQL: `override`/);
   assert.match(createSql, /INSERT INTO organizations/);
   assert.match(createSql, /submitter_coach/);
   assert.match(createSql, /organization_admin/);
+  assert.match(createSql, /INSERT INTO organization_workflow_policies/);
+  assert.match(createSql, /INSERT INTO club_workflow_policies/);
+  assert.match(createSql, /"allowedContentTypes":\["photo"\]/);
+  assert.match(createSql, /"contentTypeApprovers":\{"video":"club_admin"\}/);
+  assert.match(createSql, /"requireSecondApprovalForPublic":true/);
   assert.match(rollbackSql, /DELETE FROM memberships/);
   assert.match(rollbackSql, /DELETE FROM organization_memberships/);
+  assert.match(rollbackSql, /DELETE FROM club_workflow_policies/);
+  assert.match(rollbackSql, /DELETE FROM organization_workflow_policies/);
+});
+
+test("pilot candidate creation plan skips club policy SQL when the candidate fully inherits organization defaults", () => {
+  const profilePath = writeProfile("candidate-inherit.local.env", [
+    "PILOT_CANDIDATE_PROFILE_NAME=inherit-candidate",
+    'PILOT_ORGANIZATION_NAME="Inherit Organization"',
+    "PILOT_ORGANIZATION_SLUG=inherit-org",
+    "ORGANIZATION_SLUG=inherit-org",
+    'PILOT_CLUB_NAME="Inherit Club"',
+    "PILOT_CLUB_SLUG=inherit-club",
+    "CLUB_SLUG=inherit-club",
+    'PILOT_TEAM_NAME="Inherit Team"',
+    "PILOT_TEAM_SLUG=inherit-team",
+    "TEAM_SLUG=inherit-team",
+    "PILOT_AGE_GROUP=U13",
+    'SUBMITTER_NAME="Inherit Submitter"',
+    "SUBMITTER_EMAIL=submitter@inherit.local",
+    'ORGANIZATION_ADMIN_NAME="Inherit Org Admin"',
+    "ORGANIZATION_ADMIN_EMAIL=org-admin@inherit.local",
+    'CLUB_ADMIN_NAME="Inherit Club Admin"',
+    "CLUB_ADMIN_EMAIL=club-admin@inherit.local",
+    'REVIEWER_NAME="Inherit Reviewer"',
+    "REVIEWER_EMAIL=reviewer@inherit.local",
+    'TEAM_MANAGER_REVIEWER_NAME="Inherit Team Manager"',
+    "TEAM_MANAGER_REVIEWER_EMAIL=manager@inherit.local",
+    "PILOT_ORG_DEFAULT_APPROVER_ROLE=team_manager",
+    "PILOT_ORG_PUBLIC_APPROVER_ROLE=club_comms",
+    "PILOT_ORG_MEDIUM_RISK_APPROVER_ROLE=club_comms",
+    "PILOT_CLUB_POLICY_INHERITS_ORG_DEFAULTS=yes"
+  ]);
+  const outputDir = path.join(tempRoot, "inherit-output");
+
+  const output = execFileSync("bash", [scriptPath, profilePath], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PILOT_CANDIDATE_CREATION_OUTPUT_DIR: outputDir
+    }
+  });
+
+  assert.match(output, /pilot_candidate_creation_decision=GO/);
+  const bundleName = fs
+    .readdirSync(outputDir, { withFileTypes: true })
+    .find((entry) => entry.isDirectory())?.name;
+  assert.ok(bundleName);
+  const bundleDir = path.join(outputDir, bundleName);
+  const plan = fs.readFileSync(path.join(bundleDir, "creation-plan.md"), "utf8");
+  const createSql = fs.readFileSync(path.join(bundleDir, "create.sql"), "utf8");
+
+  assert.match(plan, /Organization policy SQL: `configured`/);
+  assert.match(plan, /Club policy SQL: `inherit`/);
+  assert.match(createSql, /INSERT INTO organization_workflow_policies/);
+  assert.doesNotMatch(createSql, /INSERT INTO club_workflow_policies/);
 });
 
 test("pilot candidate creation plan blocks when creation-only fields are missing", () => {
