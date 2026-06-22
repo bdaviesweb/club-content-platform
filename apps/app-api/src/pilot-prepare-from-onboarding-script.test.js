@@ -27,6 +27,7 @@ function setupFixtureRepo() {
 
   for (const scriptName of [
     "pilot_prepare_from_onboarding.sh",
+    "pilot_validate_onboarding.sh",
     "pilot_onboarding_to_intake.sh",
     "pilot_prepare_from_intake.sh",
     "pilot_candidate_profile_from_intake.sh",
@@ -152,6 +153,7 @@ test("prepare from onboarding converts the worksheet and creates all pre-creatio
 
   assert.match(output, /pilot_prepare_onboarding=.*pilot-onboarding\.md/);
   assert.match(output, /pilot_prepare_onboarding_intake=.*candidate-intake\.txt/);
+  assert.match(output, /pilot_onboarding_validation=GO/);
   assert.match(output, /pilot_prepare_profile=block-club-pilot/);
   assert.match(output, /pilot_prepare_readiness=GO/);
 
@@ -161,4 +163,41 @@ test("prepare from onboarding converts the worksheet and creates all pre-creatio
 
   const profilePath = path.join(repoRoot, "config", "pilot-candidates", "block-club-pilot.local.env");
   assert.equal(fs.existsSync(profilePath), true);
+});
+
+test("prepare from onboarding stops before intake generation when the worksheet is incomplete", () => {
+  const repoRoot = setupFixtureRepo();
+  const scriptPath = path.join(repoRoot, "scripts", "pilot_prepare_from_onboarding.sh");
+  const onboardingPath = path.join(repoRoot, "docs", "pilot-onboarding.md");
+  const intakeOutputPath = path.join(repoRoot, "tmp", "candidate-intake.txt");
+
+  fs.writeFileSync(
+    onboardingPath,
+    [
+      "# Pilot Club Onboarding: Incomplete Club",
+      "",
+      "## Club Identity",
+      "",
+      "- Organization name: Incomplete Organization"
+    ].join("\n")
+  );
+
+  let output = "";
+  try {
+    output = execFileSync("bash", [scriptPath, onboardingPath], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PILOT_REAL_CANDIDATE_INTAKE_OUTPUT_PATH: intakeOutputPath
+      }
+    });
+    assert.fail("expected prepare from onboarding to fail");
+  } catch (error) {
+    assert.equal(error.status, 1);
+    output = String(error.stdout || "");
+  }
+
+  assert.match(output, /pilot_onboarding_validation=NO_GO/);
+  assert.equal(fs.existsSync(intakeOutputPath), false);
 });

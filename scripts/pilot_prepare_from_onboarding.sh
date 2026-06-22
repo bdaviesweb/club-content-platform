@@ -14,11 +14,24 @@ fi
 
 mkdir -p "$(dirname "${intake_output_path}")"
 
+set +e
+validation_output="$(
+  bash "${script_dir}/pilot_validate_onboarding.sh" "${onboarding_path}"
+)"
+validation_status=$?
+set -e
+
+if [[ "${validation_status}" -ne 0 ]]; then
+  printf '%s\n' "${validation_output}"
+  exit "${validation_status}"
+fi
+
 bash "${script_dir}/pilot_onboarding_to_intake.sh" "${onboarding_path}" > "${intake_output_path}"
 prepare_output="$(
   bash "${script_dir}/pilot_prepare_from_intake.sh" "${intake_output_path}"
 )"
 
+printf '%s\n' "${validation_output}"
 printf '%s\n' "${prepare_output}"
 echo "pilot_prepare_onboarding=${onboarding_path}"
 echo "pilot_prepare_onboarding_intake=${intake_output_path}"
