@@ -22,6 +22,7 @@
     "pilot:validate-onboarding": "bash scripts/pilot_validate_onboarding.sh",
     "pilot:intake-from-onboarding": "bash scripts/pilot_onboarding_to_intake.sh",
     "pilot:prepare-from-onboarding": "bash scripts/pilot_prepare_from_onboarding.sh",
+    "pilot:launch-from-onboarding": "bash scripts/pilot_launch_from_onboarding.sh",
     "pilot:profile-from-intake": "bash scripts/pilot_candidate_profile_from_intake.sh",
     "pilot:prepare-from-intake": "bash scripts/pilot_prepare_from_intake.sh",
     "pilot:readiness": "bash scripts/pilot_real_candidate_readiness.sh",
