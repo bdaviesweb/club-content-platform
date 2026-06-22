@@ -6,17 +6,21 @@ This worksheet is filled from the current hosted dev environment at `https://clu
 
 ## Club Identity
 
+- Candidate profile name: `north-river-soccer-club-pilot`
 - Organization name: `North River Youth Sports`
 - Organization slug: `north-river-youth-sports`
 - Club name: `North River Soccer Club`
 - Club slug: `north-river-soccer-club`
 - Team names and slugs: `U13 Girls Blue` / `u13-girls-blue`
+- Age group: `U13`
 - Primary launch date: not scheduled yet
 
 ## People and Roles
 
 - Executive sponsor: `Nora Operations` <`ops@northriverpilot.local`>
 - Day-to-day club lead: `Casey Admin` <`admin@northriverpilot.local`>
+- Launch decision owner: `Nora Operations`
+- Day-one operator: `Casey Admin`
 - Submitter accounts: `Avery Coach` <`coach@northriverpilot.local`>
 - Reviewer accounts:
   - `Jordan Manager` <`manager@northriverpilot.local`>
@@ -31,6 +35,11 @@ Current live role map:
 - `club_admin`: `admin@northriverpilot.local`
 - Optional second approver: `admin@northriverpilot.local`
 - Organization admin: `ops@northriverpilot.local`
+- Submitter name and email: `Avery Coach` <`coach@northriverpilot.local`>
+- Organization admin name and email: `Nora Operations` <`ops@northriverpilot.local`>
+- Club admin name and email: `Casey Admin` <`admin@northriverpilot.local`>
+- Club comms reviewer name and email: `Riley Comms` <`comms@northriverpilot.local`>
+- Team manager reviewer name and email: `Jordan Manager` <`manager@northriverpilot.local`>
 
 ## Workflow Policy Decisions
 
@@ -42,6 +51,7 @@ Current live role map:
 - Auto-approve low-risk internal content at club effective level: `no`
 - Auto-approve max risk threshold: `0.35`
 - Allowed auto-approval content types: `photo`
+- Should the club inherit org defaults unless explicitly noted: `yes`
 
 ## Approval and Publishing Rules
 
@@ -56,6 +66,8 @@ Current live role map:
 
 ## Notification Decisions
 
+- Require real email delivery for launch: `no`
+- Require real push delivery for launch: `no`
 - Organization notification default: `email=true`, `push=true`
 - Organization event-specific review-start posture: `submission_review_started.email=false`, `submission_review_started.push=false`
 - Club effective notification baseline: `email=false`, `push=false`
@@ -69,6 +81,7 @@ Current live role map:
   - live email provider credentials are not configured
   - live push delivery is disabled
   - notification policy behavior is verified, but real delivery is not yet production-ready
+- Notification posture on day one: `log-only with manual verification`
 
 ## Current Override Posture
 
@@ -92,3 +105,11 @@ The simulated pilot uses three distinct approval actors. Rehearsals should use t
 1. Email delivery is still `log-only` because the Resend API key is missing.
 2. Push delivery is still disabled because no push provider is configured.
 3. This remains a simulated customer environment with local-only identities, not a real club rollout.
+
+## Rollback Plan
+
+- Rollback owner: `Nora Operations`
+- Rollback trigger: `wrong reviewer routing or unexpected publish behavior`
+- First override to remove if pilot behavior is wrong: `organization default auto-approval`
+- Scenarios to rerun after rollback: `submit photo, submit video, approve, publish`
+- Pilot-club communication owner: `Casey Admin`

@@ -4,11 +4,13 @@ Use this worksheet when preparing the first real club for Club Content.
 
 ## Club Identity
 
+- Candidate profile name:
 - Organization name:
 - Organization slug:
 - Club name:
 - Club slug:
 - Team names and slugs:
+- Age group:
 - Primary launch date:
 
 ## People and Roles
@@ -43,24 +45,30 @@ Record the real names used to create the first pilot users:
 - Public-content approver role:
 - Medium-risk approver role:
 - Allow Hermes agent routing: yes / no
-- Auto-approve low-risk internal content: yes / no
+- Auto-approve low-risk internal content at organization level: yes / no
+- Auto-approve low-risk internal content at club effective level: yes / no
 - Auto-approve max risk threshold:
 - Allowed auto-approval content types:
+- Should the club inherit org defaults unless explicitly noted: yes / no
 
 ## Approval and Publishing Rules
 
-- Require second approval for public content: yes / no
-- Second approver role:
-- Second-approval content types:
+- Organization routing rule for `video`:
+- Club effective routing rule for `video`:
+- Organization public-content second approval: yes / no
+- Organization second approver role:
+- Organization second-approval content types:
+- Club effective public-content second approval: yes / no
 - Internal destinations:
 - Public destinations:
 
 ## Notification Decisions
 
-- Review-start email enabled: yes / no
-- Review-start push enabled: yes / no
-- Publish email enabled: yes / no
-- Publish push enabled: yes / no
+- Require real email delivery for launch: yes / no
+- Require real push delivery for launch: yes / no
+- Organization notification default: `email=true`, `push=true`
+- Club effective notification baseline: `email=false`, `push=false`
+- Notification posture on day one:
 - Known delivery limitations or accepted gaps:
 
 ## Demo and QA Evidence
@@ -78,3 +86,11 @@ Record the real names used to create the first pilot users:
 - First override to remove if pilot behavior is wrong:
 - Scenarios to rerun after rollback:
 - Pilot-club communication owner:
+
+## Intake Export
+
+When the worksheet is filled, convert it into the real-candidate intake block with:
+
+1. `npm run pilot:intake-from-onboarding -- /absolute/path/to/pilot-onboarding.md`
+2. Save that output to `docs/pilot-real-candidate-intake.txt` or another local text file
+3. Run `npm run pilot:prepare-from-intake -- /absolute/path/to/intake.txt`

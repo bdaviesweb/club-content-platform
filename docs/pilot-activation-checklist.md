@@ -21,6 +21,7 @@ Use this checklist before turning on the first real pilot club or declaring the 
 - Run `npm run pilot:handoff-packet -- <candidate-name>` and save the generated packet.
 - Run `npm run pilot:create-plan -- <candidate-name>` and review the generated create/rollback SQL.
 - Fill out `docs/pilot-onboarding-template.md`.
+- Run `npm run pilot:intake-from-onboarding -- /absolute/path/to/pilot-onboarding.md` and save the generated intake block.
 - Record the rollback trigger, rollback owner, and first override to remove if day-one behavior is wrong.
 - Keep hosted audit, VPS checks, and full rehearsal on the simulator profile until the real organization records exist.
 
