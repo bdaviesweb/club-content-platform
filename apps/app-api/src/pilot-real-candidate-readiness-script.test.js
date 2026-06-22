@@ -188,6 +188,22 @@ test("real candidate readiness blocks early when intake fields are still missing
   assert.match(output, /pilot_real_candidate_readiness=NO_GO/);
   assert.match(output, /pilot_real_candidate_next_step=fill_intake/);
   assert.match(output, /missing_intake=club_name/);
+  assert.equal(
+    (output.match(/^missing_intake=require_email_delivery$/gm) || []).length,
+    1
+  );
+  assert.equal(
+    (output.match(/^missing_intake=require_push_delivery$/gm) || []).length,
+    1
+  );
+  assert.equal(
+    (output.match(/^missing_intake=inherit_org_defaults$/gm) || []).length,
+    1
+  );
+  assert.equal(
+    (output.match(/^missing_intake=public_second_approval$/gm) || []).length,
+    1
+  );
 });
 
 test("real candidate readiness also accepts the ready-to-paste key value block", () => {

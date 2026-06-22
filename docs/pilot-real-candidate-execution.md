@@ -8,7 +8,7 @@ This is the controlled transition from simulator prep to real candidate records.
 
 Before running anything hosted, confirm all of these exist:
 
-1. A filled [pilot-real-candidate-intake.md](/Users/robertdavies/Documents/Codex/club-content/docs/pilot-real-candidate-intake.md)
+1. A filled [pilot-real-candidate-intake.md](/Users/robertdavies/Documents/Codex/club-content/docs/pilot-real-candidate-intake.md) or [pilot-real-candidate-intake.txt](/Users/robertdavies/Documents/Codex/club-content/docs/pilot-real-candidate-intake.txt)
 2. A filled `config/pilot-candidates/<candidate>.local.env`
 3. A passing `validate_pilot_candidate_profile.sh` result
 4. A saved candidate handoff packet from `npm run pilot:handoff-packet -- <candidate>`
@@ -18,7 +18,7 @@ Before running anything hosted, confirm all of these exist:
 
 ## Execution Order
 
-1. Fill `docs/pilot-real-candidate-intake.md` or save the full ready-to-paste block to a local text file
+1. Fill `docs/pilot-real-candidate-intake.md` or edit `docs/pilot-real-candidate-intake.txt`
 2. Fast path: run `npm run pilot:prepare-from-intake -- /absolute/path/to/intake.txt` to generate the profile, handoff packet, creation plan, and readiness result in one pass
 3. Manual path: run `npm run pilot:profile-from-intake` or `npm run pilot:profile-from-intake -- /absolute/path/to/intake.txt`
 4. Run `npm run pilot:inspect -- <candidate>`

@@ -175,6 +175,23 @@ for yes_no_field in require_email_delivery require_push_delivery inherit_org_def
   fi
 done
 
+if [[ "${#missing_intake[@]}" -gt 1 ]]; then
+  deduped_missing=()
+  for item in "${missing_intake[@]}"; do
+    already_seen=0
+    for seen_item in ${deduped_missing[@]+"${deduped_missing[@]}"}; do
+      if [[ "${seen_item}" == "${item}" ]]; then
+        already_seen=1
+        break
+      fi
+    done
+    if [[ "${already_seen}" == "0" ]]; then
+      deduped_missing+=("${item}")
+    fi
+  done
+  missing_intake=("${deduped_missing[@]}")
+fi
+
 if [[ "${#missing_intake[@]}" -gt 0 ]]; then
   emit_check "intake_fields" "missing" "$(IFS=,; echo "${missing_intake[*]}")"
   echo "pilot_real_candidate_profile=${pilot_profile:-unknown}"
