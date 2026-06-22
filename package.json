@@ -23,6 +23,7 @@
     "pilot:validate-onboarding": "bash scripts/pilot_validate_onboarding.sh",
     "pilot:onboarding-gaps": "bash scripts/pilot_real_onboarding_gaps.sh",
     "pilot:data-request": "bash scripts/pilot_real_data_request_packet.sh",
+    "pilot:share-data-request": "bash scripts/pilot_share_real_data_request.sh",
     "pilot:check-launch-readiness": "bash scripts/pilot_check_launch_readiness.sh",
     "pilot:intake-from-onboarding": "bash scripts/pilot_onboarding_to_intake.sh",
     "pilot:prepare-from-onboarding": "bash scripts/pilot_prepare_from_onboarding.sh",

@@ -14,14 +14,15 @@ These steps are safe before any real candidate records are created:
 1. Start from `npm run pilot:scaffold-onboarding -- /absolute/path/to/validated-simulator-onboarding.md /absolute/path/to/real-pilot-onboarding.md` if you want a near-filled worksheet with carried-forward policy defaults, then finish the real blanks.
 2. Run `npm run pilot:onboarding-gaps -- /absolute/path/to/pilot-onboarding.md` to see the remaining real-world blanks grouped by category.
 3. Run `npm run pilot:data-request -- /absolute/path/to/pilot-onboarding.md /absolute/path/to/pilot-real-data-request.md` if you want a shareable request packet for the club or operator.
-4. Run `npm run pilot:intake-from-onboarding -- /absolute/path/to/pilot-onboarding.md` and save the output as the candidate intake block, or use `npm run pilot:prepare-from-onboarding -- /absolute/path/to/pilot-onboarding.md` for the full local prep path.
-5. Run `npm run pilot:profile-from-intake` if you did not use the full onboarding prep path.
-6. Run `npm run pilot:inspect -- <candidate-name>` to review the resolved values.
-7. Run `PILOT_CANDIDATE_PROFILE=<candidate-name> bash scripts/validate_pilot_candidate_profile.sh` as the profile preflight gate.
-8. Run `npm run pilot:create-plan -- <candidate-name>` to generate the exact create and rollback SQL without mutating anything yet.
-9. Run `npm run pilot:readiness -- <candidate-name>` to confirm the intake, profile, handoff packet, and creation bundle all agree.
-10. Fill out the ownership and rollback plan in [pilot-activation-checklist.md](/Users/robertdavies/Documents/Codex/club-content/docs/pilot-activation-checklist.md).
-11. Keep using the test-tenant operator kit for demos, policy walkthroughs, and rehearsal storytelling.
+4. Run `npm run pilot:share-data-request -- /absolute/path/to/pilot-real-data-request.md /absolute/path/to/pilot-real-data-request-message.txt` if you want a ready-to-send plain-language message.
+5. Run `npm run pilot:intake-from-onboarding -- /absolute/path/to/pilot-onboarding.md` and save the output as the candidate intake block, or use `npm run pilot:prepare-from-onboarding -- /absolute/path/to/pilot-onboarding.md` for the full local prep path.
+6. Run `npm run pilot:profile-from-intake` if you did not use the full onboarding prep path.
+7. Run `npm run pilot:inspect -- <candidate-name>` to review the resolved values.
+8. Run `PILOT_CANDIDATE_PROFILE=<candidate-name> bash scripts/validate_pilot_candidate_profile.sh` as the profile preflight gate.
+9. Run `npm run pilot:create-plan -- <candidate-name>` to generate the exact create and rollback SQL without mutating anything yet.
+10. Run `npm run pilot:readiness -- <candidate-name>` to confirm the intake, profile, handoff packet, and creation bundle all agree.
+11. Fill out the ownership and rollback plan in [pilot-activation-checklist.md](/Users/robertdavies/Documents/Codex/club-content/docs/pilot-activation-checklist.md).
+12. Keep using the test-tenant operator kit for demos, policy walkthroughs, and rehearsal storytelling.
 
 ## Not Safe Before Real Data Exists
 
