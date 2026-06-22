@@ -29,10 +29,11 @@ Before running anything hosted, confirm all of these exist:
 9. Run `npm run pilot:readiness -- <candidate>` or `npm run pilot:readiness -- /absolute/path/to/intake.txt`
 10. Review the generated `create.sql` and `rollback.sql`
 11. Apply the `create.sql` on the hosted pilot database with an operator present
-12. Immediately run `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:audit`
-13. If audit is `GO`, run `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:vps`
-14. If the hosted scenarios pass, run the operator demo and capture evidence
-15. If anything fails, stop and use the generated `rollback.sql` before making more changes
+12. Fastest hosted verification path: run `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:post-create-verify`
+13. Manual hosted verification path: run `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:audit`
+14. If audit is `GO`, run `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:vps`
+15. If the hosted scenarios pass, run the operator demo and capture evidence
+16. If anything fails, stop and use the generated `rollback.sql` before making more changes
 
 ## Stop Conditions
 
@@ -53,10 +54,11 @@ After hosted creation, preserve:
 3. The creation plan bundle path
 4. The exact `create.sql` used
 5. The exact `rollback.sql` saved
-6. The `pilot:audit` output
-7. The `pilot:vps` output
-8. Any operator demo submission, approval, and publish ids
-9. The hosted `pending_workflow_count` and `failed_workflow_count` from `pilot:audit`
+6. The `pilot:post-create-verify` bundle path, if used
+7. The `pilot:audit` output
+8. The `pilot:vps` output
+9. Any operator demo submission, approval, and publish ids
+10. The hosted `pending_workflow_count` and `failed_workflow_count` from `pilot:audit`
 
 ## Rollback Trigger
 

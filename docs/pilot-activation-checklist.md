@@ -34,6 +34,7 @@ Use this checklist before turning on the first real pilot club or declaring the 
 - `npm run pilot:simulator-state`
 - `npm run pilot:vps`
 - `npm run pilot:audit`
+- `npm run pilot:post-create-verify`
 - `npm run pilot:rehearse`
 - `npm run pilot:packet`
 - `npm run pilot:share`
@@ -47,6 +48,7 @@ Use this checklist before turning on the first real pilot club or declaring the 
 - Candidate creation plan:
 - Candidate create SQL:
 - Candidate rollback SQL:
+- Post-creation verification bundle:
 - Demo command center URL used:
 - Demo bundle path:
 - Rehearsal bundle path:
