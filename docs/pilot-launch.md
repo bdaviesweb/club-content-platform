@@ -28,35 +28,37 @@ Use these entry points:
    Boots local demo dependencies when available, runs the simulator-org reset, starts the operator surfaces, opens the key URLs, and writes a timestamped bundle under `tmp/pilot-demo/`.
 2. `npm run demo:operator`
    Starts the local operator-facing demo command center and Expo runtime.
-3. `bash scripts/mobile_demo_review_smoke.sh`
+3. `npm run pilot:test-tenant`
+   Prepares the non-customer test tenant by rebuilding the fake candidate artifacts and refreshing the simulator organization when the local stack is running. Use this when you do not have a real club or team yet.
+4. `bash scripts/mobile_demo_review_smoke.sh`
    Verifies the live submitter-to-reviewer-to-publish mobile flow. It can resume a pending `mobile-demo-post-*` item.
-4. `npm run pilot:rehearse`
+5. `npm run pilot:rehearse`
    Runs the simulator profile inspection, validation, hosted audit, hosted VPS rehearsal, and demo UI check in one pass. It writes an evidence bundle under `tmp/pilot-rehearsal/<timestamp>-<profile>/` with `summary.txt`, `handoff.md`, command logs, step logs, and a go/no-go decision.
-5. `npm run pilot:simulator-state`
+6. `npm run pilot:simulator-state`
    Resets the committed simulator organization to the canonical North River baseline and validates the org, club, workflow policy, routing, approvals, and directory state in one command.
-6. `npm run pilot:packet`
+7. `npm run pilot:packet`
    Turns the latest rehearsal bundle into a single portable markdown packet at `tmp/pilot-launch-packet.md`.
-7. `npm run pilot:share`
+8. `npm run pilot:share`
    Copies the portable packet to `tmp/pilot-launch-packet-share.md`, writes a ready-to-forward message body, and copies it to the clipboard when `pbcopy` is available.
-8. `npm run pilot:deliver`
+9. `npm run pilot:deliver`
    Opens the ready-to-forward message body and shared packet together so the operator can hand it off without assembling anything manually.
-9. `workflow-settings?organizationMode=simulator`
+10. `workflow-settings?organizationMode=simulator`
    Opens the committed simulator organization in workflow settings so we can rehearse organization defaults, club exceptions, routing rules, and auto-approvals without real clubs or candidates.
-10. `docs/pilot-onboarding-template.md`
+11. `docs/pilot-onboarding-template.md`
    Captures the first-club role map, policy choices, and signoff fields.
-11. `docs/pilot-activation-checklist.md`
+12. `docs/pilot-activation-checklist.md`
    Defines the go-live gate, evidence to save, and recovery steps.
-12. `docs/pilot-candidate-handoff.md`
+13. `docs/pilot-candidate-handoff.md`
    Separates safe pre-creation candidate prep from the hosted checks that only make sense after real records exist.
-13. `npm run pilot:handoff-packet -- <candidate>`
+14. `npm run pilot:handoff-packet -- <candidate>`
    Generates one candidate handoff packet that combines profile status, simulator evidence references, ownership prompts, and rollback prompts before real records exist.
-14. `npm run pilot:create-plan -- <candidate>`
+15. `npm run pilot:create-plan -- <candidate>`
    Generates the exact create and rollback SQL plan for the candidate profile without mutating hosted data yet.
-15. `docs/pilot-real-candidate-execution.md`
+16. `docs/pilot-real-candidate-execution.md`
    Defines the exact hosted creation order once the candidate packet and SQL plan are approved.
-16. `docs/pilot-real-candidate-intake.md`
+17. `docs/pilot-real-candidate-intake.md`
    Captures the real candidate identity, owners, and delivery posture in the exact shape needed for hosted creation.
-17. `npm run pilot:profile-from-intake`
+18. `npm run pilot:profile-from-intake`
    Generates `config/pilot-candidates/<candidate>.local.env` directly from the filled intake document.
 
 ## Operator Demo Flow

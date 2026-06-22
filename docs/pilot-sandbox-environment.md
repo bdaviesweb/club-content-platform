@@ -10,6 +10,23 @@ Use this when you want a repeatable non-customer test environment that exercises
 
 This stays safely away from live club data.
 
+## Fastest Start
+
+If you do not have a real club or team yet, start here:
+
+1. `npm run pilot:test-tenant`
+
+That command does two things:
+
+1. rebuilds the fake candidate packet and SQL artifacts
+2. refreshes the simulator organization when the local database stack is available
+
+After that, the main next moves are:
+
+1. `npm run demo:pilot`
+2. `npm run pilot:rehearse`
+3. `http://127.0.0.1:3013/workflow-settings?organizationMode=simulator&clubSlug=north-river-soccer-club`
+
 ## Fake Candidate Prep
 
 The committed sandbox intake lives at [pilot-sandbox-intake.txt](/Users/robertdavies/Documents/Codex/club-content/docs/pilot-sandbox-intake.txt).
