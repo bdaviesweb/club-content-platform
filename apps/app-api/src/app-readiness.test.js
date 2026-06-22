@@ -46,7 +46,7 @@ test("buildAppReadinessPayload exposes demo identities and ready capabilities", 
   });
   assert.deepEqual(payload.pilotCandidate, {
     key: "simulated_pilot",
-    label: "Simulated pilot organization",
+    label: "Demo Sports Organization test tenant",
     organizationSlug: "north-river-youth-sports",
     clubSlug: "north-river-soccer-club",
     teamSlug: "u13-girls-blue",

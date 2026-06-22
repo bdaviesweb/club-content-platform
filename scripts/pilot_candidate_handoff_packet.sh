@@ -81,14 +81,14 @@ mkdir -p "$(dirname "${packet_path}")"
   echo "- Activation checklist: \`${repo_root}/docs/pilot-activation-checklist.md\`"
   echo "- Launch playbook: \`${repo_root}/docs/pilot-launch.md\`"
   if [[ -n "${demo_bundle_dir}" ]]; then
-    echo "- Latest simulator demo bundle: \`${demo_bundle_dir}\`"
+    echo "- Latest test-tenant demo bundle: \`${demo_bundle_dir}\`"
   else
-    echo "- Latest simulator demo bundle: \`<missing>\`"
+    echo "- Latest test-tenant demo bundle: \`<missing>\`"
   fi
   if [[ -n "${rehearsal_bundle_dir}" ]]; then
-    echo "- Latest simulator rehearsal bundle: \`${rehearsal_bundle_dir}\`"
+    echo "- Latest test-tenant rehearsal bundle: \`${rehearsal_bundle_dir}\`"
   else
-    echo "- Latest simulator rehearsal bundle: \`<missing>\`"
+    echo "- Latest test-tenant rehearsal bundle: \`<missing>\`"
   fi
   echo
   echo "## Pre-Creation Boundary"
@@ -100,7 +100,7 @@ mkdir -p "$(dirname "${packet_path}")"
   echo "- inspect the resolved candidate values"
   echo "- run the candidate preflight validator"
   echo "- capture ownership, signoff, and rollback decisions"
-  echo "- keep demo and rehearsal proof on the simulator profile"
+  echo "- keep demo and rehearsal proof on the test-tenant profile"
   echo
   echo "Not safe yet:"
   echo "- candidate-specific hosted audit"
@@ -115,7 +115,7 @@ mkdir -p "$(dirname "${packet_path}")"
   echo "3. \`PILOT_CANDIDATE_PROFILE=${profile_name} bash scripts/validate_pilot_candidate_profile.sh\`"
   echo "4. Fill out \`docs/pilot-onboarding-template.md\`"
   echo "5. Fill out \`docs/pilot-activation-checklist.md\`"
-  echo "6. Keep \`npm run demo:pilot\` and \`npm run pilot:rehearse\` on the simulator profile until real records exist"
+  echo "6. Keep \`npm run demo:pilot\` and \`npm run pilot:rehearse\` on the test-tenant profile until real records exist"
   echo
   echo "## Ownership Checklist"
   echo

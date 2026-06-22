@@ -30,7 +30,7 @@ function writeBundle(rootName, bundleName, files = {}) {
   return bundleDir;
 }
 
-test("candidate handoff packet packages a validated profile with simulator evidence references", () => {
+test("candidate handoff packet packages a validated profile with test-tenant evidence references", () => {
   const profilePath = writeProfile("candidate.local.env", [
     "PILOT_CANDIDATE_PROFILE_NAME=real-candidate",
     "PILOT_CANDIDATE=real_candidate",
@@ -82,8 +82,8 @@ test("candidate handoff packet packages a validated profile with simulator evide
   assert.match(packet, /# Pilot Candidate Handoff Packet/);
   assert.match(packet, /Candidate profile: `real-candidate`/);
   assert.match(packet, /Decision: `GO`/);
-  assert.match(packet, /Latest simulator demo bundle: `.*20260622T010000Z-simulated`/);
-  assert.match(packet, /Latest simulator rehearsal bundle: `.*20260622T020000Z-simulated`/);
+  assert.match(packet, /Latest test-tenant demo bundle: `.*20260622T010000Z-simulated`/);
+  assert.match(packet, /Latest test-tenant rehearsal bundle: `.*20260622T020000Z-simulated`/);
   assert.match(packet, /## Ownership Checklist/);
   assert.match(packet, /## Rollback Checklist/);
   assert.match(packet, /preflight_result=ok/);
@@ -133,7 +133,7 @@ test("candidate handoff packet surfaces a no-go packet when template values rema
 
   const packet = fs.readFileSync(packetPath, "utf8");
   assert.match(packet, /Decision: `NO_GO`/);
-  assert.match(packet, /Latest simulator demo bundle: `<missing>`/);
-  assert.match(packet, /Latest simulator rehearsal bundle: `<missing>`/);
+  assert.match(packet, /Latest test-tenant demo bundle: `<missing>`/);
+  assert.match(packet, /Latest test-tenant rehearsal bundle: `<missing>`/);
   assert.match(packet, /template placeholder values/);
 });

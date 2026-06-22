@@ -96,11 +96,11 @@ log_line "pilot_rehearsal_handoff_path=${handoff_file}"
 
 overall_status=0
 
-if ! run_step "inspect" "Inspect simulator profile" "${inspect_output}" npm run pilot:inspect -- "${pilot_profile}"; then
+if ! run_step "inspect" "Inspect test-tenant profile" "${inspect_output}" npm run pilot:inspect -- "${pilot_profile}"; then
   overall_status=1
 fi
 
-if ! run_step "validate" "Validate simulator profile" "${validate_output}" env PILOT_CANDIDATE_PROFILE="${pilot_profile}" bash scripts/validate_pilot_candidate_profile.sh; then
+if ! run_step "validate" "Validate test-tenant profile" "${validate_output}" env PILOT_CANDIDATE_PROFILE="${pilot_profile}" bash scripts/validate_pilot_candidate_profile.sh; then
   overall_status=1
 fi
 
@@ -162,9 +162,10 @@ fi
   echo "- Bundle: \`${bundle_dir}\`"
   echo "- Handoff file: \`${handoff_file}\`"
   echo "- Decision: \`${decision}\`"
+  echo "- Tenant: \`Demo Sports Organization test tenant\`"
   echo "- Demo command center: \`http://127.0.0.1:3013/demo\`"
   echo "- Quick review: \`http://127.0.0.1:3013/quick-review\`"
-  echo "- Workflow settings: \`http://127.0.0.1:3013/workflow-settings?clubSlug=${PILOT_CLUB_SLUG:-${CLUB_SLUG:-north-river-soccer-club}}\`"
+  echo "- Workflow settings: \`http://127.0.0.1:3013/workflow-settings?organizationMode=simulator&clubSlug=${PILOT_CLUB_SLUG:-${CLUB_SLUG:-north-river-soccer-club}}\`"
   echo "- Admin API readiness: \`https://clubcontent-api.davmn.net/app/readiness\`"
   echo "- Internal feed API: \`https://clubcontent-api.davmn.net/feed/internal?includeSmoke=1\`"
   echo "- Rehearsal command: \`npm run pilot:rehearse\`"

@@ -55,7 +55,7 @@ Blockers: ${blockers_summary}
 Key links:
 - Demo command center: http://127.0.0.1:3013/demo
 - Quick review: http://127.0.0.1:3013/quick-review
-- Workflow settings: http://127.0.0.1:3013/workflow-settings?clubSlug=north-river-soccer-club
+- Workflow settings: http://127.0.0.1:3013/workflow-settings?organizationMode=simulator&clubSlug=north-river-soccer-club
 - Internal feed API: https://clubcontent-api.davmn.net/feed/internal?includeSmoke=1
 EOF
 )

@@ -15,7 +15,7 @@ test.after(() => {
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
-test("pilot rehearsal script runs the full simulator flow in order", () => {
+test("pilot rehearsal script runs the full test-tenant flow in order", () => {
   const outputDir = path.join(tempRoot, "bundle-a");
   const output = execFileSync("bash", [scriptPath], {
     cwd: repoRoot,
@@ -33,9 +33,9 @@ test("pilot rehearsal script runs the full simulator flow in order", () => {
   assert.match(output, /pilot_rehearsal_bundle_path=.*bundle-a.*simulated-north-river/);
   assert.match(output, /pilot_rehearsal_summary_path=.*summary\.txt/);
   assert.match(output, /pilot_rehearsal_handoff_path=.*handoff\.md/);
-  assert.match(output, /==> Inspect simulator profile/);
+  assert.match(output, /==> Inspect test-tenant profile/);
   assert.match(output, /DRY_RUN npm run pilot:inspect -- simulated-north-river/);
-  assert.match(output, /==> Validate simulator profile/);
+  assert.match(output, /==> Validate test-tenant profile/);
   assert.match(
     output,
     /DRY_RUN env PILOT_CANDIDATE_PROFILE=simulated-north-river bash scripts\/validate_pilot_candidate_profile\.sh/
@@ -78,9 +78,10 @@ test("pilot rehearsal script runs the full simulator flow in order", () => {
   const handoff = fs.readFileSync(path.join(bundleDir, "handoff.md"), "utf8");
   assert.match(handoff, /# Pilot Rehearsal Handoff/);
   assert.match(handoff, /Decision: `GO`/);
+  assert.match(handoff, /Tenant: `Demo Sports Organization test tenant`/);
   assert.match(handoff, /Demo command center: `http:\/\/127\.0\.0\.1:3013\/demo`/);
   assert.match(handoff, /Quick review: `http:\/\/127\.0\.0\.1:3013\/quick-review`/);
-  assert.match(handoff, /Workflow settings: `http:\/\/127\.0\.0\.1:3013\/workflow-settings\?clubSlug=north-river-soccer-club`/);
+  assert.match(handoff, /Workflow settings: `http:\/\/127\.0\.0\.1:3013\/workflow-settings\?organizationMode=simulator&clubSlug=north-river-soccer-club`/);
   assert.match(handoff, /Internal feed API: `https:\/\/clubcontent-api\.davmn\.net\/feed\/internal\?includeSmoke=1`/);
 });
 

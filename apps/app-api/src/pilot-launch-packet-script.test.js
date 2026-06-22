@@ -34,9 +34,10 @@ test("pilot launch packet converts a rehearsal bundle into a portable markdown p
       "- Bundle: `/tmp/example-bundle`",
       "- Handoff file: `/tmp/example-bundle/handoff.md`",
       "- Decision: `GO`",
+      "- Tenant: `Demo Sports Organization test tenant`",
       "- Demo command center: `http://127.0.0.1:3013/demo`",
       "- Quick review: `http://127.0.0.1:3013/quick-review`",
-      "- Workflow settings: `http://127.0.0.1:3013/workflow-settings?clubSlug=north-river-soccer-club`",
+      "- Workflow settings: `http://127.0.0.1:3013/workflow-settings?organizationMode=simulator&clubSlug=north-river-soccer-club`",
       "- Admin API readiness: `https://clubcontent-api.davmn.net/app/readiness`",
       "- Internal feed API: `https://clubcontent-api.davmn.net/feed/internal?includeSmoke=1`",
       "- Rehearsal command: `npm run pilot:rehearse`",
@@ -65,9 +66,10 @@ test("pilot launch packet converts a rehearsal bundle into a portable markdown p
   assert.match(packet, /Source bundle: `.*20260622T020000Z-simulated-north-river`/);
   assert.match(packet, /## Portable Handoff/);
   assert.match(packet, /Decision: `GO`/);
+  assert.match(packet, /Tenant: `Demo Sports Organization test tenant`/);
   assert.match(packet, /Demo command center: `http:\/\/127\.0\.0\.1:3013\/demo`/);
   assert.match(packet, /Quick review: `http:\/\/127\.0\.0\.1:3013\/quick-review`/);
-  assert.match(packet, /Workflow settings: `http:\/\/127\.0\.0\.1:3013\/workflow-settings\?clubSlug=north-river-soccer-club`/);
+  assert.match(packet, /Workflow settings: `http:\/\/127\.0\.0\.1:3013\/workflow-settings\?organizationMode=simulator&clubSlug=north-river-soccer-club`/);
   assert.match(packet, /Internal feed API: `https:\/\/clubcontent-api\.davmn\.net\/feed\/internal\?includeSmoke=1`/);
   assert.match(packet, /Blockers: none\./);
   assert.match(packet, /## Copy Notes/);

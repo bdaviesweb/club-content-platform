@@ -54,7 +54,7 @@ export function buildAppReadinessPayload({ seed, row = {}, env = process.env }) 
     },
     pilotCandidate: {
       key: "simulated_pilot",
-      label: "Simulated pilot organization",
+      label: "Demo Sports Organization test tenant",
       organizationSlug: simulatedPilotSeed.organizationSlug,
       clubSlug: simulatedPilotSeed.slug,
       teamSlug: simulatedPilotSeed.teamSlug,
