@@ -2543,6 +2543,26 @@ async function renderDemoPage() {
           command: "PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:audit"
         })}
         ${renderPilotScenarioCard({
+          title: "Open simulator organization mode",
+          copy: "Jump straight into workflow settings using the committed simulator organization so you can review org defaults and club exceptions without real club data.",
+          command: "open /workflow-settings?organizationMode=simulator&clubSlug=north-river-soccer-club",
+          links: [
+            {
+              label: "Open simulator mode",
+              href: buildWorkflowSettingsLink({
+                clubSlug: "north-river-soccer-club",
+                organizationMode: "simulator",
+                simulationInput: {
+                  contentType: "video",
+                  visibilityTarget: "public",
+                  riskScore: 0.42,
+                  moderationFlagged: false
+                }
+              })
+            }
+          ]
+        })}
+        ${renderPilotScenarioCard({
           title: "Promote a local candidate later",
           copy: "When we are ready for a real org, scaffold a private local profile from the template instead of editing the committed simulator profile.",
           command: "npm run pilot:profile -- <candidate-name>"
@@ -5235,6 +5255,7 @@ function buildOrganizationGovernanceSummary(clubs = []) {
 
 function buildWorkflowSettingsLink({
   clubSlug = "",
+  organizationMode = null,
   historyView = null,
   clubView = null,
   clubArea = null,
@@ -5249,6 +5270,9 @@ function buildWorkflowSettingsLink({
 
   if (clubSlug) {
     params.set("clubSlug", clubSlug);
+  }
+  if (organizationMode) {
+    params.set("organizationMode", organizationMode);
   }
   if (historyView) {
     params.set("historyView", historyView);
@@ -8096,6 +8120,7 @@ function renderOrganizationDirectory(
 
 async function renderWorkflowSettingsPage(
   clubSlug,
+  organizationMode = null,
   simulationInput = {},
   previewDraft = null,
   historyView = "all",
@@ -8107,7 +8132,10 @@ async function renderWorkflowSettingsPage(
   previewCleanupClubs = []
 ) {
   const readiness = await fetchJson("/app/readiness");
-  const selectedClubSlug = clubSlug || readiness?.demo?.clubSlug || "demo-soccer-club";
+  const selectedClubSlug =
+    organizationMode === "simulator"
+      ? readiness?.pilotCandidate?.clubSlug || clubSlug || readiness?.demo?.clubSlug || "demo-soccer-club"
+      : clubSlug || readiness?.demo?.clubSlug || "demo-soccer-club";
   const clubPolicy = await fetchJson(`/workflow-policies/clubs/${encodeURIComponent(selectedClubSlug)}`);
   const organizationSlug = clubPolicy.organization?.slug || null;
   const organizationPolicy = organizationSlug
@@ -8275,6 +8303,8 @@ async function renderWorkflowSettingsPage(
           previewOutcome
         })
       : null;
+  const simulatorOrganization = readiness?.pilotCandidate || null;
+  const simulatorModeEnabled = organizationMode === "simulator";
 
   return layout(`
     <section class="hero">
@@ -8285,9 +8315,51 @@ async function renderWorkflowSettingsPage(
       </div>
       <div class="quick-actions">
         <a class="quick-link" href="/demo">Open demo command center</a>
+        <a class="quick-link" href="${buildWorkflowSettingsLink({
+          clubSlug: simulatorOrganization?.clubSlug || selectedClubSlug,
+          organizationMode: "simulator",
+          simulationInput: normalizedSimulationInput
+        })}">Open simulator organization mode</a>
         <a class="quick-link" href="/">Open review workspace</a>
       </div>
     </section>
+
+    ${
+      simulatorModeEnabled && simulatorOrganization
+        ? `<section class="panel" style="margin-bottom:18px; border:1px solid rgba(37, 99, 235, 0.20); background: linear-gradient(180deg, rgba(239, 246, 255, 0.94), rgba(255,255,255,0.98));">
+            <div class="section-header">
+              <div>
+                <div class="eyebrow">Simulator organization mode</div>
+                <h2>${escapeHtml(simulatorOrganization.label || "Simulated pilot organization")}</h2>
+                <p class="subtle" style="margin-top:8px;">Use this committed simulator profile to rehearse organization defaults, club exceptions, reviewer roles, routing rules, and auto-approvals without real club data.</p>
+              </div>
+              ${renderStatusBadge("No real candidate required", "good")}
+            </div>
+            <div class="topline" style="margin-top:14px;">
+              <div class="metric-card">
+                <span class="metric-label">Organization</span>
+                <strong>${escapeHtml(simulatorOrganization.organizationSlug || "n/a")}</strong>
+                <span class="subtle">${escapeHtml(simulatorOrganization.label || "Simulated pilot organization")}</span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-label">Club</span>
+                <strong>${escapeHtml(simulatorOrganization.clubSlug || "n/a")}</strong>
+                <span class="subtle">${escapeHtml(simulatorOrganization.reviewerEmail || "No reviewer email")}</span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-label">Team</span>
+                <strong>${escapeHtml(simulatorOrganization.teamSlug || "n/a")}</strong>
+                <span class="subtle">${escapeHtml(simulatorOrganization.teamManagerEmail || "No team manager email")}</span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-label">Submitter</span>
+                <strong>${escapeHtml(simulatorOrganization.submitterEmail || "n/a")}</strong>
+                <span class="subtle">Use this identity when showing the simulator intake path.</span>
+              </div>
+            </div>
+          </section>`
+        : ""
+    }
 
     ${renderWorkflowSaveSummary(
       saveSummary,
@@ -9476,16 +9548,28 @@ export function createAdminServer() {
                     .filter(Boolean)
                 }
             : null;
-        const html = await renderWorkflowSettingsPage(url.searchParams.get("clubSlug"), {
+        const html = await renderWorkflowSettingsPage(
+          url.searchParams.get("clubSlug"),
+          url.searchParams.get("organizationMode"),
+          {
           contentType: url.searchParams.get("simulationContentType"),
           visibilityTarget: url.searchParams.get("simulationVisibilityTarget"),
           riskScore: url.searchParams.get("simulationRiskScore"),
           moderationFlagged: url.searchParams.get("simulationModerationFlagged"),
           agentSuggestedApproverRole: url.searchParams.get("simulationAgentSuggestedApproverRole")
-        }, {
+          },
+          {
           scopeType: url.searchParams.get("previewScopeType"),
           payload: parsePreviewDraft(url.searchParams.get("previewDraftPolicy"))
-        }, url.searchParams.get("historyView"), url.searchParams.get("clubView"), url.searchParams.get("clubArea"), saveSummary, url.searchParams.get("previewResetArea"), url.searchParams.get("previewCleanupArea"), String(url.searchParams.get("previewCleanupClubs") || "").split(",").map((value) => value.trim()).filter(Boolean));
+          },
+          url.searchParams.get("historyView"),
+          url.searchParams.get("clubView"),
+          url.searchParams.get("clubArea"),
+          saveSummary,
+          url.searchParams.get("previewResetArea"),
+          url.searchParams.get("previewCleanupArea"),
+          String(url.searchParams.get("previewCleanupClubs") || "").split(",").map((value) => value.trim()).filter(Boolean)
+        );
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         res.end(html);
         return;
@@ -9774,6 +9858,9 @@ export function createAdminServer() {
             String(normalizedSimulationInput.agentSuggestedApproverRole)
           );
         }
+        if (url.searchParams.get("organizationMode")) {
+          params.set("organizationMode", url.searchParams.get("organizationMode"));
+        }
         params.set("saveScopeType", "organization");
         params.set(
           "saveChangedAreaCount",
@@ -9957,6 +10044,9 @@ export function createAdminServer() {
             "simulationAgentSuggestedApproverRole",
             String(normalizedSimulationInput.agentSuggestedApproverRole)
           );
+        }
+        if (url.searchParams.get("organizationMode")) {
+          params.set("organizationMode", url.searchParams.get("organizationMode"));
         }
         params.set("saveScopeType", "club");
         params.set("saveChangedAreaCount", String(changedAreas.length));

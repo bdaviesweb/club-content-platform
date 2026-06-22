@@ -240,6 +240,8 @@ test("GET /demo renders the multi-role walkthrough", async () => {
     assert.match(html, /npm run pilot:profiles/);
     assert.match(html, /npm run pilot:inspect -- simulated-north-river/);
     assert.match(html, /PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:audit/);
+    assert.match(html, /Open simulator organization mode/);
+    assert.match(html, /organizationMode=simulator/);
     assert.match(html, /npm run pilot:profile -- &lt;candidate-name&gt;/);
     assert.match(html, /Human decision surfaces/);
     assert.match(html, /Policy outcomes for different scenarios/);
@@ -263,9 +265,14 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
   const calls = [];
 
   globalThis.fetch = async (url) => {
-    calls.push(String(url));
+    const requestUrl = String(url);
+    if (requestUrl.startsWith("http://127.0.0.1:")) {
+      return originalFetch(url);
+    }
 
-    if (String(url).endsWith("/app/readiness")) {
+    calls.push(requestUrl);
+
+    if (requestUrl.endsWith("/app/readiness")) {
       return {
         ok: true,
         async json() {
@@ -673,6 +680,197 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
       "http://app-api:4000/workflow-policies/organizations/metro/history",
       "http://app-api:4000/workflow-policies/clubs/westside/history"
     ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await new Promise((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))
+    );
+  }
+});
+
+test("GET /workflow-settings opens simulator organization mode by default", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+
+  globalThis.fetch = async (url) => {
+    const requestUrl = String(url);
+    if (requestUrl.startsWith("http://127.0.0.1:")) {
+      return originalFetch(url);
+    }
+
+    calls.push(requestUrl);
+
+    if (String(url).endsWith("/app/readiness")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            demo: {
+              clubSlug: "westside",
+              reviewerEmail: "comms@westside.test"
+            },
+            pilotCandidate: {
+              key: "simulated_pilot",
+              label: "Simulated pilot organization",
+              organizationSlug: "north-river-youth-sports",
+              clubSlug: "north-river-soccer-club",
+              teamSlug: "u13-girls-blue",
+              submitterEmail: "coach@northriverpilot.local",
+              reviewerEmail: "comms@northriverpilot.local",
+              clubAdminEmail: "admin@northriverpilot.local",
+              teamManagerEmail: "manager@northriverpilot.local"
+            }
+          };
+        }
+      };
+    }
+
+    if (requestUrl.endsWith("/workflow-policies/clubs/north-river-soccer-club")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            club: { slug: "north-river-soccer-club", name: "North River Soccer Club" },
+            organization: { slug: "north-river-youth-sports", name: "North River Youth Sports" },
+            clubPolicy: {
+              defaultApproverRole: "club_admin",
+              publicApproverRole: "club_comms",
+              mediumRiskApproverRole: "club_comms",
+              allowAgentRouting: true,
+              autoApproveInternalLowRisk: false,
+              autoApproveMaxRisk: 0.35,
+              autoApprovalRule: { allowedContentTypes: ["photo"] },
+              routingRule: { contentTypeApprovers: { video: "team_manager" } },
+              approvalRule: { requireSecondApprovalForPublic: false },
+              publishingRule: {
+                visibilityDestinations: {
+                  internal: ["internal_feed"],
+                  public: ["internal_feed"]
+                }
+              },
+              notificationRule: { email: false, push: false }
+            },
+            effectivePolicy: {
+              defaultApproverRole: "club_admin",
+              publicApproverRole: "club_comms",
+              mediumRiskApproverRole: "club_comms",
+              allowAgentRouting: true,
+              autoApproveInternalLowRisk: false,
+              autoApproveMaxRisk: 0.35,
+              autoApprovalRule: { allowedContentTypes: ["photo"] },
+              routingRule: { contentTypeApprovers: { video: "team_manager" } },
+              approvalRule: { requireSecondApprovalForPublic: false },
+              publishingRule: {
+                visibilityDestinations: {
+                  internal: ["internal_feed"],
+                  public: ["internal_feed"]
+                }
+              },
+              notificationRule: { email: false, push: false }
+            }
+          };
+        }
+      };
+    }
+
+    if (requestUrl.endsWith("/workflow-policies/organizations/north-river-youth-sports")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            organization: { slug: "north-river-youth-sports", name: "North River Youth Sports" },
+            organizationPolicy: {
+              defaultApproverRole: "team_manager",
+              publicApproverRole: "club_comms",
+              mediumRiskApproverRole: "club_comms",
+              allowAgentRouting: true,
+              autoApproveInternalLowRisk: true,
+              autoApproveMaxRisk: 0.35,
+              autoApprovalRule: { allowedContentTypes: ["photo"] },
+              routingRule: { contentTypeApprovers: { video: "club_admin" } },
+              approvalRule: {
+                requireSecondApprovalForPublic: true,
+                secondApproverRole: "club_admin",
+                secondApprovalContentTypes: ["video"]
+              },
+              publishingRule: {
+                visibilityDestinations: {
+                  internal: ["internal_feed"],
+                  public: ["internal_feed"]
+                }
+              },
+              notificationRule: { email: true, push: true }
+            }
+          };
+        }
+      };
+    }
+
+    if (requestUrl.endsWith("/organizations/north-river-youth-sports")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            clubs: [{ slug: "north-river-soccer-club", name: "North River Soccer Club" }],
+            admins: [{ email: "ops@northriverpilot.local", role: "organization_admin" }]
+          };
+        }
+      };
+    }
+
+    if (requestUrl.includes("/history")) {
+      return {
+        ok: true,
+        async json() {
+          return { items: [] };
+        }
+      };
+    }
+
+    if (requestUrl.endsWith("/approvals/queue")) {
+      return { ok: true, async json() { return { items: [] }; } };
+    }
+
+    if (requestUrl.includes("/feed/internal?includeSmoke=1")) {
+      return { ok: true, async json() { return { items: [] }; } };
+    }
+
+    if (requestUrl.includes("/submissions?submitterEmail=")) {
+      return { ok: true, async json() { return { items: [] }; } };
+    }
+
+    if (requestUrl.includes("/notifications?userEmail=")) {
+      return { ok: true, async json() { return { items: [] }; } };
+    }
+
+    if (requestUrl.endsWith("/notification-delivery/status")) {
+      return { ok: true, async json() { return { email: { mode: "log-only" }, push: { mode: "disabled" } }; } };
+    }
+
+    throw new Error(`Unhandled fetch: ${requestUrl}`);
+  };
+
+  const server = createAdminServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const address = server.address();
+    const response = await fetch(
+      `http://127.0.0.1:${address.port}/workflow-settings?organizationMode=simulator`
+    );
+    const html = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(html, /Simulator organization mode/);
+    assert.match(html, /Simulated pilot organization/);
+    assert.match(html, /north-river-youth-sports/);
+    assert.match(html, /north-river-soccer-club/);
+    assert.match(html, /manager@northriverpilot.local/);
+    assert.match(html, /coach@northriverpilot.local/);
+    assert.ok(calls.some((call) => call.endsWith("/workflow-policies/clubs/north-river-soccer-club")));
+    assert.ok(
+      calls.some((call) => call.endsWith("/workflow-policies/organizations/north-river-youth-sports"))
+    );
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise((resolve, reject) =>

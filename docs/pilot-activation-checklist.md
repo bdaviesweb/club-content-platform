@@ -32,6 +32,7 @@ Use this checklist before turning on the first real pilot club or declaring the 
 - Rehearsal share packet:
 - Rehearsal share message:
 - Rehearsal delivery target:
+- Simulator organization mode URL used:
 - Rehearsal go/no-go summary:
 - Mobile submission id verified:
 - Published post id verified:
