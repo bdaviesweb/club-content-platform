@@ -149,6 +149,8 @@ Use the pilot package when you want repeatable proof for customer-facing demos a
   Defines the safe pre-creation candidate prep path before any real organization records exist.
 - [Pilot real candidate intake](docs/pilot-real-candidate-intake.md)
   Captures the real candidate identity, owners, and delivery posture before hosted creation starts.
+- [Pilot sandbox environment](docs/pilot-sandbox-environment.md)
+  Defines the repeatable fake-candidate and simulator-based local test environment.
 - [Pilot activation checklist](docs/pilot-activation-checklist.md)
   Defines the go-live evidence, blockers, and recovery steps for first customer use.
 - [North River onboarding packet](docs/pilot-onboarding-north-river-youth-sports.md)
@@ -215,6 +217,7 @@ Use `npm run pilot:inspect -- <candidate>` to review a candidate before validati
 Use `npm run pilot:handoff-packet -- <candidate>` to assemble the candidate-ready onboarding packet with simulator evidence, ownership prompts, and rollback prompts.
 Use `npm run pilot:create-plan -- <candidate>` to generate the exact create and rollback SQL plan before any hosted data is changed.
 Use `npm run pilot:readiness -- <candidate>` as the final pre-creation gate before any hosted record mutation.
+Use `npm run pilot:sandbox` to rebuild the committed fake-candidate sandbox artifacts for local testing.
 Use [docs/pilot-candidate-handoff.md](/Users/robertdavies/Documents/Codex/club-content/docs/pilot-candidate-handoff.md) for the exact handoff sequence and ownership/rollback checklist.
 
 `./scripts/update_vps.sh` now autostashes a dirty VPS checkout before it pulls, so a stray edit on the server no longer blocks the update.

@@ -1,0 +1,41 @@
+candidate_profile_name=sandbox-summit-pilot
+organization_name=Summit Youth Sports Sandbox
+organization_slug=summit-youth-sports-sandbox
+club_name=Summit Soccer Club Sandbox
+club_slug=summit-soccer-sandbox
+team_name=U14 Blue Sandbox
+team_slug=u14-blue-sandbox
+age_group=U14
+
+submitter_name=Avery Submitter
+submitter_email=avery.submitter@sandbox.clubcontent.local
+
+organization_admin_name=Olivia Admin
+organization_admin_email=olivia.admin@sandbox.clubcontent.local
+
+club_admin_name=Cameron Club Admin
+club_admin_email=cameron.clubadmin@sandbox.clubcontent.local
+
+reviewer_name=Riley Reviewer
+reviewer_email=riley.reviewer@sandbox.clubcontent.local
+
+team_manager_name=Taylor Manager
+team_manager_email=taylor.manager@sandbox.clubcontent.local
+
+launch_decision_owner=Olivia Admin
+day_one_operator=Cameron Club Admin
+rollback_owner=Olivia Admin
+escalation_contact=ops@sandbox.clubcontent.local
+
+require_email_delivery=no
+require_push_delivery=no
+default_approver_role=club_comms
+public_content_approver_role=club_admin
+medium_risk_approver_role=team_manager
+inherit_org_defaults=yes
+public_second_approval=yes
+notification_posture=log-only with manual verification
+rollback_trigger=wrong reviewer routing or unexpected publish behavior
+first_override=organization default auto-approval
+rollback_scenarios=submit photo, submit video, approve, publish
+pilot_comms_owner=Cameron Club Admin
