@@ -16,7 +16,7 @@ function writeExecutable(pathname, contents) {
   fs.chmodSync(pathname, 0o755);
 }
 
-function setupFixtureRepo({ verifyExitCode = 0 } = {}) {
+function setupFixtureRepo({ readinessExitCode = 0, verifyExitCode = 0 } = {}) {
   const repoRoot = fs.mkdtempSync(path.join(fixtureRoot, "repo-"));
   const scriptsDir = path.join(repoRoot, "scripts");
   const docsDir = path.join(repoRoot, "docs");
@@ -44,6 +44,17 @@ function setupFixtureRepo({ verifyExitCode = 0 } = {}) {
       "echo \"pilot_prepare_create_sql=/tmp/create.sql\"",
       "echo \"pilot_prepare_rollback_sql=/tmp/rollback.sql\"",
       "echo \"pilot_prepare_readiness=GO\""
+    ].join("\n")
+  );
+
+  writeExecutable(
+    path.join(scriptsDir, "pilot_check_launch_readiness.sh"),
+    [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      `echo "pilot_launch_readiness=$([[ ${readinessExitCode} -eq 0 ]] && echo GO || echo NO_GO)"`,
+      `echo "pilot_launch_readiness_next_step=$([[ ${readinessExitCode} -eq 0 ]] && echo apply_create_sql || echo finish_prelaunch_checklist)"`,
+      `exit ${readinessExitCode}`
     ].join("\n")
   );
 
@@ -114,4 +125,27 @@ test("pilot launch from onboarding can auto-rollback after failed verification",
 
   assert.match(output, /pilot_real_launch_decision=NO_GO/);
   assert.match(output, /pilot_real_launch_rollback_bundle=\/tmp\/rollback-bundle/);
+});
+
+test("pilot launch from onboarding stops before hosted create when prelaunch readiness is not recorded", () => {
+  const repoRoot = setupFixtureRepo({ readinessExitCode: 1 });
+  const scriptPath = path.join(repoRoot, "scripts", "pilot_launch_from_onboarding.sh");
+  const onboardingPath = path.join(repoRoot, "docs", "pilot-onboarding.md");
+  fs.writeFileSync(onboardingPath, "# Pilot Club Onboarding: Real Club\n");
+
+  let output = "";
+  try {
+    output = execFileSync("bash", [scriptPath, onboardingPath], {
+      cwd: repoRoot,
+      encoding: "utf8"
+    });
+    assert.fail("expected launch from onboarding to fail when launch readiness is missing");
+  } catch (error) {
+    assert.equal(error.status, 1);
+    output = String(error.stdout || "");
+  }
+
+  assert.match(output, /pilot_real_launch_decision=NO_GO/);
+  assert.match(output, /pilot_launch_readiness=NO_GO/);
+  assert.doesNotMatch(output, /pilot_real_launch_create_bundle=\/tmp\/create-bundle/);
 });

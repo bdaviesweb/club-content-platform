@@ -79,6 +79,12 @@ Record the real names used to create the first pilot users:
 - Open rollout blockers:
 - Go-live owner signoff:
 
+For the real hosted launch path, record explicit launch-ready values here:
+
+1. Set the three completed checks to `yes`, `completed`, or `passed`
+2. Set `Open rollout blockers` to `none` or `clear`
+3. Record the actual approver in `Go-live owner signoff`
+
 ## Rollback Plan
 
 - Rollback owner:

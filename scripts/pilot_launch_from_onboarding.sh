@@ -22,6 +22,7 @@ commands_path="${bundle_dir}/commands.txt"
 handoff_path="${bundle_dir}/handoff.md"
 validate_log="${logs_dir}/validate-onboarding.log"
 prepare_log="${logs_dir}/prepare-from-onboarding.log"
+readiness_log="${logs_dir}/check-launch-readiness.log"
 create_log="${logs_dir}/apply-create.log"
 verify_log="${logs_dir}/post-create-verify.log"
 rollback_log="${logs_dir}/apply-rollback.log"
@@ -98,6 +99,12 @@ if [[ "${overall_decision}" == "GO" ]]; then
     creation_plan_path="$(extract_value "pilot_prepare_creation_plan" "${prepare_log}")"
     create_sql_path="$(extract_value "pilot_prepare_create_sql" "${prepare_log}")"
     rollback_sql_path="$(extract_value "pilot_prepare_rollback_sql" "${prepare_log}")"
+  fi
+fi
+
+if [[ "${overall_decision}" == "GO" ]]; then
+  if ! run_step "launch_readiness" "Check prelaunch evidence and signoff" "${readiness_log}" env DRY_RUN="${dry_run}" bash "${script_dir}/pilot_check_launch_readiness.sh" "${onboarding_path}"; then
+    overall_decision="NO_GO"
   fi
 fi
 
