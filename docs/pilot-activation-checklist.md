@@ -59,6 +59,7 @@ Use this checklist before turning on the first real pilot club or declaring the 
 - Mobile submission id verified:
 - Published post id verified:
 - Pilot VPS scenarios run:
+- Pending workflow event count during hosted audit:
 - Any scenario-specific notes:
 
 ## Rollout Blockers
@@ -67,7 +68,7 @@ Do not activate if any of these are unresolved:
 
 - A new mobile post stays stuck at `received` without the worker eventually draining `submission.created`.
 - The approval queue contains unexplained residual smoke items.
-- Workflow events are failing or repeatedly staying pending without explanation.
+- Workflow events are failing or staying pending during hosted audit without explanation.
 - Notification delivery behavior does not match the chosen pilot posture.
 - Reviewer roles are ambiguous or mapped to the wrong people.
 - Scripted cleanup or approval actions use a reviewer identity that is not authorized for the routed role.

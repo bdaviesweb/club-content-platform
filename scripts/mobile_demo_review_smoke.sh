@@ -2,7 +2,11 @@
 set -euo pipefail
 
 API_BASE_URL="${API_BASE_URL:-https://clubcontent-api.davmn.net}"
-EXPO_URL="${EXPO_URL:-exp://127.0.0.1:8082}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/detect_local_ip.sh"
+
+LOCAL_IP="${LOCAL_IP:-$(detect_local_ip)}"
+EXPO_URL="${EXPO_URL:-exp://${LOCAL_IP}:8082}"
 METRO_STATUS_URL="${METRO_STATUS_URL:-http://127.0.0.1:8082/status}"
 SIMULATOR_DEVICE="${SIMULATOR_DEVICE:-Club Content iPhone 17 Pro}"
 SIMULATOR_DEVICE_TYPE="${SIMULATOR_DEVICE_TYPE:-com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro}"

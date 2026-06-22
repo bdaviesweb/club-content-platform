@@ -55,6 +55,7 @@ After hosted creation, preserve:
 6. The `pilot:audit` output
 7. The `pilot:vps` output
 8. Any operator demo submission, approval, and publish ids
+9. The hosted `pending_workflow_count` and `failed_workflow_count` from `pilot:audit`
 
 ## Rollback Trigger
 

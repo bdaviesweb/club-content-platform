@@ -9,6 +9,7 @@ REMOTE_DIR="${REMOTE_DIR:-/srv/repos/projects/club-content-platform}"
 REQUIRE_EMAIL_DELIVERY="${REQUIRE_EMAIL_DELIVERY:-0}"
 REQUIRE_PUSH_DELIVERY="${REQUIRE_PUSH_DELIVERY:-0}"
 REQUIRE_CLEAN_QUEUE="${REQUIRE_CLEAN_QUEUE:-1}"
+REQUIRE_CLEAN_PENDING_WORKFLOW="${REQUIRE_CLEAN_PENDING_WORKFLOW:-1}"
 ALLOW_DEMO_IDENTITIES="${ALLOW_DEMO_IDENTITIES:-0}"
 API_BASE_URL="${API_BASE_URL:-https://clubcontent-api.davmn.net}"
 PILOT_CANDIDATE="${PILOT_CANDIDATE:-simulated_pilot}"
@@ -21,6 +22,7 @@ app_readiness="$(request_json "/app/readiness")"
 notification_delivery_status="$(request_json "/notification-delivery/status")"
 approval_queue="$(request_json "/approvals/queue")"
 workflow_failed_events="$(request_json "/workflow-events")"
+workflow_pending_events="$(request_json "/workflow-events?status=pending")"
 
 resolve_candidate_field() {
   local field="$1"
@@ -73,6 +75,7 @@ printf '%s' "${app_readiness}" > "${payload_dir}/app_readiness.json"
 printf '%s' "${notification_delivery_status}" > "${payload_dir}/notification_delivery_status.json"
 printf '%s' "${approval_queue}" > "${payload_dir}/approval_queue.json"
 printf '%s' "${workflow_failed_events}" > "${payload_dir}/workflow_failed_events.json"
+printf '%s' "${workflow_pending_events}" > "${payload_dir}/workflow_pending_events.json"
 printf '%s' "${organization_directory}" > "${payload_dir}/organization_directory.json"
 printf '%s' "${organization_policy}" > "${payload_dir}/organization_policy.json"
 printf '%s' "${club_policy}" > "${payload_dir}/club_policy.json"
@@ -86,6 +89,8 @@ const payloadDir = process.argv[2];
 const requireEmailDelivery = process.env.REQUIRE_EMAIL_DELIVERY === "1";
 const requirePushDelivery = process.env.REQUIRE_PUSH_DELIVERY === "1";
 const requireCleanQueue = process.env.REQUIRE_CLEAN_QUEUE !== "0";
+const requireCleanPendingWorkflow =
+  process.env.REQUIRE_CLEAN_PENDING_WORKFLOW !== "0";
 const allowDemoIdentities = process.env.ALLOW_DEMO_IDENTITIES === "1";
 const pilotCandidateKey = process.env.PILOT_CANDIDATE || "simulated_pilot";
 
@@ -105,6 +110,7 @@ const readiness = readJson("app_readiness.json");
 const delivery = readJson("notification_delivery_status.json");
 const queue = readJson("approval_queue.json");
 const failedEvents = readJson("workflow_failed_events.json");
+const pendingEvents = readJson("workflow_pending_events.json");
 const organizationDirectory = readJson("organization_directory.json");
 const organizationPolicy = readJson("organization_policy.json");
 const clubPolicy = readJson("club_policy.json");
@@ -199,6 +205,16 @@ if (requireCleanQueue && Array.isArray(queue?.items) && queue.items.length > 0) 
   blockers.push(`Approval queue is not clean. Pending items=${queue.items.length}.`);
 }
 
+if (
+  requireCleanPendingWorkflow &&
+  Array.isArray(pendingEvents?.items) &&
+  pendingEvents.items.length > 0
+) {
+  blockers.push(
+    `Pending workflow events are present. Pending items=${pendingEvents.items.length}.`
+  );
+}
+
 if (Array.isArray(failedEvents?.items) && failedEvents.items.length > 0) {
   blockers.push(`Failed workflow events are present. Failed items=${failedEvents.items.length}.`);
 }
@@ -215,6 +231,9 @@ console.log(`video_approver_role=${videoApproverRole || "n/a"}`);
 console.log(`email_mode=${delivery?.email?.mode || "unknown"}`);
 console.log(`push_mode=${delivery?.push?.mode || "unknown"}`);
 console.log(`approval_queue_count=${Array.isArray(queue?.items) ? queue.items.length : 0}`);
+console.log(
+  `pending_workflow_count=${Array.isArray(pendingEvents?.items) ? pendingEvents.items.length : 0}`
+);
 console.log(`failed_workflow_count=${Array.isArray(failedEvents?.items) ? failedEvents.items.length : 0}`);
 
 if (warnings.length) {

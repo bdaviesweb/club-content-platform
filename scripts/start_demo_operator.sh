@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+source "${ROOT_DIR}/scripts/detect_local_ip.sh"
+
 ADMIN_PORT="${ADMIN_PORT:-3013}"
 MOBILE_PORT="${MOBILE_PORT:-8082}"
 API_BASE_URL="${API_BASE_URL:-https://clubcontent-api.davmn.net}"
@@ -12,21 +14,6 @@ SIMULATOR_DEVICE_NAME="${SIMULATOR_DEVICE_NAME:-Club Content iPhone 17 Pro}"
 XCRUN_BIN="${XCRUN_BIN:-xcrun}"
 
 mkdir -p "${LOG_DIR}"
-
-detect_local_ip() {
-  local candidates=("en0" "en1")
-  local address=""
-
-  for iface in "${candidates[@]}"; do
-    address="$(ipconfig getifaddr "${iface}" 2>/dev/null || true)"
-    if [[ -n "${address}" ]]; then
-      printf '%s' "${address}"
-      return
-    fi
-  done
-
-  printf '127.0.0.1'
-}
 
 LOCAL_IP="${LOCAL_IP:-$(detect_local_ip)}"
 EXPO_URL="${EXPO_URL:-exp://${LOCAL_IP}:${MOBILE_PORT}}"

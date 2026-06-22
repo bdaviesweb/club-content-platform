@@ -45,3 +45,30 @@ test("pilot activation audit can target the legacy demo candidate explicitly", (
   assert.match(output, /pilot_team_slug=u14-girls/);
   assert.match(output, /activation_decision=GO/);
 });
+
+test("pilot activation audit blocks when pending workflow events are present", () => {
+  const stubDir = path.join(currentDir, "__fixtures__", "pilot-activation-audit");
+
+  const output = (() => {
+    try {
+      execFileSync("bash", [scriptPath], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PATH: `${stubDir}:${process.env.PATH}`,
+          API_BASE_URL: "http://localhost:4000",
+          PILOT_PENDING_WORKFLOW_FIXTURE: "1"
+        }
+      });
+      assert.fail("expected pilot activation audit to fail on pending workflow events");
+    } catch (error) {
+      assert.equal(error.status, 1);
+      return String(error.stdout || "");
+    }
+  })();
+
+  assert.match(output, /pending_workflow_count=1/);
+  assert.match(output, /activation_decision=NO_GO/);
+  assert.match(output, /blocker=Pending workflow events are present\. Pending items=1\./);
+});

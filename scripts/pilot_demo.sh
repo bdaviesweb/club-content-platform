@@ -3,6 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
+source "${script_dir}/detect_local_ip.sh"
 
 if [[ -n "${PILOT_DEMO_RUNTIME_ROOT:-}" ]]; then
   runtime_root="${PILOT_DEMO_RUNTIME_ROOT}"
@@ -65,7 +66,8 @@ demo_url="http://127.0.0.1:${ADMIN_PORT}/demo"
 quick_review_url="http://127.0.0.1:${ADMIN_PORT}/quick-review"
 workflow_settings_url="http://127.0.0.1:${ADMIN_PORT}/workflow-settings?organizationMode=simulator&clubSlug=${PILOT_CLUB_SLUG:-${CLUB_SLUG:-north-river-soccer-club}}"
 internal_feed_url="${local_api_base}/feed/internal?includeSmoke=1"
-expo_url="${EXPO_URL:-exp://127.0.0.1:${MOBILE_PORT}}"
+local_ip="${LOCAL_IP:-$(detect_local_ip)}"
+expo_url="${EXPO_URL:-exp://${local_ip}:${MOBILE_PORT}}"
 happy_path_post_url="${expo_url}${expo_url#*\?}" # placeholder overwritten below when no query string exists
 
 if [[ "${expo_url}" == *"?"* ]]; then

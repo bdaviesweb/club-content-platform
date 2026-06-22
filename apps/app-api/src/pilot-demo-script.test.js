@@ -25,7 +25,8 @@ test("pilot demo script assembles a repeatable operator bundle in dry run mode",
       DRY_RUN: "1",
       OPEN_SURFACES: "1",
       PILOT_CANDIDATE_PROFILE: "simulated-north-river",
-      PILOT_DEMO_OUTPUT_DIR: outputDir
+      PILOT_DEMO_OUTPUT_DIR: outputDir,
+      EXPO_URL: "exp://10.0.0.50:8082"
     }
   });
 
@@ -97,14 +98,14 @@ test("pilot demo script assembles a repeatable operator bundle in dry run mode",
   assert.match(runbook, /Machine manifest: `.*manifest\.json`/);
   assert.match(runbook, /Demo command center: `http:\/\/127\.0\.0\.1:3013\/demo`/);
   assert.match(runbook, /Simulator workflow settings: `http:\/\/127\.0\.0\.1:3013\/workflow-settings\?organizationMode=simulator&clubSlug=north-river-soccer-club`/);
-  assert.match(runbook, /Expo launch URL: `exp:\/\/127\.0\.0\.1:8082`/);
+  assert.match(runbook, /Expo launch URL: `exp:\/\/10\.0\.0\.50:8082`/);
   assert.match(runbook, /Internal feed: `http:\/\/127\.0\.0\.1:4000\/feed\/internal\?includeSmoke=1`/);
   assert.match(runbook, /## Happy Path/);
   assert.match(runbook, /## Exception Paths/);
 
   const evidence = fs.readFileSync(path.join(bundleDir, "evidence.md"), "utf8");
   assert.match(evidence, /# Pilot Demo Evidence/);
-  assert.match(evidence, /Poster launch URL: `exp:\/\/127\.0\.0\.1:8082\?demoAction=post`/);
+  assert.match(evidence, /Poster launch URL: `exp:\/\/10\.0\.0\.50:8082\?demoAction=post`/);
   assert.match(evidence, /Published output: `http:\/\/127\.0\.0\.1:4000\/feed\/internal\?includeSmoke=1`/);
   assert.match(evidence, /## Captured Artifacts/);
   assert.match(evidence, /Manifest: `.*artifacts\/manifest\.txt`/);
@@ -118,7 +119,7 @@ test("pilot demo script assembles a repeatable operator bundle in dry run mode",
   assert.match(evidence, /Operator mobile log: `.*logs\/mobile-demo\.log`/);
 
   const links = fs.readFileSync(path.join(bundleDir, "links.txt"), "utf8");
-  assert.match(links, /happy_path_post=exp:\/\/127\.0\.0\.1:8082\?demoAction=post/);
+  assert.match(links, /happy_path_post=exp:\/\/10\.0\.0\.50:8082\?demoAction=post/);
   assert.match(links, /exception_auto_approval=http:\/\/127\.0\.0\.1:3013\/workflow-settings\?organizationMode=simulator&clubSlug=north-river-soccer-club&simulationContentType=photo&simulationVisibilityTarget=internal&simulationRiskScore=0\.12&simulationModerationFlagged=false/);
   assert.match(links, /exception_second_approval=http:\/\/127\.0\.0\.1:3013\/workflow-settings\?organizationMode=simulator&clubSlug=north-river-soccer-club&simulationContentType=video&simulationVisibilityTarget=public&simulationRiskScore=0\.42&simulationModerationFlagged=false/);
   assert.match(links, /internal_feed=http:\/\/127\.0\.0\.1:4000\/feed\/internal\?includeSmoke=1/);
