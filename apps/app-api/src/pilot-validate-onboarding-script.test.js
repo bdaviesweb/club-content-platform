@@ -137,5 +137,7 @@ test("pilot onboarding validator blocks when required fields are missing", () =>
   assert.match(output, /pilot_onboarding_validation=NO_GO/);
   assert.match(output, /pilot_onboarding_next_step=fill_onboarding/);
   assert.match(output, /missing_onboarding=candidate_profile_name/);
+  assert.match(output, /missing_onboarding_label=Candidate profile name/);
   assert.match(output, /missing_onboarding=require_email_delivery/);
+  assert.match(output, /missing_onboarding_label=Require real email delivery for launch \(yes\/no\)/);
 });

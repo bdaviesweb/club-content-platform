@@ -28,6 +28,52 @@ strip_value() {
   printf "%s" "$1" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/^`//; s/`$//'
 }
 
+field_label() {
+  case "$1" in
+    candidate_profile_name) printf '%s' "Candidate profile name" ;;
+    organization_name) printf '%s' "Organization name" ;;
+    organization_slug) printf '%s' "Organization slug" ;;
+    club_name) printf '%s' "Club name" ;;
+    club_slug) printf '%s' "Club slug" ;;
+    team_names_and_slugs) printf '%s' "Team names and slugs" ;;
+    age_group) printf '%s' "Age group" ;;
+    launch_decision_owner) printf '%s' "Launch decision owner" ;;
+    day_one_operator) printf '%s' "Day-one operator" ;;
+    escalation_contact) printf '%s' "Escalation contact" ;;
+    submitter_identity) printf '%s' "Submitter name and email" ;;
+    organization_admin_identity) printf '%s' "Organization admin name and email" ;;
+    club_admin_identity) printf '%s' "Club admin name and email" ;;
+    reviewer_identity) printf '%s' "Club comms reviewer name and email" ;;
+    team_manager_identity) printf '%s' "Team manager reviewer name and email" ;;
+    default_approver_role) printf '%s' "Default approver role" ;;
+    public_content_approver_role) printf '%s' "Public-content approver role" ;;
+    medium_risk_approver_role) printf '%s' "Medium-risk approver role" ;;
+    allow_agent_routing) printf '%s' "Allow Hermes agent routing (yes/no)" ;;
+    auto_approve_internal_low_risk_org) printf '%s' "Auto-approve low-risk internal content at organization level (yes/no)" ;;
+    auto_approve_internal_low_risk_club) printf '%s' "Auto-approve low-risk internal content at club effective level (yes/no)" ;;
+    auto_approve_max_risk) printf '%s' "Auto-approve max risk threshold" ;;
+    auto_approval_content_types) printf '%s' "Allowed auto-approval content types" ;;
+    inherit_org_defaults) printf '%s' "Should the club inherit org defaults unless explicitly noted (yes/no)" ;;
+    org_routing_video) printf '%s' "Organization routing rule for video" ;;
+    club_routing_video) printf '%s' "Club effective routing rule for video" ;;
+    org_public_second_approval) printf '%s' "Organization public-content second approval (yes/no)" ;;
+    org_second_approver_role) printf '%s' "Organization second approver role" ;;
+    org_second_approval_types) printf '%s' "Organization second-approval content types" ;;
+    club_public_second_approval) printf '%s' "Club effective public-content second approval (yes/no)" ;;
+    require_email_delivery) printf '%s' "Require real email delivery for launch (yes/no)" ;;
+    require_push_delivery) printf '%s' "Require real push delivery for launch (yes/no)" ;;
+    organization_notification_default) printf '%s' "Organization notification default" ;;
+    club_notification_baseline) printf '%s' "Club effective notification baseline" ;;
+    notification_posture) printf '%s' "Notification posture on day one" ;;
+    rollback_owner) printf '%s' "Rollback owner" ;;
+    rollback_trigger) printf '%s' "Rollback trigger" ;;
+    first_override) printf '%s' "First override to remove if pilot behavior is wrong" ;;
+    rollback_scenarios) printf '%s' "Scenarios to rerun after rollback" ;;
+    pilot_comms_owner) printf '%s' "Pilot-club communication owner" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
 candidate_profile_name="$(strip_value "$(extract_field "Candidate profile name")")"
 organization_name="$(strip_value "$(extract_field "Organization name")")"
 organization_slug="$(strip_value "$(extract_field "Organization slug")")"
@@ -156,6 +202,7 @@ if [[ "${#missing[@]}" -gt 0 ]]; then
   echo "pilot_onboarding_next_step=fill_onboarding"
   for item in "${missing[@]}"; do
     echo "missing_onboarding=${item}"
+    echo "missing_onboarding_label=$(field_label "${item}")"
   done
   exit 1
 fi
