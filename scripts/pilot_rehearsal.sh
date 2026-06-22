@@ -24,10 +24,12 @@ mkdir -p "${logs_dir}"
 summary_file="${bundle_dir}/summary.txt"
 status_file="${bundle_dir}/status.txt"
 commands_file="${bundle_dir}/commands.txt"
+handoff_file="${bundle_dir}/handoff.md"
 
 : >"${summary_file}"
 : >"${status_file}"
 : >"${commands_file}"
+: >"${handoff_file}"
 
 log_line() {
   printf '%s\n' "$1" | tee -a "${summary_file}"
@@ -72,12 +74,12 @@ run_step() {
     record_status "${step_key}=ok"
     log_line "${step_key}=ok"
     return 0
+  else
+    local exit_code=$?
+    record_status "${step_key}=failed exit_code=${exit_code}"
+    log_line "${step_key}=failed exit_code=${exit_code}"
+    return "${exit_code}"
   fi
-
-  local exit_code=$?
-  record_status "${step_key}=failed exit_code=${exit_code}"
-  log_line "${step_key}=failed exit_code=${exit_code}"
-  return "${exit_code}"
 }
 
 inspect_output="${logs_dir}/inspect.log"
@@ -90,6 +92,7 @@ log_line "pilot_rehearsal_profile=${PILOT_CANDIDATE_PROFILE:-${pilot_profile}}"
 log_line "pilot_rehearsal_profile_path=${PILOT_CANDIDATE_PROFILE_PATH:-<unset>}"
 log_line "pilot_rehearsal_bundle_path=${bundle_dir}"
 log_line "pilot_rehearsal_summary_path=${summary_file}"
+log_line "pilot_rehearsal_handoff_path=${handoff_file}"
 
 overall_status=0
 
@@ -150,6 +153,38 @@ if [[ "${decision}" == "NO_GO" ]]; then
       log_line "blocker=${blocker}"
     done
   fi
+fi
+
+{
+  echo "# Pilot Rehearsal Handoff"
+  echo
+  echo "- Profile: \`${PILOT_CANDIDATE_PROFILE:-${pilot_profile}}\`"
+  echo "- Bundle: \`${bundle_dir}\`"
+  echo "- Handoff file: \`${handoff_file}\`"
+  echo "- Decision: \`${decision}\`"
+  echo "- Demo command center: \`http://127.0.0.1:3013/demo\`"
+  echo "- Quick review: \`http://127.0.0.1:3013/quick-review\`"
+  echo "- Workflow settings: \`http://127.0.0.1:3013/workflow-settings?clubSlug=${PILOT_CLUB_SLUG:-${CLUB_SLUG:-north-river-soccer-club}}\`"
+  echo "- Admin API readiness: \`https://clubcontent-api.davmn.net/app/readiness\`"
+  echo "- Internal feed API: \`https://clubcontent-api.davmn.net/feed/internal?includeSmoke=1\`"
+  echo "- Rehearsal command: \`npm run pilot:rehearse\`"
+  echo "- Summary file: \`${summary_file}\`"
+  if [[ "${#audit_blockers[@]}" -gt 0 ]]; then
+    echo
+    echo "## Blockers"
+    for blocker in "${audit_blockers[@]}"; do
+      echo "- ${blocker}"
+    done
+  fi
+  echo
+  echo "## Step Results"
+  while IFS= read -r step_status; do
+    [[ -n "${step_status}" ]] || continue
+    echo "- ${step_status}"
+  done < "${status_file}"
+} > "${handoff_file}"
+
+if [[ "${decision}" == "NO_GO" ]]; then
   exit 1
 fi
 

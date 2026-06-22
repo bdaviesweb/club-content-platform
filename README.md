@@ -177,7 +177,7 @@ PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:vps
 npm run pilot:rehearse
 ```
 
-The rehearsal writes an evidence bundle under `tmp/pilot-rehearsal/<timestamp>-<profile>/` and prints the go/no-go decision at the end.
+The rehearsal writes an evidence bundle under `tmp/pilot-rehearsal/<timestamp>-<profile>/`, including a shareable `handoff.md`, and prints the go/no-go decision at the end.
 
 This lets the suite keep `club_comms` for the comms lane while automatically using the team manager where a scenario routes video review to `team_manager`.
 

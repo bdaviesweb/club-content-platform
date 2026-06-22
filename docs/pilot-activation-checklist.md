@@ -24,6 +24,7 @@ Use this checklist before turning on the first real pilot club or declaring the 
 
 - Demo command center URL used:
 - Rehearsal bundle path:
+- Rehearsal handoff file:
 - Rehearsal go/no-go summary:
 - Mobile submission id verified:
 - Published post id verified:

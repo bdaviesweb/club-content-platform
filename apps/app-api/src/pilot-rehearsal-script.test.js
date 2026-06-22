@@ -32,6 +32,7 @@ test("pilot rehearsal script runs the full simulator flow in order", () => {
   assert.match(output, /pilot_rehearsal_profile_path=.*simulated-north-river\.env/);
   assert.match(output, /pilot_rehearsal_bundle_path=.*bundle-a.*simulated-north-river/);
   assert.match(output, /pilot_rehearsal_summary_path=.*summary\.txt/);
+  assert.match(output, /pilot_rehearsal_handoff_path=.*handoff\.md/);
   assert.match(output, /==> Inspect simulator profile/);
   assert.match(output, /DRY_RUN npm run pilot:inspect -- simulated-north-river/);
   assert.match(output, /==> Validate simulator profile/);
@@ -55,6 +56,7 @@ test("pilot rehearsal script runs the full simulator flow in order", () => {
 
   const bundleDir = path.join(outputDir, bundleName);
   assert.equal(fs.existsSync(path.join(bundleDir, "summary.txt")), true);
+  assert.equal(fs.existsSync(path.join(bundleDir, "handoff.md")), true);
   assert.equal(fs.existsSync(path.join(bundleDir, "status.txt")), true);
   assert.equal(fs.existsSync(path.join(bundleDir, "commands.txt")), true);
   assert.equal(fs.existsSync(path.join(bundleDir, "logs", "inspect.log")), true);
@@ -72,6 +74,14 @@ test("pilot rehearsal script runs the full simulator flow in order", () => {
   assert.match(commands, /npm run pilot:inspect -- simulated-north-river/);
   assert.match(commands, /env PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:audit/);
   assert.match(commands, /node --test /);
+
+  const handoff = fs.readFileSync(path.join(bundleDir, "handoff.md"), "utf8");
+  assert.match(handoff, /# Pilot Rehearsal Handoff/);
+  assert.match(handoff, /Decision: `GO`/);
+  assert.match(handoff, /Demo command center: `http:\/\/127\.0\.0\.1:3013\/demo`/);
+  assert.match(handoff, /Quick review: `http:\/\/127\.0\.0\.1:3013\/quick-review`/);
+  assert.match(handoff, /Workflow settings: `http:\/\/127\.0\.0\.1:3013\/workflow-settings\?clubSlug=north-river-soccer-club`/);
+  assert.match(handoff, /Internal feed API: `https:\/\/clubcontent-api\.davmn\.net\/feed\/internal\?includeSmoke=1`/);
 });
 
 test("pilot rehearsal script defaults to the committed simulator profile", () => {
