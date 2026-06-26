@@ -120,10 +120,11 @@ EOF
   echo "3. Or process the reply template in one pass with \`npm run pilot:process-reply-template -- ${scaffolded_onboarding_path} ${reply_template_path}\`."
   echo "4. Or go straight to the pre-creation candidate bundle with \`npm run pilot:prepare-from-reply-template -- ${scaffolded_onboarding_path} ${reply_template_path}\`."
   echo "5. Or run the full local preflight gate with \`npm run pilot:preflight-from-reply-template -- ${scaffolded_onboarding_path} ${reply_template_path}\`."
-  echo "6. Review the grouped gap report to confirm what is still missing."
-  echo "7. Send the share message if someone else needs to provide the missing inputs."
-  echo "8. Use the reply template if you want one paste-back block of answers."
-  echo "9. Rerun the gap check and request-packet commands after updates."
+  echo "6. Or run the full hosted launch path with \`npm run pilot:launch-from-reply-template -- ${scaffolded_onboarding_path} ${reply_template_path}\` when the real data, signoff, and operator window are all ready."
+  echo "7. Review the grouped gap report to confirm what is still missing."
+  echo "8. Send the share message if someone else needs to provide the missing inputs."
+  echo "9. Use the reply template if you want one paste-back block of answers."
+  echo "10. Rerun the gap check and request-packet commands after updates."
   echo
   echo "## Commands"
   echo
@@ -131,6 +132,7 @@ EOF
   echo "- \`npm run pilot:process-reply-template -- ${scaffolded_onboarding_path} ${reply_template_path}\`"
   echo "- \`npm run pilot:prepare-from-reply-template -- ${scaffolded_onboarding_path} ${reply_template_path}\`"
   echo "- \`npm run pilot:preflight-from-reply-template -- ${scaffolded_onboarding_path} ${reply_template_path}\`"
+  echo "- \`npm run pilot:launch-from-reply-template -- ${scaffolded_onboarding_path} ${reply_template_path}\`"
   echo "- \`npm run pilot:onboarding-gaps -- ${scaffolded_onboarding_path}\`"
   echo "- \`npm run pilot:data-request -- ${scaffolded_onboarding_path} ${request_packet_path}\`"
   echo "- \`npm run pilot:share-data-request -- ${request_packet_path} ${share_message_path}\`"
