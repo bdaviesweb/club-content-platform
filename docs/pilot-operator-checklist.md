@@ -175,6 +175,18 @@ Good result:
 - output includes candidate profile, intake path, create SQL path, rollback SQL path, and readiness result
 - if everything is complete, output includes `pilot_reply_template_prep_decision=GO`
 
+Optional one-pass local preflight:
+
+```bash
+npm run pilot:preflight-from-reply-template -- /absolute/path/to/pilot-onboarding.md /absolute/path/to/pilot-real-data-reply-template.txt
+```
+
+Good result:
+
+- bundle is written under `tmp/pilot-reply-template-preflight/<timestamp>/`
+- output includes candidate profile, create SQL path, rollback SQL path, local readiness result, and profile preflight result
+- if everything is complete, output includes `pilot_reply_template_preflight_decision=GO`
+
 ### 4. Fill the onboarding worksheet
 
 File to update:
