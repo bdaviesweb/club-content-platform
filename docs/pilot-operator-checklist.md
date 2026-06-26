@@ -163,6 +163,18 @@ Good result:
 - output shows applied worksheet path, validation result, gap count, and launch-readiness result
 - if everything is complete, output includes `pilot_reply_template_process_decision=GO`
 
+Optional one-pass prep:
+
+```bash
+npm run pilot:prepare-from-reply-template -- /absolute/path/to/pilot-onboarding.md /absolute/path/to/pilot-real-data-reply-template.txt
+```
+
+Good result:
+
+- bundle is written under `tmp/pilot-reply-template-prep/<timestamp>/`
+- output includes candidate profile, intake path, create SQL path, rollback SQL path, and readiness result
+- if everything is complete, output includes `pilot_reply_template_prep_decision=GO`
+
 ### 4. Fill the onboarding worksheet
 
 File to update:

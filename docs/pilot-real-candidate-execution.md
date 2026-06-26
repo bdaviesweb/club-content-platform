@@ -21,24 +21,25 @@ Before running anything hosted, confirm all of these exist:
 1. Fill `docs/pilot-onboarding-template.md` or a copied onboarding worksheet for the real club
 2. If the real values were collected in the prep-kit reply template, apply them with `npm run pilot:apply-reply-template -- /absolute/path/to/pilot-onboarding.md /absolute/path/to/pilot-real-data-reply-template.txt`
 3. Fastest preflight checkpoint: run `npm run pilot:process-reply-template -- /absolute/path/to/pilot-onboarding.md /absolute/path/to/pilot-real-data-reply-template.txt` to apply the returned answers, rerun validation, rerun the gap report, and check launch readiness in one saved bundle
-4. Validate it with `npm run pilot:validate-onboarding -- /absolute/path/to/pilot-onboarding.md`
-5. Confirm the prelaunch evidence gate with `npm run pilot:check-launch-readiness -- /absolute/path/to/pilot-onboarding.md`
-6. Fastest onboarding path: run `npm run pilot:prepare-from-onboarding -- /absolute/path/to/pilot-onboarding.md` to generate the intake block, profile, handoff packet, creation plan, and readiness result in one pass
-7. Fastest end-to-end operator path: run `npm run pilot:launch-from-onboarding -- /absolute/path/to/pilot-onboarding.md` to validate onboarding, confirm prelaunch evidence and signoff, prepare the candidate artifacts, apply the hosted create SQL, run hosted verification, and emit a rollback-ready bundle in one pass
-8. Intake-first fast path: run `npm run pilot:prepare-from-intake -- /absolute/path/to/intake.txt` to generate the profile, handoff packet, creation plan, and readiness result in one pass
-9. Manual path: run `npm run pilot:intake-from-onboarding -- /absolute/path/to/pilot-onboarding.md`, save the block, then run `npm run pilot:profile-from-intake` or `npm run pilot:profile-from-intake -- /absolute/path/to/intake.txt`
-10. Run `npm run pilot:inspect -- <candidate>`
-11. Run `PILOT_CANDIDATE_PROFILE=<candidate> bash scripts/validate_pilot_candidate_profile.sh`
-12. Run `npm run pilot:handoff-packet -- <candidate>`
-13. Run `npm run pilot:create-plan -- <candidate>`
-14. Run `npm run pilot:readiness -- <candidate>` or `npm run pilot:readiness -- /absolute/path/to/intake.txt`
-15. Review the generated `create.sql` and `rollback.sql`
-16. Apply the `create.sql` on the hosted pilot database with an operator present, or use `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:apply-sql -- <candidate> create`
-17. Fastest hosted verification path: run `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:post-create-verify`
-18. Manual hosted verification path: run `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:audit`
-19. If audit is `GO`, run `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:vps`
-20. If the hosted scenarios pass, run the operator demo and capture evidence
-21. If anything fails, stop and use the generated `rollback.sql` before making more changes, or use `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:apply-sql -- <candidate> rollback`
+4. Fastest pre-creation local prep: run `npm run pilot:prepare-from-reply-template -- /absolute/path/to/pilot-onboarding.md /absolute/path/to/pilot-real-data-reply-template.txt` to accept the returned answers and generate the intake block, profile, creation plan, and rollback-ready local bundle without touching hosted records
+5. Validate it with `npm run pilot:validate-onboarding -- /absolute/path/to/pilot-onboarding.md`
+6. Confirm the prelaunch evidence gate with `npm run pilot:check-launch-readiness -- /absolute/path/to/pilot-onboarding.md`
+7. Fastest onboarding path: run `npm run pilot:prepare-from-onboarding -- /absolute/path/to/pilot-onboarding.md` to generate the intake block, profile, handoff packet, creation plan, and readiness result in one pass
+8. Fastest end-to-end operator path: run `npm run pilot:launch-from-onboarding -- /absolute/path/to/pilot-onboarding.md` to validate onboarding, confirm prelaunch evidence and signoff, prepare the candidate artifacts, apply the hosted create SQL, run hosted verification, and emit a rollback-ready bundle in one pass
+9. Intake-first fast path: run `npm run pilot:prepare-from-intake -- /absolute/path/to/intake.txt` to generate the profile, handoff packet, creation plan, and readiness result in one pass
+10. Manual path: run `npm run pilot:intake-from-onboarding -- /absolute/path/to/pilot-onboarding.md`, save the block, then run `npm run pilot:profile-from-intake` or `npm run pilot:profile-from-intake -- /absolute/path/to/intake.txt`
+11. Run `npm run pilot:inspect -- <candidate>`
+12. Run `PILOT_CANDIDATE_PROFILE=<candidate> bash scripts/validate_pilot_candidate_profile.sh`
+13. Run `npm run pilot:handoff-packet -- <candidate>`
+14. Run `npm run pilot:create-plan -- <candidate>`
+15. Run `npm run pilot:readiness -- <candidate>` or `npm run pilot:readiness -- /absolute/path/to/intake.txt`
+16. Review the generated `create.sql` and `rollback.sql`
+17. Apply the `create.sql` on the hosted pilot database with an operator present, or use `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:apply-sql -- <candidate> create`
+18. Fastest hosted verification path: run `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:post-create-verify`
+19. Manual hosted verification path: run `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:audit`
+20. If audit is `GO`, run `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:vps`
+21. If the hosted scenarios pass, run the operator demo and capture evidence
+22. If anything fails, stop and use the generated `rollback.sql` before making more changes, or use `PILOT_CANDIDATE_PROFILE=<candidate> npm run pilot:apply-sql -- <candidate> rollback`
 
 ## Stop Conditions
 

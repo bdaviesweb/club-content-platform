@@ -23,6 +23,7 @@
     "pilot:scaffold-onboarding": "bash scripts/pilot_scaffold_real_onboarding.sh",
     "pilot:apply-reply-template": "bash scripts/pilot_apply_reply_template.sh",
     "pilot:process-reply-template": "bash scripts/pilot_process_reply_template.sh",
+    "pilot:prepare-from-reply-template": "bash scripts/pilot_prepare_from_reply_template.sh",
     "pilot:validate-onboarding": "bash scripts/pilot_validate_onboarding.sh",
     "pilot:onboarding-gaps": "bash scripts/pilot_real_onboarding_gaps.sh",
     "pilot:data-request": "bash scripts/pilot_real_data_request_packet.sh",
