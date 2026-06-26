@@ -151,6 +151,18 @@ Good result:
 - output includes `pilot_reply_template_next_step=validate_onboarding`
 - onboarding worksheet now contains the filled identity, ownership, delivery, launch-gate, and rollback values
 
+Optional one-pass check:
+
+```bash
+npm run pilot:process-reply-template -- /absolute/path/to/pilot-onboarding.md /absolute/path/to/pilot-real-data-reply-template.txt
+```
+
+Good result:
+
+- bundle is written under `tmp/pilot-reply-template-processing/<timestamp>/`
+- output shows applied worksheet path, validation result, gap count, and launch-readiness result
+- if everything is complete, output includes `pilot_reply_template_process_decision=GO`
+
 ### 4. Fill the onboarding worksheet
 
 File to update:

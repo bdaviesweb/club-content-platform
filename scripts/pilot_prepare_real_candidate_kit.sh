@@ -117,14 +117,16 @@ EOF
   echo
   echo "1. Fill the scaffolded onboarding worksheet with the real club details."
   echo "2. If you collect answers in the reply template, apply them into the worksheet with \`npm run pilot:apply-reply-template -- ${scaffolded_onboarding_path} ${reply_template_path}\`."
-  echo "3. Review the grouped gap report to confirm what is still missing."
-  echo "4. Send the share message if someone else needs to provide the missing inputs."
-  echo "5. Use the reply template if you want one paste-back block of answers."
-  echo "6. Rerun the gap check and request-packet commands after updates."
+  echo "3. Or process the reply template in one pass with \`npm run pilot:process-reply-template -- ${scaffolded_onboarding_path} ${reply_template_path}\`."
+  echo "4. Review the grouped gap report to confirm what is still missing."
+  echo "5. Send the share message if someone else needs to provide the missing inputs."
+  echo "6. Use the reply template if you want one paste-back block of answers."
+  echo "7. Rerun the gap check and request-packet commands after updates."
   echo
   echo "## Commands"
   echo
   echo "- \`npm run pilot:apply-reply-template -- ${scaffolded_onboarding_path} ${reply_template_path}\`"
+  echo "- \`npm run pilot:process-reply-template -- ${scaffolded_onboarding_path} ${reply_template_path}\`"
   echo "- \`npm run pilot:onboarding-gaps -- ${scaffolded_onboarding_path}\`"
   echo "- \`npm run pilot:data-request -- ${scaffolded_onboarding_path} ${request_packet_path}\`"
   echo "- \`npm run pilot:share-data-request -- ${request_packet_path} ${share_message_path}\`"
