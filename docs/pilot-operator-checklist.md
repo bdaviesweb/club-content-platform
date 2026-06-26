@@ -138,7 +138,20 @@ Good result:
 
 - real org, club, team, reviewer, ownership, notification, and rollback values are present
 
-### 3. Fill the onboarding worksheet
+### 3. Apply the reply template into the onboarding worksheet
+
+Command:
+
+```bash
+npm run pilot:apply-reply-template -- /absolute/path/to/pilot-onboarding.md /absolute/path/to/pilot-real-data-reply-template.txt
+```
+
+Good result:
+
+- output includes `pilot_reply_template_next_step=validate_onboarding`
+- onboarding worksheet now contains the filled identity, ownership, delivery, launch-gate, and rollback values
+
+### 4. Fill the onboarding worksheet
 
 File to update:
 
@@ -147,8 +160,9 @@ File to update:
 Good result:
 
 - required identity, owner, reviewer, notification, and rollback fields are filled
+- any fields not covered by the reply template are completed manually
 
-### 4. Validate the onboarding worksheet
+### 5. Validate the onboarding worksheet
 
 Command:
 
@@ -161,7 +175,7 @@ Good result:
 - output includes `pilot_onboarding_validation=GO`
 - output includes `pilot_onboarding_next_step=prepare_from_onboarding`
 
-### 5. Check what is still missing
+### 6. Check what is still missing
 
 Command:
 
@@ -174,7 +188,7 @@ Good result:
 - output includes `pilot_real_onboarding_gaps=GO`
 - output includes `pilot_real_onboarding_gap_count=0`
 
-### 6. Check launch readiness
+### 7. Check launch readiness
 
 Command:
 
@@ -187,7 +201,7 @@ Good result:
 - output includes `pilot_launch_readiness=GO`
 - output includes `pilot_launch_readiness_next_step=apply_create_sql`
 
-### 7. Generate the candidate artifacts
+### 8. Generate the candidate artifacts
 
 Command:
 
@@ -203,7 +217,7 @@ Good result:
 - readiness passes
 - output includes `pilot_prepare_readiness=GO`
 
-### 8. Inspect and validate the candidate profile
+### 9. Inspect and validate the candidate profile
 
 Commands:
 
@@ -217,7 +231,7 @@ Good result:
 - inspect output shows the expected org, club, team, and emails
 - validator exits cleanly without template or missing-value errors
 
-### 9. Generate the create and rollback SQL
+### 10. Generate the create and rollback SQL
 
 Command:
 
@@ -233,7 +247,7 @@ Good result:
   - `create.sql`
   - `rollback.sql`
 
-### 10. Confirm readiness
+### 11. Confirm readiness
 
 Command:
 
@@ -245,7 +259,7 @@ Good result:
 
 - output includes `pilot_real_candidate_readiness=GO`
 
-### 11. Create the hosted records
+### 12. Create the hosted records
 
 Command:
 
