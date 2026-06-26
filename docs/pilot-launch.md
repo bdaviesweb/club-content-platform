@@ -46,19 +46,21 @@ Use these entry points:
    Opens the committed test-tenant organization in workflow settings so we can rehearse organization defaults, club exceptions, routing rules, and auto-approvals without real clubs or candidates.
 11. `docs/pilot-onboarding-template.md`
    Captures the first-club role map, policy choices, and signoff fields.
-12. `docs/pilot-activation-checklist.md`
+12. `docs/pilot-operator-checklist.md`
+   One-page setup checklist that pairs each operator command with the expected success signal or artifact.
+13. `docs/pilot-activation-checklist.md`
    Defines the go-live gate, evidence to save, and recovery steps.
-13. `docs/pilot-candidate-handoff.md`
+14. `docs/pilot-candidate-handoff.md`
    Separates safe pre-creation candidate prep from the hosted checks that only make sense after real records exist.
-14. `npm run pilot:handoff-packet -- <candidate>`
+15. `npm run pilot:handoff-packet -- <candidate>`
    Generates one candidate handoff packet that combines profile status, test-tenant evidence references, ownership prompts, and rollback prompts before real records exist.
-15. `npm run pilot:create-plan -- <candidate>`
+16. `npm run pilot:create-plan -- <candidate>`
    Generates the exact create and rollback SQL plan for the candidate profile without mutating hosted data yet.
-16. `docs/pilot-real-candidate-execution.md`
+17. `docs/pilot-real-candidate-execution.md`
    Defines the exact hosted creation order once the candidate packet and SQL plan are approved.
-17. `docs/pilot-real-candidate-intake.md`
+18. `docs/pilot-real-candidate-intake.md`
    Captures the real candidate identity, owners, and delivery posture in the exact shape needed for hosted creation.
-18. `npm run pilot:profile-from-intake`
+19. `npm run pilot:profile-from-intake`
    Generates `config/pilot-candidates/<candidate>.local.env` directly from the filled intake document.
 
 ## Operator Demo Flow
