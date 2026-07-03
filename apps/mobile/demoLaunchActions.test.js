@@ -4,7 +4,8 @@ const test = require("node:test");
 const {
   demoLaunchActions,
   parseDemoLaunchAction,
-  parseDemoLaunchRequest
+  parseDemoLaunchRequest,
+  selectDemoReviewQueueItem
 } = require("./demoLaunchActions");
 
 test("parseDemoLaunchAction reads Expo Go load-demo URLs", () => {
@@ -84,4 +85,15 @@ test("parseDemoLaunchAction reads Expo Go approve first review URLs", () => {
 
 test("parseDemoLaunchAction ignores unrelated URLs", () => {
   assert.equal(parseDemoLaunchAction("exp://10.0.0.133:8082/--/status"), null);
+});
+
+test("selectDemoReviewQueueItem refuses to fall back when a target is missing", () => {
+  assert.throws(
+    () =>
+      selectDemoReviewQueueItem(
+        [{ submission_id: "submission-a" }, { submission_id: "submission-b" }],
+        "submission-missing"
+      ),
+    /Targeted demo review item was not found/
+  );
 });

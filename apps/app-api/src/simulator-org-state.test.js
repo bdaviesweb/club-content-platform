@@ -190,6 +190,21 @@ test("repairSimulatorOrganizationStateWithClient canonicalizes the simulator org
   assert.equal(state.seed.organizationSlug, "north-river-youth-sports");
 });
 
+test("repairSimulatorOrganizationStateWithClient rejects custom simulator slugs by default", async () => {
+  const client = createRepairClient();
+
+  await assert.rejects(
+    repairSimulatorOrganizationStateWithClient(client, {
+      SIMULATED_PILOT_ORGANIZATION_SLUG: "real-customer-org",
+      SIMULATED_PILOT_CLUB_SLUG: "real-customer-club",
+      SIMULATED_PILOT_TEAM_SLUG: "real-customer-team"
+    }),
+    /Refusing to reset simulator organization for custom slugs/
+  );
+
+  assert.equal(client.calls.length, 0);
+});
+
 test("validateSimulatorOrganizationState accepts the canonical simulator org", async () => {
   const state = getSimulatorOrganizationState();
   const pool = createValidationPool(state);

@@ -6,7 +6,7 @@ url="${@: -1}"
 case "${url}" in
   http://localhost:4000/app/readiness)
     cat <<'JSON'
-{"demo":{"organizationSlug":"demo-sports-org","clubSlug":"demo-soccer-club","teamSlug":"u14-girls","submitterEmail":"coach@demo-club.local","reviewerEmail":"comms@demo-club.local"},"pilotCandidate":{"organizationSlug":"north-river-youth-sports","clubSlug":"north-river-soccer-club","teamSlug":"u13-girls-blue","submitterEmail":"coach@northriverpilot.local","reviewerEmail":"comms@northriverpilot.local","clubAdminEmail":"admin@northriverpilot.local","teamManagerEmail":"manager@northriverpilot.local"}} 
+{"demo":{"organizationSlug":"demo-sports-org","clubSlug":"demo-soccer-club","teamSlug":"u14-girls","submitterEmail":"coach@demo-club.local","reviewerEmail":"comms@demo-club.local"},"pilotCandidate":{"organizationSlug":"north-river-youth-sports","clubSlug":"north-river-soccer-club","teamSlug":"u13-girls-blue","submitterEmail":"coach@northriverpilot.local","reviewerEmail":"comms@northriverpilot.local","clubAdminEmail":"admin@northriverpilot.local","teamManagerEmail":"manager@northriverpilot.local"}}
 JSON
     ;;
   http://localhost:4000/notification-delivery/status)

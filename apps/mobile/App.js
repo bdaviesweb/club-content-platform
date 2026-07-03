@@ -35,7 +35,8 @@ const { uploadSelectedAsset } = require("./mediaUpload");
 const { buildApiError } = require("./apiErrors");
 const {
   demoLaunchActions,
-  parseDemoLaunchRequest
+  parseDemoLaunchRequest,
+  selectDemoReviewQueueItem
 } = require("./demoLaunchActions");
 const { buildDemoSubmissionPayload } = require("./demoTools");
 const {
@@ -1035,10 +1036,10 @@ export default function App() {
       setReviewQueue(items);
       setReviewQueueLastRefreshedAt(new Date().toISOString());
 
-      const targetedItem = options.targetSubmissionId
-        ? items.find((item) => item.submission_id === options.targetSubmissionId) || null
-        : null;
-      const selectedQueueItem = targetedItem || items[0] || null;
+      const selectedQueueItem = selectDemoReviewQueueItem(
+        items,
+        options.targetSubmissionId || null
+      );
 
       if (options.openFirst && selectedQueueItem?.submission_id) {
         const detailResponse = await fetch(

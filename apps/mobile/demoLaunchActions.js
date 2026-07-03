@@ -59,8 +59,25 @@ function parseDemoLaunchAction(url) {
   return parseDemoLaunchRequest(url)?.action || null;
 }
 
+function selectDemoReviewQueueItem(items = [], targetSubmissionId = null) {
+  if (!targetSubmissionId) {
+    return items[0] || null;
+  }
+
+  const targetedItem =
+    items.find((item) => item?.submission_id === targetSubmissionId) || null;
+  if (!targetedItem) {
+    throw new Error(
+      `Targeted demo review item was not found: ${targetSubmissionId}`
+    );
+  }
+
+  return targetedItem;
+}
+
 module.exports = {
   demoLaunchActions,
   parseDemoLaunchAction,
-  parseDemoLaunchRequest
+  parseDemoLaunchRequest,
+  selectDemoReviewQueueItem
 };

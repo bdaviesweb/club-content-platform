@@ -39,6 +39,30 @@ const simulatorClubPolicy = {
   notificationRule: { email: false, push: false }
 };
 
+const safeSimulatorResetSeed = {
+  organizationSlug: "north-river-youth-sports",
+  clubSlug: "north-river-soccer-club",
+  teamSlug: "u13-girls-blue"
+};
+
+function assertSafeSimulatorReset(state, env = process.env) {
+  const customResetAllowed =
+    String(env.ALLOW_CUSTOM_SIMULATOR_ORG_RESET || "").trim() === "1";
+  if (customResetAllowed) {
+    return;
+  }
+
+  const matchesDefaultSeed =
+    state.seed.organizationSlug === safeSimulatorResetSeed.organizationSlug &&
+    state.seed.slug === safeSimulatorResetSeed.clubSlug &&
+    state.seed.teamSlug === safeSimulatorResetSeed.teamSlug;
+  if (!matchesDefaultSeed) {
+    throw new Error(
+      "Refusing to reset simulator organization for custom slugs without ALLOW_CUSTOM_SIMULATOR_ORG_RESET=1."
+    );
+  }
+}
+
 function sortJson(value) {
   if (Array.isArray(value)) {
     return value.map(sortJson);
@@ -142,6 +166,7 @@ export async function repairSimulatorOrganizationStateWithClient(
   env = process.env
 ) {
   const state = getSimulatorOrganizationState(env);
+  assertSafeSimulatorReset(state, env);
 
   await client.query(
     `
