@@ -116,7 +116,7 @@ The simulated pilot uses three distinct approval actors. Rehearsals should use t
 
 ## Launch Evidence
 
-- Go-live owner signoff:
+- Go-live owner signoff: `Robert Davies, 2026-07-17`
 - Operator demo completed: `completed`
 - Mobile review smoke completed: `completed`
 - Pilot VPS scenario suite completed: `completed`
