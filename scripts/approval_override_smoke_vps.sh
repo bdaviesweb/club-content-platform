@@ -3,6 +3,7 @@ set -euo pipefail
 
 REMOTE_HOST="${REMOTE_HOST:-hermes-dev}"
 REMOTE_DIR="${REMOTE_DIR:-/srv/repos/projects/club-content-platform}"
+SSH_OPTS="${SSH_OPTS:-}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.vps.yml}"
 ORGANIZATION_SLUG="${ORGANIZATION_SLUG:-demo-sports-org}"
 CLUB_SLUG="${CLUB_SLUG:-demo-soccer-club}"
@@ -46,7 +47,7 @@ if [[ "${CLUB_CONTENT_SMOKE_ON_VPS:-0}" != "1" ]]; then
         "$(shell_quote "${SMOKE_MARKER}")"
     )
 
-    exec ssh "${REMOTE_HOST}" "${remote_command}" < "$0"
+    exec ssh ${SSH_OPTS} "${REMOTE_HOST}" "${remote_command}" < "$0"
   fi
 
   export CLUB_CONTENT_SMOKE_ON_VPS=1

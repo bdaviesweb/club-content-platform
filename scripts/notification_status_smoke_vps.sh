@@ -2,6 +2,7 @@
 set -euo pipefail
 
 REMOTE_HOST="${REMOTE_HOST:-hermes-dev}"
+SSH_OPTS="${SSH_OPTS:-}"
 EXPECTED_EMAIL_PROVIDER="${EXPECTED_EMAIL_PROVIDER:-log-only}"
 EXPECTED_EMAIL_ENABLED="${EXPECTED_EMAIL_ENABLED:-false}"
 EXPECTED_EMAIL_MODE="${EXPECTED_EMAIL_MODE:-log-only}"
@@ -11,7 +12,7 @@ EXPECTED_PUSH_ENABLED="${EXPECTED_PUSH_ENABLED:-false}"
 EXPECTED_PUSH_MODE="${EXPECTED_PUSH_MODE:-disabled}"
 EXPECTED_PUSH_REASON="${EXPECTED_PUSH_REASON:-push_disabled}"
 
-status_json="$(ssh "${REMOTE_HOST}" "curl -fsS http://localhost:4000/notification-delivery/status")"
+status_json="$(ssh ${SSH_OPTS} "${REMOTE_HOST}" "curl -fsS http://localhost:4000/notification-delivery/status")"
 
 STATUS_JSON="${status_json}" \
 EXPECTED_EMAIL_PROVIDER="${EXPECTED_EMAIL_PROVIDER}" \

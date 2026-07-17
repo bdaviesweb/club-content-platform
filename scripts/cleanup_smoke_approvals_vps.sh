@@ -3,11 +3,12 @@ set -euo pipefail
 
 REMOTE_HOST="${REMOTE_HOST:-hermes-dev}"
 REMOTE_DIR="${REMOTE_DIR:-/srv/repos/projects/club-content-platform}"
+SSH_OPTS="${SSH_OPTS:-}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.vps.yml}"
 REVIEWER_EMAIL="${REVIEWER_EMAIL:-comms@demo-club.local}"
 APPLY="${APPLY:-0}"
 
-ssh "${REMOTE_HOST}" /bin/bash <<INNER
+ssh ${SSH_OPTS} "${REMOTE_HOST}" /bin/bash <<INNER
 set -euo pipefail
 
 cd '${REMOTE_DIR}'

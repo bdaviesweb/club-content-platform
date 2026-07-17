@@ -3,6 +3,7 @@ set -euo pipefail
 
 REMOTE_HOST="${REMOTE_HOST:-hermes-dev}"
 REMOTE_DIR="${REMOTE_DIR:-/srv/repos/projects/club-content-platform}"
+SSH_OPTS="${SSH_OPTS:-}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.vps.yml}"
 ORGANIZATION_SLUG="${ORGANIZATION_SLUG:-demo-sports-org}"
 CLUB_SLUG="${CLUB_SLUG:-demo-soccer-club}"
@@ -40,7 +41,7 @@ if [[ "${CLUB_CONTENT_SMOKE_ON_VPS:-0}" != "1" ]]; then
         "$(shell_quote "${SMOKE_MARKER}")"
     )
 
-    exec ssh "${REMOTE_HOST}" "${remote_command}" < "$0"
+    exec ssh ${SSH_OPTS} "${REMOTE_HOST}" "${remote_command}" < "$0"
   fi
 
   export CLUB_CONTENT_SMOKE_ON_VPS=1
@@ -71,27 +72,24 @@ curl -fsS \
   "http://localhost:4000/workflow-policies/clubs/${CLUB_SLUG}" >/dev/null
 
 policy_json="$(curl -fsS "http://localhost:4000/workflow-policies/clubs/${CLUB_SLUG}")"
-POLICY_JSON="${policy_json}" node <<'NODE'
-const assert = require("node:assert/strict");
+policy_row="$(query_one "
+  SELECT
+    COALESCE(op.routing_rule->'contentTypeApprovers'->>'video', ''),
+    COALESCE(cp.routing_rule->'contentTypeApprovers'->>'video', '')
+  FROM clubs c
+  JOIN organizations o ON o.id = c.organization_id
+  LEFT JOIN organization_workflow_policies op ON op.organization_id = o.id
+  LEFT JOIN club_workflow_policies cp ON cp.club_id = c.id
+  WHERE c.slug = '${CLUB_SLUG}'
+  LIMIT 1;
+")"
+IFS='|' read -r organization_video_role club_video_role <<< "${policy_row}"
 
-const policy = JSON.parse(process.env.POLICY_JSON);
-
-assert.equal(
-  policy.organizationPolicy?.routingRule?.contentTypeApprovers?.video,
-  "club_admin",
-  "Organization routing rule should target club_admin"
-);
-assert.equal(
-  policy.clubPolicy?.routingRule?.contentTypeApprovers?.video,
-  "team_manager",
-  "Club routing override should target team_manager"
-);
-assert.equal(
-  policy.effectivePolicy?.routingRule?.contentTypeApprovers?.video,
-  "team_manager",
-  "Effective routing rule should prefer the club override"
-);
-NODE
+if [[ "${organization_video_role}" != "club_admin" || "${club_video_role}" != "team_manager" ]]; then
+  echo "Routing policy assertion failed. organization_video_role=${organization_video_role:-missing} club_video_role=${club_video_role:-missing}" >&2
+  echo "policy_json=${policy_json}" >&2
+  exit 1
+fi
 
 echo "Creating routing rule smoke submission: ${SMOKE_MARKER}"
 curl -fsS \

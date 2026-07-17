@@ -3,12 +3,22 @@ set -euo pipefail
 
 REMOTE_HOST="${REMOTE_HOST:-hermes-dev}"
 REMOTE_DIR="${REMOTE_DIR:-/srv/repos/projects/club-content-platform}"
+SSH_OPTS="${SSH_OPTS:-}"
+rsync_ssh_opts=()
+if [[ -n "${SSH_OPTS}" ]]; then
+  rsync_ssh_opts=(-e "ssh ${SSH_OPTS}")
+fi
+
+ssh_remote() {
+  ssh ${SSH_OPTS} "${REMOTE_HOST}" "$@"
+}
 
 echo "Preparing remote directory: ${REMOTE_DIR}"
-ssh "${REMOTE_HOST}" "mkdir -p '${REMOTE_DIR}'"
+ssh_remote "mkdir -p '${REMOTE_DIR}'"
 
 echo "Syncing project to ${REMOTE_HOST}:${REMOTE_DIR}"
 rsync -av \
+  "${rsync_ssh_opts[@]}" \
   --delete \
   --exclude node_modules \
   --exclude data \
@@ -18,10 +28,10 @@ rsync -av \
   ./ "${REMOTE_HOST}:${REMOTE_DIR}/"
 
 echo "Ensuring VPS env file exists"
-ssh "${REMOTE_HOST}" "cd '${REMOTE_DIR}' && if [ ! -f .env.vps ]; then cp .env.vps.example .env.vps; fi"
+ssh_remote "cd '${REMOTE_DIR}' && if [ ! -f .env.vps ]; then cp .env.vps.example .env.vps; fi"
 
 echo "Starting VPS stack"
-ssh "${REMOTE_HOST}" "cd '${REMOTE_DIR}' && docker compose -f docker-compose.vps.yml up --build -d --remove-orphans"
+ssh_remote "cd '${REMOTE_DIR}' && docker compose -f docker-compose.vps.yml up --build -d --remove-orphans"
 
 echo "Done. Next check:"
 echo "ssh ${REMOTE_HOST} 'cd ${REMOTE_DIR} && docker compose -f docker-compose.vps.yml ps'"

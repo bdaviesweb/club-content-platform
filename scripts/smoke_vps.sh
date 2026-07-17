@@ -3,10 +3,11 @@ set -euo pipefail
 
 REMOTE_HOST="${REMOTE_HOST:-hermes-dev}"
 REMOTE_DIR="${REMOTE_DIR:-/srv/repos/projects/club-content-platform}"
+SSH_OPTS="${SSH_OPTS:-}"
 CLUB_CONTENT_SMOKE_ON_VPS="${CLUB_CONTENT_SMOKE_ON_VPS:-0}"
 
 if [[ "${CLUB_CONTENT_SMOKE_ON_VPS}" != "1" ]]; then
-  exec ssh "${REMOTE_HOST}" \
+  exec ssh ${SSH_OPTS} "${REMOTE_HOST}" \
     "cd '${REMOTE_DIR}' && CLUB_CONTENT_SMOKE_ON_VPS=1 bash -s" < "$0"
 fi
 

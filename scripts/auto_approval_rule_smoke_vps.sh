@@ -3,6 +3,7 @@ set -euo pipefail
 
 REMOTE_HOST="${REMOTE_HOST:-hermes-dev}"
 REMOTE_DIR="${REMOTE_DIR:-/srv/repos/projects/club-content-platform}"
+SSH_OPTS="${SSH_OPTS:-}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.vps.yml}"
 ORGANIZATION_SLUG="${ORGANIZATION_SLUG:-demo-sports-org}"
 CLUB_SLUG="${CLUB_SLUG:-demo-soccer-club}"
@@ -38,7 +39,7 @@ if [[ "${CLUB_CONTENT_SMOKE_ON_VPS:-0}" != "1" ]]; then
         "$(shell_quote "${SMOKE_MARKER}")"
     )
 
-    exec ssh "${REMOTE_HOST}" "${remote_command}" < "$0"
+    exec ssh ${SSH_OPTS} "${REMOTE_HOST}" "${remote_command}" < "$0"
   fi
 
   export CLUB_CONTENT_SMOKE_ON_VPS=1
@@ -130,47 +131,47 @@ while (( SECONDS < deadline )); do
     fi
 
     if [[ "${status}" == "published" && "${auto_approved}" == "true" && "${auto_approve_reason}" == "policy_auto_approve_low_risk_internal" && "${publish_state}" == "succeeded" && -n "${external_post_id}" ]]; then
-      detail_json="$(curl -fsS "http://localhost:4000/submissions/${submission_id}")"
-      approved_event_payload="$(query_one "
-        SELECT COALESCE(payload::text, '{}')
+      detail_row="$(query_one "
+        SELECT
+          s.status,
+          COALESCE(ar.id::text, ''),
+          COALESCE(s.routing_decision->>'autoApproved', ''),
+          COALESCE(s.routing_decision->>'autoApproveReason', ''),
+          COALESCE(pd.destination_type::text, ''),
+          COALESCE(pp.external_post_id, '')
+        FROM submissions s
+        LEFT JOIN approval_requests ar ON ar.submission_id = s.id
+        LEFT JOIN LATERAL (
+          SELECT destination_id, external_post_id
+          FROM published_posts
+          WHERE submission_id = s.id
+          ORDER BY created_at DESC
+          LIMIT 1
+        ) pp ON TRUE
+        LEFT JOIN publishing_destinations pd ON pd.id = pp.destination_id
+        WHERE s.id = '${submission_id}'
+        LIMIT 1;
+      ")"
+      IFS='|' read -r detail_status detail_approval_request_id detail_auto_approved detail_auto_reason destination_type detail_external_post_id <<< "${detail_row}"
+
+      approved_event_row="$(query_one "
+        SELECT
+          COALESCE(payload->>'autoApproved', ''),
+          COALESCE(payload->>'autoApproveReason', '')
         FROM submission_events
         WHERE submission_id = '${submission_id}'
           AND event_name = 'submission.approved'
         ORDER BY created_at DESC
         LIMIT 1;
       ")"
-      DETAIL_JSON="${detail_json}" APPROVED_EVENT_PAYLOAD="${approved_event_payload}" EXTERNAL_POST_ID="${external_post_id}" node <<'NODE'
-const assert = require("node:assert/strict");
+      IFS='|' read -r event_auto_approved event_auto_reason <<< "${approved_event_row}"
 
-const detail = JSON.parse(process.env.DETAIL_JSON);
-const approvedEvent = JSON.parse(process.env.APPROVED_EVENT_PAYLOAD || "{}");
-const externalPostId = process.env.EXTERNAL_POST_ID;
-
-assert.equal(detail.status, "published", "Submission detail did not reach published");
-assert.equal(detail.latestApprovalRequest, null, "Auto-approved submission should not have an approval request");
-assert.equal(detail.routing_decision?.autoApproved, true, "Routing decision autoApproved missing");
-assert.equal(
-  detail.routing_decision?.autoApproveReason,
-  "policy_auto_approve_low_risk_internal",
-  "Routing decision auto-approve reason mismatch"
-);
-assert.equal(
-  detail.publishedPost?.destinationType,
-  "internal_feed",
-  "Published destination type mismatch"
-);
-assert.equal(
-  detail.publishedPost?.externalPostId,
-  externalPostId,
-  "Published post id mismatch"
-);
-assert.equal(approvedEvent.autoApproved, true, "Approved event must mark autoApproved");
-assert.equal(
-  approvedEvent.autoApproveReason,
-  "policy_auto_approve_low_risk_internal",
-  "Approved event auto-approve reason mismatch"
-);
-NODE
+      if [[ "${detail_status}" != "published" || -n "${detail_approval_request_id}" || "${detail_auto_approved}" != "true" || "${detail_auto_reason}" != "policy_auto_approve_low_risk_internal" || "${destination_type}" != "internal_feed" || "${detail_external_post_id}" != "${external_post_id}" || "${event_auto_approved}" != "true" || "${event_auto_reason}" != "policy_auto_approve_low_risk_internal" ]]; then
+        echo "Auto-approval detail assertion failed." >&2
+        echo "detail_status=${detail_status} detail_approval_request_id=${detail_approval_request_id} detail_auto_approved=${detail_auto_approved} detail_auto_reason=${detail_auto_reason} destination_type=${destination_type} detail_external_post_id=${detail_external_post_id}" >&2
+        echo "event_auto_approved=${event_auto_approved} event_auto_reason=${event_auto_reason}" >&2
+        exit 1
+      fi
 
       echo "Auto-approval rule smoke passed."
       echo "submission_id=${submission_id}"

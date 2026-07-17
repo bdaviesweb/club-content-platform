@@ -73,6 +73,11 @@ process.exit(0);
     `#!/usr/bin/env node
 const args = process.argv.slice(2).join(" ");
 
+if (args.includes("organization_workflow_policies op") && args.includes("club_workflow_policies cp")) {
+  process.stdout.write("club_admin|team_manager");
+  process.exit(0);
+}
+
 if (args.includes("SELECT") && args.includes("routing_decision->>'approverRole'")) {
   process.stdout.write("submission-1|needs_review|approval-1|club_comms|team_manager|team_manager|routing_rule_content_type|workflow_policy|");
   process.exit(0);
