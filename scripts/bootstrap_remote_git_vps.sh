@@ -8,6 +8,7 @@ BRANCH="${BRANCH:-main}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.vps.yml}"
 HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-90}"
 HEALTH_POLL_SECONDS="${HEALTH_POLL_SECONDS:-3}"
+SSH_OPTS="${SSH_OPTS:-}"
 
 if [[ -z "${REMOTE_HOST}" ]]; then
   echo "Set REMOTE_HOST to the production VPS SSH target." >&2
@@ -15,7 +16,9 @@ if [[ -z "${REMOTE_HOST}" ]]; then
   exit 1
 fi
 
-ssh "${REMOTE_HOST}" \
+read -r -a ssh_opts <<< "${SSH_OPTS}"
+
+ssh "${ssh_opts[@]}" "${REMOTE_HOST}" \
   "REMOTE_DIR='${REMOTE_DIR}' REPO_URL='${REPO_URL}' BRANCH='${BRANCH}' COMPOSE_FILE='${COMPOSE_FILE}' HEALTH_TIMEOUT_SECONDS='${HEALTH_TIMEOUT_SECONDS}' HEALTH_POLL_SECONDS='${HEALTH_POLL_SECONDS}' bash -s" <<'REMOTE_SCRIPT'
 set -euo pipefail
 
@@ -71,5 +74,10 @@ printf '\n---\n'
 docker compose -f "${COMPOSE_FILE}" ps
 
 printf '\n---\n'
-CLUB_CONTENT_SMOKE_ON_VPS=1 ./scripts/smoke_vps.sh
+if command -v node >/dev/null 2>&1; then
+  CLUB_CONTENT_SMOKE_ON_VPS=1 ./scripts/smoke_vps.sh
+else
+  echo "Skipping full VPS smoke because node is not installed on the host."
+  echo "Verified API health; run ./scripts/smoke_vps.sh from a workstation or install Node.js on the VPS for full host-side smoke assertions."
+fi
 REMOTE_SCRIPT
