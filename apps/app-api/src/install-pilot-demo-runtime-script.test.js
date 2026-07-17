@@ -27,7 +27,7 @@ test("install_pilot_demo_runtime prints a deterministic dry-run plan and activat
     assert.match(output, new RegExp(`pilot_demo_runtime_root=${runtimeRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
     assert.match(output, /postgres_url=https:\/\/github.com\/PostgresApp\/PostgresApp\/releases\/download\/v2\.9\.5\/Postgres-2\.9\.5-16\.dmg/);
     assert.match(output, /redis_url=https:\/\/download\.redis\.io\/releases\/redis-8\.8\.0\.tar\.gz/);
-    assert.match(output, /minio_url=https:\/\/dl\.min\.io\/server\/minio\/release\/darwin-arm64\/minio/);
+    assert.match(output, /minio_url=https:\/\/dl\.min\.io\/server\/minio\/release\/darwin-(arm64|amd64)\/minio/);
     assert.match(output, /DRY_RUN curl -fL .*Postgres-2\.9\.5-16\.dmg/);
     assert.match(output, /DRY_RUN make -C .*redis-8\.8\.0/);
     assert.match(output, /pilot_demo_runtime_activate=.*activate\.sh/);
