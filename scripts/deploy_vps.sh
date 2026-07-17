@@ -25,6 +25,12 @@ rsync -av \
   --exclude .expo \
   --exclude .git \
   --exclude .env.vps \
+  --exclude apps/mobile/credentials \
+  --exclude apps/mobile/ios \
+  --exclude apps/mobile/android \
+  --exclude apps/mobile/.expo \
+  --exclude apps/mobile/build \
+  --exclude apps/mobile/dist \
   ./ "${REMOTE_HOST}:${REMOTE_DIR}/"
 
 echo "Ensuring VPS env file exists"

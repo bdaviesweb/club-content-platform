@@ -4,6 +4,7 @@ set -euo pipefail
 REMOTE_HOST="${REMOTE_HOST:-hermes-dev}"
 REMOTE_DIR="${REMOTE_DIR:-/srv/repos/projects/club-content-platform}"
 SSH_OPTS="${SSH_OPTS:-}"
+SKIP_DEPLOY="${SKIP_DEPLOY:-0}"
 RUN_NOTIFICATION_WEBHOOK_SMOKE="${RUN_NOTIFICATION_WEBHOOK_SMOKE:-1}"
 RUN_NOTIFICATION_DEEP_SMOKE="${RUN_NOTIFICATION_DEEP_SMOKE:-1}"
 CLEAN_SMOKE_APPROVALS="${CLEAN_SMOKE_APPROVALS:-1}"
@@ -46,7 +47,11 @@ process.exit(1);
 }
 
 echo "Deploying current checkout to ${REMOTE_HOST}:${REMOTE_DIR}"
-REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" SSH_OPTS="${SSH_OPTS}" ./scripts/deploy_vps.sh
+if [[ "${SKIP_DEPLOY}" == "1" ]]; then
+  echo "Skipping deploy because SKIP_DEPLOY=1."
+else
+  REMOTE_HOST="${REMOTE_HOST}" REMOTE_DIR="${REMOTE_DIR}" SSH_OPTS="${SSH_OPTS}" ./scripts/deploy_vps.sh
+fi
 
 echo
 echo "---"
