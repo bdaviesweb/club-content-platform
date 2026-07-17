@@ -21,6 +21,20 @@ const authUser = process.env.ADMIN_BASIC_AUTH_USER || "";
 const authPassword = process.env.ADMIN_BASIC_AUTH_PASSWORD || "";
 const basicAuthEnabled = Boolean(authUser && authPassword);
 
+class ApiRequestError extends Error {
+  constructor(path, status, body) {
+    super(`API ${path} failed: ${status}`);
+    this.name = "ApiRequestError";
+    this.path = path;
+    this.status = status;
+    this.body = body;
+  }
+}
+
+function isApiRequestError(error) {
+  return error instanceof ApiRequestError || error?.name === "ApiRequestError";
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -34,7 +48,7 @@ async function fetchJson(path, init) {
   const response = await fetch(`${apiBase}${path}`, init);
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`API ${path} failed: ${response.status} ${text}`);
+    throw new ApiRequestError(path, response.status, text);
   }
   return response.json();
 }
@@ -1084,6 +1098,56 @@ function layout(content, title = "Club Content Ops") {
     <main>${content}</main>
   </body>
 </html>`;
+}
+
+function renderApiUnavailablePage({ eyebrow, title, copy, error }) {
+  const status = error?.status || "unknown";
+  const path = error?.path || "unknown API route";
+  const bodySnippet = String(error?.body || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 260);
+
+  return layout(`
+    <section class="hero">
+      <div>
+        <div class="eyebrow">${escapeHtml(eyebrow)}</div>
+        <h1>${escapeHtml(title)}</h1>
+        <p class="subtle" style="margin-top:10px; max-width:820px;">${escapeHtml(copy)}</p>
+      </div>
+      <div class="quick-actions">
+        <a class="quick-link" href="/health">Admin health</a>
+        <a class="quick-link" href="/demo">Retry demo</a>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-bottom:18px;">
+      <div class="section-header">
+        <div>
+          <div class="eyebrow">Backend status</div>
+          <h2>API is unavailable</h2>
+          <p class="subtle" style="margin-top:8px;">The admin web process is running, but it could not load required data from the API.</p>
+        </div>
+        ${renderStatusBadge(`API ${status}`, "alert")}
+      </div>
+      <div class="summary-stack" style="margin-top:12px;">
+        <div class="summary-item">
+          <strong>Failed request</strong>
+          <p class="subtle" style="margin-top:6px;">${escapeHtml(path)}</p>
+        </div>
+        <div class="summary-item">
+          <strong>What to check next</strong>
+          <p class="subtle" style="margin-top:6px;">Verify the hosted API health, restart the VPS API and worker if needed, then rerun the relevant QA smoke before using this surface for a demo.</p>
+        </div>
+        ${bodySnippet ? `
+          <div class="summary-item">
+            <strong>Upstream response</strong>
+            <p class="subtle" style="margin-top:6px;">${escapeHtml(bodySnippet)}</p>
+          </div>
+        ` : ""}
+      </div>
+    </section>
+  `, "Club Content API Unavailable");
 }
 
 function buildExpoDemoActionUrl(action, params = {}) {
@@ -9468,15 +9532,41 @@ export function createAdminServer() {
       }
 
       if (req.method === "GET" && url.pathname === "/quick-review") {
-        const html = await renderQuickReviewHome(url.searchParams.get("approvalRequestId"));
-        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        let html;
+        let statusCode = 200;
+        try {
+          html = await renderQuickReviewHome(url.searchParams.get("approvalRequestId"));
+        } catch (error) {
+          if (!isApiRequestError(error)) throw error;
+          statusCode = 503;
+          html = renderApiUnavailablePage({
+            eyebrow: "Quick review",
+            title: "The review queue cannot load right now.",
+            copy: "Reviewer actions are paused until the backend API is healthy again.",
+            error
+          });
+        }
+        res.writeHead(statusCode, { "content-type": "text/html; charset=utf-8" });
         res.end(html);
         return;
       }
 
       if (req.method === "GET" && url.pathname === "/demo") {
-        const html = await renderDemoPage();
-        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        let html;
+        let statusCode = 200;
+        try {
+          html = await renderDemoPage();
+        } catch (error) {
+          if (!isApiRequestError(error)) throw error;
+          statusCode = 503;
+          html = renderApiUnavailablePage({
+            eyebrow: "Demo command center",
+            title: "The demo backend is unavailable.",
+            copy: "The command center is running, but the API did not return the readiness, queue, policy, or feed data needed for a live walkthrough.",
+            error
+          });
+        }
+        res.writeHead(statusCode, { "content-type": "text/html; charset=utf-8" });
         res.end(html);
         return;
       }
@@ -9579,29 +9669,42 @@ export function createAdminServer() {
                     .filter(Boolean)
                 }
             : null;
-        const html = await renderWorkflowSettingsPage(
-          url.searchParams.get("clubSlug"),
-          url.searchParams.get("organizationMode"),
-          {
-          contentType: url.searchParams.get("simulationContentType"),
-          visibilityTarget: url.searchParams.get("simulationVisibilityTarget"),
-          riskScore: url.searchParams.get("simulationRiskScore"),
-          moderationFlagged: url.searchParams.get("simulationModerationFlagged"),
-          agentSuggestedApproverRole: url.searchParams.get("simulationAgentSuggestedApproverRole")
-          },
-          {
-          scopeType: url.searchParams.get("previewScopeType"),
-          payload: parsePreviewDraft(url.searchParams.get("previewDraftPolicy"))
-          },
-          url.searchParams.get("historyView"),
-          url.searchParams.get("clubView"),
-          url.searchParams.get("clubArea"),
-          saveSummary,
-          url.searchParams.get("previewResetArea"),
-          url.searchParams.get("previewCleanupArea"),
-          String(url.searchParams.get("previewCleanupClubs") || "").split(",").map((value) => value.trim()).filter(Boolean)
-        );
-        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        let html;
+        let statusCode = 200;
+        try {
+          html = await renderWorkflowSettingsPage(
+            url.searchParams.get("clubSlug"),
+            url.searchParams.get("organizationMode"),
+            {
+            contentType: url.searchParams.get("simulationContentType"),
+            visibilityTarget: url.searchParams.get("simulationVisibilityTarget"),
+            riskScore: url.searchParams.get("simulationRiskScore"),
+            moderationFlagged: url.searchParams.get("simulationModerationFlagged"),
+            agentSuggestedApproverRole: url.searchParams.get("simulationAgentSuggestedApproverRole")
+            },
+            {
+            scopeType: url.searchParams.get("previewScopeType"),
+            payload: parsePreviewDraft(url.searchParams.get("previewDraftPolicy"))
+            },
+            url.searchParams.get("historyView"),
+            url.searchParams.get("clubView"),
+            url.searchParams.get("clubArea"),
+            saveSummary,
+            url.searchParams.get("previewResetArea"),
+            url.searchParams.get("previewCleanupArea"),
+            String(url.searchParams.get("previewCleanupClubs") || "").split(",").map((value) => value.trim()).filter(Boolean)
+          );
+        } catch (error) {
+          if (!isApiRequestError(error)) throw error;
+          statusCode = 503;
+          html = renderApiUnavailablePage({
+            eyebrow: "Workflow settings",
+            title: "Policy settings cannot load right now.",
+            copy: "Policy editing and simulation need live organization data from the API before an operator can safely change rollout rules.",
+            error
+          });
+        }
+        res.writeHead(statusCode, { "content-type": "text/html; charset=utf-8" });
         res.end(html);
         return;
       }

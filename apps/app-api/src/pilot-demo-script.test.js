@@ -26,6 +26,7 @@ test("pilot demo script assembles a repeatable operator bundle in dry run mode",
       OPEN_SURFACES: "1",
       PILOT_CANDIDATE_PROFILE: "simulated-north-river",
       PILOT_DEMO_OUTPUT_DIR: outputDir,
+      PILOT_DEMO_RUNTIME_MODE: "force_unavailable",
       EXPO_URL: "exp://10.0.0.50:8082"
     }
   });
@@ -127,7 +128,8 @@ test("pilot demo script assembles a repeatable operator bundle in dry run mode",
   const preflight = fs.readFileSync(path.join(bundleDir, "preflight.md"), "utf8");
   assert.match(preflight, /# Pilot Demo Preflight/);
   assert.match(preflight, /Decision: `GO`/);
-  assert.match(preflight, /Docker available: `false`/);
+  assert.match(preflight, /Local runtime available: `false`/);
+  assert.match(preflight, /Runtime mode: `force_unavailable`/);
   assert.match(preflight, /Local API base: `http:\/\/127\.0\.0\.1:4000`/);
   assert.match(preflight, /Artifact manifest: `.*artifacts\/manifest\.txt`/);
   assert.match(preflight, /Machine manifest: `.*manifest\.json`/);

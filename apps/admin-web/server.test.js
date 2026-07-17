@@ -34,6 +34,120 @@ test("GET /health responds without admin auth", async () => {
   }
 });
 
+async function withAdminServer(assertions) {
+  const server = createAdminServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const address = server.address();
+    await assertions(`http://127.0.0.1:${address.port}`);
+  } finally {
+    await new Promise((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))
+    );
+  }
+}
+
+test("GET /demo renders an operator fallback when the API is unavailable", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (url) => {
+    const requestUrl = String(url);
+    if (requestUrl.startsWith("http://127.0.0.1:")) {
+      return originalFetch(url);
+    }
+
+    return {
+      ok: false,
+      status: 502,
+      async text() {
+        return "error code: 502";
+      }
+    };
+  };
+
+  try {
+    await withAdminServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/demo`);
+      const body = await response.text();
+
+      assert.equal(response.status, 503);
+      assert.match(body, /The demo backend is unavailable/);
+      assert.match(body, /API is unavailable/);
+      assert.match(body, /\/app\/readiness/);
+      assert.match(body, /error code: 502/);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("GET /quick-review renders an operator fallback when the API is unavailable", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (url) => {
+    const requestUrl = String(url);
+    if (requestUrl.startsWith("http://127.0.0.1:")) {
+      return originalFetch(url);
+    }
+
+    return {
+      ok: false,
+      status: 502,
+      async text() {
+        return "error code: 502";
+      }
+    };
+  };
+
+  try {
+    await withAdminServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/quick-review`);
+      const body = await response.text();
+
+      assert.equal(response.status, 503);
+      assert.match(body, /The review queue cannot load right now/);
+      assert.match(body, /API is unavailable/);
+      assert.match(body, /\/approvals\/queue/);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("GET /workflow-settings renders an operator fallback when the API is unavailable", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (url) => {
+    const requestUrl = String(url);
+    if (requestUrl.startsWith("http://127.0.0.1:")) {
+      return originalFetch(url);
+    }
+
+    return {
+      ok: false,
+      status: 502,
+      async text() {
+        return "error code: 502";
+      }
+    };
+  };
+
+  try {
+    await withAdminServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/workflow-settings`);
+      const body = await response.text();
+
+      assert.equal(response.status, 503);
+      assert.match(body, /Policy settings cannot load right now/);
+      assert.match(body, /API is unavailable/);
+      assert.match(body, /\/app\/readiness/);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("GET /demo renders the multi-role walkthrough", async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
