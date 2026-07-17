@@ -98,6 +98,24 @@ Evidence:
 - `simulator_org_admins=1`
 - `simulator_org_clubs=1`
 
+## Admin Operator Smoke
+
+Command:
+
+```bash
+TIMEOUT_SECONDS=300 npm run qa:admin
+```
+
+Result: passed.
+
+Evidence:
+
+- Admin web started locally on `http://127.0.0.1:3011`.
+- Created admin review smoke submission `d27fc76a-a0cf-436f-816e-76ff46b74db5`.
+- Approved approval request `2335f4d1-6107-401a-a69d-538c135f8de5` through the admin web proxy.
+- Published post id: `96e24f81-e50d-4bc6-af99-6031b9c78aed`.
+- Final approval queue count: `0`.
+
 ## Launch Readiness Checks
 
 North River onboarding:
@@ -108,13 +126,15 @@ npm run pilot:check-launch-readiness -- docs/pilot-onboarding-north-river-youth-
 
 Result: `NO_GO`.
 
-Remaining North River launch-evidence gaps:
+Remaining North River launch-evidence gaps before the worksheet was updated:
 
 - Go-live owner signoff is missing.
 - Operator demo completed is not recorded.
 - Mobile review smoke completed is not recorded in the onboarding worksheet.
 - Pilot VPS scenario suite completed is not recorded in the onboarding worksheet.
 - Open rollout blockers are not marked clear.
+
+After recording the 2026-07-17 evidence in `docs/pilot-onboarding-north-river-youth-sports.md`, the only remaining launch-readiness gap is human go-live owner signoff.
 
 Demo Sports onboarding:
 
@@ -132,11 +152,7 @@ Technical pilot readiness is green for the hosted workflow, mobile submit-review
 
 Launch readiness remains blocked until the North River onboarding worksheet records:
 
-- a human go-live owner signoff,
-- operator demo completion,
-- today's mobile smoke evidence,
-- today's VPS scenario-suite evidence,
-- and an explicit open-blocker decision.
+- a human go-live owner signoff.
 
 Email and push are still accepted limitations unless production delivery credentials are added:
 

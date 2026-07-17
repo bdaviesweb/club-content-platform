@@ -1,6 +1,6 @@
 # Pilot Club Onboarding: North River Youth Sports
 
-Last verified: 2026-06-20
+Last verified: 2026-07-17
 
 This worksheet is filled from the current hosted dev environment at `https://clubcontent-api.davmn.net`, the live VPS database for memberships, and the hosted rehearsal suite run against the simulated pilot candidate.
 
@@ -113,3 +113,25 @@ The simulated pilot uses three distinct approval actors. Rehearsals should use t
 - First override to remove if pilot behavior is wrong: `organization default auto-approval`
 - Scenarios to rerun after rollback: `submit photo, submit video, approve, publish`
 - Pilot-club communication owner: `Casey Admin`
+
+## Launch Evidence
+
+- Go-live owner signoff:
+- Operator demo completed: `completed`
+- Mobile review smoke completed: `completed`
+- Pilot VPS scenario suite completed: `completed`
+- Open rollout blockers: `clear`
+
+Evidence recorded on 2026-07-17:
+
+- Mobile API and simulator smoke passed against `https://clubcontent-api.davmn.net`.
+- Admin/operator review smoke passed against `https://clubcontent-api.davmn.net`.
+- Hosted VPS pilot scenario suite passed for review/publish, auto-approval override, approval override, and notification override.
+- Local simulator seed reset and validation passed with `DATABASE_URL='postgres://club:club@localhost:5432/club_content'`.
+- Evidence file: `docs/pilot-readiness-2026-07-17.md`.
+
+Accepted launch limitations:
+
+- Email delivery remains log-only until Resend credentials are configured.
+- Push delivery remains disabled until production push credentials are configured.
+- North River still uses simulated-local identities, not a real club roster.
