@@ -119,3 +119,18 @@ Expected mobile result:
 - Email delivery is intentionally log-only without a Resend API key.
 - Push delivery is intentionally disabled unless production push credentials are configured.
 - Notification smoke pass criteria verify skipped delivery reasons and webhook audit behavior, not real outbound delivery.
+
+## Local Simulator Seed
+
+When running the simulator organization reset from the host machine, use the localhost database URL after starting Colima and local support services:
+
+```bash
+colima start
+docker compose up -d postgres redis minio
+DATABASE_URL='postgres://club:club@localhost:5432/club_content' npm run pilot:simulator-state
+```
+
+Expected result:
+
+- `simulator_org_reset=ok`
+- `simulator_org_validate=ok`
