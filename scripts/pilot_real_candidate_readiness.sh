@@ -44,7 +44,7 @@ extract_block_field() {
 }
 
 detect_input_format() {
-  if rg -q '^[[:space:]]*candidate_profile_name=' "${intake_path}" 2>/dev/null; then
+  if grep -Eq '^[[:space:]]*candidate_profile_name=' "${intake_path}" 2>/dev/null; then
     echo "key_value_block"
   else
     echo "markdown_intake"
