@@ -3,12 +3,13 @@ set -euo pipefail
 
 REMOTE_HOST="${REMOTE_HOST:-hermes-dev}"
 REMOTE_DIR="${REMOTE_DIR:-/srv/repos/projects/club-content-platform}"
+SSH_OPTS="${SSH_OPTS:-}"
 WEBHOOK_TYPE="${WEBHOOK_TYPE:-email.delivered}"
 EMAIL_ID="${EMAIL_ID:-webhook-smoke-$(date -u +%Y%m%dT%H%M%SZ)-${RANDOM}}"
 RECIPIENT_EMAIL="${RECIPIENT_EMAIL:-coach@demo-club.local}"
 
 status_json="$(
-  ssh "${REMOTE_HOST}" \
+  ssh ${SSH_OPTS} "${REMOTE_HOST}" \
     "cd '${REMOTE_DIR}' && curl -fsS http://localhost:4000/notification-delivery/status"
 )"
 email_enabled="$(
@@ -19,7 +20,7 @@ process.stdout.write(status.email?.enabled ? "true" : "false");
 )"
 
 match_row="$(
-  ssh "${REMOTE_HOST}" \
+  ssh ${SSH_OPTS} "${REMOTE_HOST}" \
     "cd '${REMOTE_DIR}' && docker compose -f docker-compose.vps.yml exec -T postgres psql -U club -d club_content -At -F '|' -c \"
       SELECT
         n.id,
@@ -62,13 +63,13 @@ else
 fi
 
 response_json="$(
-  ssh "${REMOTE_HOST}" \
+  ssh ${SSH_OPTS} "${REMOTE_HOST}" \
     "cd '${REMOTE_DIR}' && payload='{\"type\":\"${WEBHOOK_TYPE}\",\"created_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"data\":{\"email_id\":\"${email_id}\",\"to\":[\"${recipient_email}\"]}}' && curl -fsS -H 'content-type: application/json' -d \"\${payload}\" http://localhost:4000/webhooks/resend"
 )"
 
 if [[ "${match_mode}" == "matched" ]]; then
   audit_row="$(
-    ssh "${REMOTE_HOST}" \
+    ssh ${SSH_OPTS} "${REMOTE_HOST}" \
       "cd '${REMOTE_DIR}' && docker compose -f docker-compose.vps.yml exec -T postgres psql -U club -d club_content -At -F '|' -c \"
         SELECT
           entity_type,
@@ -87,12 +88,12 @@ if [[ "${match_mode}" == "matched" ]]; then
       \""
   )"
   notifications_json="$(
-    ssh "${REMOTE_HOST}" \
+    ssh ${SSH_OPTS} "${REMOTE_HOST}" \
       "cd '${REMOTE_DIR}' && curl -fsS 'http://localhost:4000/notifications?userEmail=${recipient_email}&limit=10'"
   )"
 else
   audit_row="$(
-    ssh "${REMOTE_HOST}" \
+    ssh ${SSH_OPTS} "${REMOTE_HOST}" \
       "cd '${REMOTE_DIR}' && docker compose -f docker-compose.vps.yml exec -T postgres psql -U club -d club_content -At -F '|' -c \"
         SELECT
           entity_type,

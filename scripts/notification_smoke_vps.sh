@@ -3,6 +3,7 @@ set -euo pipefail
 
 REMOTE_HOST="${REMOTE_HOST:-hermes-dev}"
 REMOTE_DIR="${REMOTE_DIR:-/srv/repos/projects/club-content-platform}"
+SSH_OPTS="${SSH_OPTS:-}"
 SUBMITTER_EMAIL="${SUBMITTER_EMAIL:-coach@demo-club.local}"
 NOTIFICATION_LIMIT="${NOTIFICATION_LIMIT:-5}"
 EXPECTED_SUBMISSION_ID="${EXPECTED_SUBMISSION_ID:-}"
@@ -10,15 +11,15 @@ EXPECTED_EMAIL_REASON="${EXPECTED_EMAIL_REASON:-}"
 EXPECTED_PUSH_REASON="${EXPECTED_PUSH_REASON:-}"
 
 status_json="$(
-  ssh "${REMOTE_HOST}" \
+  ssh ${SSH_OPTS} "${REMOTE_HOST}" \
     "cd '${REMOTE_DIR}' && curl -fsS http://localhost:4000/notification-delivery/status"
 )"
 notifications_json="$(
-  ssh "${REMOTE_HOST}" \
+  ssh ${SSH_OPTS} "${REMOTE_HOST}" \
     "cd '${REMOTE_DIR}' && curl -fsS 'http://localhost:4000/notifications?userEmail=${SUBMITTER_EMAIL}&limit=${NOTIFICATION_LIMIT}'"
 )"
 audit_rows="$(
-  ssh "${REMOTE_HOST}" \
+  ssh ${SSH_OPTS} "${REMOTE_HOST}" \
     "cd '${REMOTE_DIR}' && docker compose -f docker-compose.vps.yml exec -T postgres psql -U club -d club_content -At -F '|' -c \"
       SELECT
         n.id,
@@ -56,7 +57,7 @@ audit_rows="$(
     \""
 )"
 expected_submission_rows="$(
-  ssh "${REMOTE_HOST}" \
+  ssh ${SSH_OPTS} "${REMOTE_HOST}" \
     "cd '${REMOTE_DIR}' && docker compose -f docker-compose.vps.yml exec -T postgres psql -U club -d club_content -At -F '|' -c \"
       SELECT
         n.id,
