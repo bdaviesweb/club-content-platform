@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ensureWorkflowPolicyTables } from "./bootstrap.js";
+import {
+  ensureWorkflowPolicyTables,
+  getClubSeed,
+  getSimulatedPilotSeed
+} from "./bootstrap.js";
 
 test("ensureWorkflowPolicyTables upgrades existing workflow policy tables in place", async () => {
   const queries = [];
@@ -38,4 +42,25 @@ test("ensureWorkflowPolicyTables upgrades existing workflow policy tables in pla
   assert.match(clubUpgrade, /ADD COLUMN IF NOT EXISTS publishing_rule/);
   assert.match(clubUpgrade, /ADD COLUMN IF NOT EXISTS notification_rule/);
   assert.match(orgMembershipTable, /organization_membership_role/);
+});
+
+test("getClubSeed keeps demo defaults and Expo fallback", () => {
+  const seed = getClubSeed({
+    EXPO_PUBLIC_SUBMITTER_EMAIL: "expo-submitter@example.test"
+  });
+
+  assert.equal(seed.organizationSlug, "demo-sports-org");
+  assert.equal(seed.submitterEmail, "expo-submitter@example.test");
+  assert.equal(seed.ageGroup, "U14");
+});
+
+test("getSimulatedPilotSeed exposes the multi-role simulated pilot defaults", () => {
+  const seed = getSimulatedPilotSeed();
+
+  assert.equal(seed.organizationSlug, "north-river-youth-sports");
+  assert.equal(seed.slug, "north-river-soccer-club");
+  assert.equal(seed.teamSlug, "u13-girls-blue");
+  assert.equal(seed.ageGroup, "U13");
+  assert.equal(seed.clubAdminEmail, "admin@northriverpilot.local");
+  assert.equal(seed.teamManagerEmail, "manager@northriverpilot.local");
 });

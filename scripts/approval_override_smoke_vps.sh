@@ -10,8 +10,10 @@ TEAM_SLUG="${TEAM_SLUG:-u14-girls}"
 SUBMITTER_EMAIL="${SUBMITTER_EMAIL:-coach@demo-club.local}"
 ORGANIZATION_ADMIN_EMAIL="${ORGANIZATION_ADMIN_EMAIL:-org-admin@demo-club.local}"
 CLUB_ADMIN_EMAIL="${CLUB_ADMIN_EMAIL:-comms@demo-club.local}"
-PRIMARY_REVIEWER_EMAIL="${PRIMARY_REVIEWER_EMAIL:-comms@demo-club.local}"
-SECOND_REVIEWER_EMAIL="${SECOND_REVIEWER_EMAIL:-comms@demo-club.local}"
+REVIEWER_EMAIL="${REVIEWER_EMAIL:-comms@demo-club.local}"
+TEAM_MANAGER_REVIEWER_EMAIL="${TEAM_MANAGER_REVIEWER_EMAIL:-${REVIEWER_EMAIL}}"
+PRIMARY_REVIEWER_EMAIL="${PRIMARY_REVIEWER_EMAIL:-${TEAM_MANAGER_REVIEWER_EMAIL}}"
+SECOND_REVIEWER_EMAIL="${SECOND_REVIEWER_EMAIL:-${CLUB_ADMIN_EMAIL}}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-300}"
 POLL_SECONDS="${POLL_SECONDS:-3}"
 SMOKE_MARKER="${SMOKE_MARKER:-approval-override-smoke-$(date -u +%Y%m%dT%H%M%SZ)-${RANDOM}}"
@@ -26,7 +28,7 @@ if [[ "${CLUB_CONTENT_SMOKE_ON_VPS:-0}" != "1" ]]; then
   if [[ "${current_dir}" != "${REMOTE_DIR}" || ! -f "${COMPOSE_FILE}" ]]; then
     remote_dir_quoted="$(shell_quote "${REMOTE_DIR}")"
     remote_command=$(
-      printf "cd %s && CLUB_CONTENT_SMOKE_ON_VPS=1 COMPOSE_FILE=%s ORGANIZATION_SLUG=%s CLUB_SLUG=%s TEAM_SLUG=%s SUBMITTER_EMAIL=%s ORGANIZATION_ADMIN_EMAIL=%s CLUB_ADMIN_EMAIL=%s PRIMARY_REVIEWER_EMAIL=%s SECOND_REVIEWER_EMAIL=%s TIMEOUT_SECONDS=%s POLL_SECONDS=%s SMOKE_MARKER=%s bash -s" \
+      printf "cd %s && CLUB_CONTENT_SMOKE_ON_VPS=1 COMPOSE_FILE=%s ORGANIZATION_SLUG=%s CLUB_SLUG=%s TEAM_SLUG=%s SUBMITTER_EMAIL=%s ORGANIZATION_ADMIN_EMAIL=%s CLUB_ADMIN_EMAIL=%s REVIEWER_EMAIL=%s TEAM_MANAGER_REVIEWER_EMAIL=%s PRIMARY_REVIEWER_EMAIL=%s SECOND_REVIEWER_EMAIL=%s TIMEOUT_SECONDS=%s POLL_SECONDS=%s SMOKE_MARKER=%s bash -s" \
         "${remote_dir_quoted}" \
         "$(shell_quote "${COMPOSE_FILE}")" \
         "$(shell_quote "${ORGANIZATION_SLUG}")" \
@@ -35,6 +37,8 @@ if [[ "${CLUB_CONTENT_SMOKE_ON_VPS:-0}" != "1" ]]; then
         "$(shell_quote "${SUBMITTER_EMAIL}")" \
         "$(shell_quote "${ORGANIZATION_ADMIN_EMAIL}")" \
         "$(shell_quote "${CLUB_ADMIN_EMAIL}")" \
+        "$(shell_quote "${REVIEWER_EMAIL}")" \
+        "$(shell_quote "${TEAM_MANAGER_REVIEWER_EMAIL}")" \
         "$(shell_quote "${PRIMARY_REVIEWER_EMAIL}")" \
         "$(shell_quote "${SECOND_REVIEWER_EMAIL}")" \
         "$(shell_quote "${TIMEOUT_SECONDS}")" \

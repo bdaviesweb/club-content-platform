@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+command_string="${@: -1}"
+
+case "${command_string}" in
+  *"slug='north-river-soccer-club'"*)
+    printf '%s\n' \
+      "admin@northriverpilot.local|club_admin" \
+      "comms@northriverpilot.local|club_comms" \
+      "coach@northriverpilot.local|submitter_coach" \
+      "manager@northriverpilot.local|team_manager"
+    ;;
+  *"slug='demo-soccer-club'"*)
+    printf '%s\n' \
+      "comms@demo-club.local|club_admin" \
+      "comms@demo-club.local|club_comms" \
+      "coach@demo-club.local|submitter_coach"
+    ;;
+  *"slug='north-river-youth-sports'"*)
+    printf '%s\n' "ops@northriverpilot.local|organization_admin"
+    ;;
+  *"slug='demo-sports-org'"*)
+    printf '%s\n' "org-admin@demo-club.local|organization_admin"
+    ;;
+  *)
+    echo "unexpected ssh command: ${command_string}" >&2
+    exit 1
+    ;;
+esac

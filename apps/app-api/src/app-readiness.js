@@ -1,5 +1,5 @@
 import { internalDestinationType } from "../../../packages/shared/src/index.js";
-import { getClubSeed } from "./bootstrap.js";
+import { getClubSeed, getSimulatedPilotSeed } from "./bootstrap.js";
 
 function buildCheck(key, label, ok, detail) {
   return {
@@ -11,6 +11,7 @@ function buildCheck(key, label, ok, detail) {
 }
 
 export function buildAppReadinessPayload({ seed, row = {}, env = process.env }) {
+  const simulatedPilotSeed = getSimulatedPilotSeed(env);
   const checks = [
     buildCheck("demo_club", "Demo club", row.club_ready, seed.slug),
     buildCheck("demo_team", "Demo team", row.team_ready, seed.teamSlug),
@@ -45,10 +46,22 @@ export function buildAppReadinessPayload({ seed, row = {}, env = process.env }) 
     productName: env.PUBLIC_PRODUCT_NAME || "Club Content",
     environment: env.NODE_ENV || "development",
     demo: {
+      organizationSlug: seed.organizationSlug,
       clubSlug: seed.slug,
       teamSlug: seed.teamSlug,
       submitterEmail: seed.submitterEmail,
       reviewerEmail: seed.approverEmail
+    },
+    pilotCandidate: {
+      key: "simulated_pilot",
+      label: "Demo Sports Organization test tenant",
+      organizationSlug: simulatedPilotSeed.organizationSlug,
+      clubSlug: simulatedPilotSeed.slug,
+      teamSlug: simulatedPilotSeed.teamSlug,
+      submitterEmail: simulatedPilotSeed.submitterEmail,
+      reviewerEmail: simulatedPilotSeed.approverEmail,
+      clubAdminEmail: simulatedPilotSeed.clubAdminEmail,
+      teamManagerEmail: simulatedPilotSeed.teamManagerEmail
     },
     capabilities: {
       submissions: submitReady,

@@ -66,6 +66,11 @@ Useful scripts:
 
 - `npm run dev:stack` - start API, admin, worker, and mobile web together with fixed local URLs
 - `npm run dev:vps` - sync the current checkout to the verified hermes-dev VPS and check the live stack
+- `npm run demo:runtime:install` - install the local pilot demo runtime under `~/.club-content-pilot-runtime` and print the activation step
+- `npm run demo:runtime:stop` - stop the local pilot demo processes while keeping runtime state intact
+- `npm run demo:runtime:reset` - stop the local pilot demo processes and clear runtime state for a cold-start rehearsal
+- `npm run demo:pilot` - boot local demo dependencies when available, normalize the simulator organization, start the operator surfaces, open the key URLs, and write a timestamped demo bundle
+- `npm run demo:operator` - start the operator-facing demo command center plus Expo mobile runtime, then print the one-page demo URL and Expo launch URL
 - `./scripts/deploy_vps.sh` - bootstrap or force-sync the repo to the VPS
 - `./scripts/update_vps.sh` - normal day-to-day flow after pushing to GitHub
 - `./scripts/smoke_vps.sh` - check VPS API health, deployed admin health, approval queue, and pending workflow events from your Mac
@@ -88,6 +93,132 @@ Recommended routine:
 5. run `./scripts/hermes_smoke_vps.sh` after AI review changes or VPS env updates when you want an isolated Hermes routing check
 6. run `./scripts/notification_status_smoke_vps.sh` after notification config or delivery-status changes when you want the narrow delivery contract only
 7. run `./scripts/notification_webhook_smoke_vps.sh` after webhook handling changes when you want only the webhook intake check
+
+## Demo Command Center
+
+Use `npm run demo:operator` when you want a single operator-friendly demo surface.
+Use `npm run demo:pilot` when you want the whole pilot demo staged for you and preserved as a timestamped bundle under `tmp/pilot-demo/`.
+
+Recommended operator-kit flow:
+
+1. `npm run demo:runtime:install`
+2. `source ~/.club-content-pilot-runtime/activate.sh`
+3. `npm run demo:runtime:reset`
+4. `npm run demo:pilot`
+5. `npm run demo:runtime:stop` after the demo, or `npm run demo:runtime:reset` before the next cold-start rehearsal
+
+It will:
+
+1. start `admin-web` on port `3013`
+2. print the command-center URL and Expo launch URL
+3. launch the Expo mobile app on iOS with the demo-friendly port wiring
+4. keep the mobile runtime attached for the live demo
+
+If you only want the services started in the background, run:
+
+- `DETACH=1 npm run demo:operator`
+
+The command center lives at:
+
+- `http://127.0.0.1:3013/demo`
+
+From that page you can:
+
+- launch the mobile poster app in demo mode
+- open the reviewer workspace and quick-review view
+- explain backend routing and approval choices across multiple scenarios
+- show the recent submission, notification, and final internal-feed output
+
+Run `bash scripts/mobile_demo_review_smoke.sh` when you want to verify the live demo loop. The smoke now resumes a single pending `mobile-demo-post-*` review item if one is already in the queue, so a half-finished demo does not require manual cleanup before you continue.
+
+## Pilot Launch
+
+Use the pilot package when you want repeatable proof for customer-facing demos and first-club rollout work.
+
+- `npm run pilot:vps`
+  Runs the hosted multi-organization pilot scenario suite across baseline review/publish, auto-approval overrides, approval overrides, and notification overrides.
+- `npm run pilot:audit`
+  Runs a live activation audit against the current pilot candidate and returns a `GO` or `NO_GO` decision with concrete blockers.
+- `PILOT_SCENARIOS=review_publish,auto_approval_override npm run pilot:vps`
+  Runs only a named subset of pilot scenarios.
+- [Pilot launch playbook](docs/pilot-launch.md)
+  Pulls together the operator demo flow, scenario suite, onboarding checklist, QA gate, and rollout guardrails.
+- [Pilot onboarding template](docs/pilot-onboarding-template.md)
+  Captures the real club, role, policy, and signoff details for the first pilot.
+- [Pilot candidate handoff](docs/pilot-candidate-handoff.md)
+  Defines the safe pre-creation candidate prep path before any real organization records exist.
+- [Pilot real candidate intake](docs/pilot-real-candidate-intake.md)
+  Captures the real candidate identity, owners, and delivery posture before hosted creation starts.
+- [Pilot sandbox environment](docs/pilot-sandbox-environment.md)
+  Defines the repeatable fake-candidate and simulator-based local test environment.
+- [Pilot activation checklist](docs/pilot-activation-checklist.md)
+  Defines the go-live evidence, blockers, and recovery steps for first customer use.
+- [North River onboarding packet](docs/pilot-onboarding-north-river-youth-sports.md)
+  Captures the current simulated pilot org, role map, policy choices, and launch risks.
+- [North River activation record](docs/pilot-activation-north-river-youth-sports.md)
+  Captures the current hosted audit result and rehearsal evidence for the simulated pilot.
+
+Current default simulator candidate:
+
+- profile: `simulated-north-river`
+- organization: `north-river-youth-sports`
+- club: `north-river-soccer-club`
+- team: `u13-girls-blue`
+- submitter: `coach@northriverpilot.local`
+
+Recommended rehearsal commands:
+
+```bash
+npm run pilot:profiles
+```
+
+```bash
+npm run pilot:profile -- real-club-name
+```
+
+```bash
+PILOT_CANDIDATE_PROFILE=simulated-north-river bash scripts/validate_pilot_candidate_profile.sh
+```
+
+```bash
+npm run pilot:inspect -- simulated-north-river
+```
+
+```bash
+PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:audit
+```
+
+```bash
+PILOT_CANDIDATE_PROFILE=simulated-north-river npm run pilot:vps
+```
+
+```bash
+npm run pilot:rehearse
+```
+
+The rehearsal writes an evidence bundle under `tmp/pilot-rehearsal/<timestamp>-<profile>/`, including a shareable `handoff.md`, and prints the go/no-go decision at the end.
+Run `npm run pilot:packet` afterward to generate a single portable packet at `tmp/pilot-launch-packet.md`.
+Run `npm run pilot:share` to copy that packet to `tmp/pilot-launch-packet-share.md` for handoff.
+It also writes `tmp/pilot-launch-packet-share-message.txt` and copies that message body to the clipboard when `pbcopy` is available.
+Run `npm run pilot:deliver` to open the ready-to-forward message body and the shared packet together.
+Run `npm run pilot:simulator-state` to reset and validate the committed simulator organization before a demo or rehearsal.
+Open `/workflow-settings?organizationMode=simulator` from the demo command center when you want to rehearse the committed simulator organization without real clubs or candidates.
+Use the demo command center storyline to show the happy path first, then the organization auto-approval exception, then the public-video second-approval exception.
+Use [docs/pilot-demo-runbook.md](/Users/robertdavies/Documents/Codex/club-content/docs/pilot-demo-runbook.md) when you want the exact operator sequence in one short checklist.
+
+This lets the suite keep `club_comms` for the comms lane while automatically using the team manager where a scenario routes video review to `team_manager`.
+
+For a future real pilot handoff, run `npm run pilot:profile -- <candidate>` to scaffold `config/pilot-candidates/<candidate>.local.env`.
+Replace the template values, run `npm run pilot:inspect -- <candidate>`, and then use `PILOT_CANDIDATE_PROFILE=<candidate> bash scripts/validate_pilot_candidate_profile.sh` as the pre-creation gate.
+Keep hosted audit, VPS rehearsal, and full `pilot:rehearse` runs on the simulator profile until the real organization records exist.
+Use `npm run pilot:profiles` to see what candidate profiles already exist.
+Use `npm run pilot:profile-from-intake` after filling `docs/pilot-real-candidate-intake.md` to generate the local candidate profile automatically.
+Use `npm run pilot:inspect -- <candidate>` to review a candidate before validation.
+Use `npm run pilot:handoff-packet -- <candidate>` to assemble the candidate-ready onboarding packet with simulator evidence, ownership prompts, and rollback prompts.
+Use `npm run pilot:create-plan -- <candidate>` to generate the exact create and rollback SQL plan before any hosted data is changed.
+Use `npm run pilot:readiness -- <candidate>` as the final pre-creation gate before any hosted record mutation.
+Use `npm run pilot:sandbox` to rebuild the committed fake-candidate sandbox artifacts for local testing.
+Use [docs/pilot-candidate-handoff.md](/Users/robertdavies/Documents/Codex/club-content/docs/pilot-candidate-handoff.md) for the exact handoff sequence and ownership/rollback checklist.
 
 `./scripts/update_vps.sh` now autostashes a dirty VPS checkout before it pulls, so a stray edit on the server no longer blocks the update.
 

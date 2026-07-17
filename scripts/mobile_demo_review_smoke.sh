@@ -2,7 +2,11 @@
 set -euo pipefail
 
 API_BASE_URL="${API_BASE_URL:-https://clubcontent-api.davmn.net}"
-EXPO_URL="${EXPO_URL:-exp://127.0.0.1:8082}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/detect_local_ip.sh"
+
+LOCAL_IP="${LOCAL_IP:-$(detect_local_ip)}"
+EXPO_URL="${EXPO_URL:-exp://${LOCAL_IP}:8082}"
 METRO_STATUS_URL="${METRO_STATUS_URL:-http://127.0.0.1:8082/status}"
 SIMULATOR_DEVICE="${SIMULATOR_DEVICE:-Club Content iPhone 17 Pro}"
 SIMULATOR_DEVICE_TYPE="${SIMULATOR_DEVICE_TYPE:-com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro}"
@@ -38,6 +42,8 @@ const submitterEmail = process.env.SUBMITTER_EMAIL;
 const timeoutSeconds = Number(process.env.TIMEOUT_SECONDS || 300);
 const pollSeconds = Number(process.env.POLL_SECONDS || 3);
 const allowNonemptyQueue = process.env.ALLOW_NONEMPTY_QUEUE === "1";
+const resumeExistingDemoReview =
+  process.env.RESUME_EXISTING_DEMO_REVIEW !== "0";
 const deadline = Date.now() + timeoutSeconds * 1000;
 const smokePrefixes = [
   "admin-review-smoke-",
@@ -65,8 +71,24 @@ function summarizeQueueItems(items = []) {
   }));
 }
 
-function actionUrl(action) {
-  return `${expoUrl}${expoUrl.includes("?") ? "&" : "?"}demoAction=${encodeURIComponent(action)}`;
+function summarizeSubmission(item) {
+  return {
+    id: item.id,
+    rawText: item.raw_text,
+    status: item.status
+  };
+}
+
+function actionUrl(action, submissionId = null) {
+  const searchParams = new URLSearchParams({
+    demoAction: action
+  });
+
+  if (submissionId) {
+    searchParams.set("submissionId", submissionId);
+  }
+
+  return `${expoUrl}${expoUrl.includes("?") ? "&" : "?"}${searchParams.toString()}`;
 }
 
 function listSimulatorDevices() {
@@ -199,62 +221,99 @@ async function main() {
   const initialQueue = await requestJson("/approvals/queue");
   const initialQueueItems = initialQueue.items || [];
   const staleSmokeItems = initialQueueItems.filter((item) => isSmokeRawText(item.raw_text));
-  if (staleSmokeItems.length) {
+  const resumableDemoItems = staleSmokeItems.filter((item) =>
+    String(item.raw_text || "").startsWith("mobile-demo-post-")
+  );
+  const blockingSmokeItems = staleSmokeItems.filter(
+    (item) => !String(item.raw_text || "").startsWith("mobile-demo-post-")
+  );
+
+  if (blockingSmokeItems.length) {
     throw new Error(
-      `Pending smoke approvals already exist: ${JSON.stringify(summarizeQueueItems(staleSmokeItems))}. ` +
+      `Pending smoke approvals already exist: ${JSON.stringify(summarizeQueueItems(blockingSmokeItems))}. ` +
         "Clear them before running mobile_demo_review_smoke.sh."
     );
   }
 
-  if (initialQueueItems.length && !allowNonemptyQueue) {
+  if (resumableDemoItems.length > 1) {
     throw new Error(
-      `Review queue has ${initialQueueItems.length} pending item(s). ` +
-        "Run cleanup first or set ALLOW_NONEMPTY_QUEUE=1 if approving the first queue item is intentional."
+      `Multiple pending mobile demo approvals exist: ${JSON.stringify(summarizeQueueItems(resumableDemoItems))}. ` +
+        "Clear older demo items before resuming the flow."
     );
+  }
+
+  if (initialQueueItems.length && !allowNonemptyQueue) {
+    if (resumableDemoItems.length && resumeExistingDemoReview) {
+      console.log(
+        `Resuming existing mobile demo review item ${resumableDemoItems[0].submission_id} within a queue of ${initialQueueItems.length} pending item(s).`
+      );
+    } else {
+      throw new Error(
+        `Review queue has ${initialQueueItems.length} pending item(s). ` +
+          "Run cleanup first or set ALLOW_NONEMPTY_QUEUE=1 if approving the first queue item is intentional."
+      );
+    }
   }
 
   const initialQueueCount = initialQueueItems.length;
   console.log(`initial_queue_count=${initialQueueCount}`);
-  openSimulatorUrl(actionUrl("post"));
+  let createdSubmission = null;
+  let queueItem = null;
 
-  const createdSubmission = await waitFor("new demo submission from mobile app", async (attempt) => {
-    const payload = await listSubmitterSubmissions();
-    const item = (payload.items || []).find((candidate) => {
-      return (
-        candidate.raw_text?.startsWith("mobile-demo-post-") &&
-        !initialSubmissionIds.has(candidate.id)
-      );
+  if (resumableDemoItems.length && resumeExistingDemoReview) {
+    queueItem = resumableDemoItems[0];
+    const detail = await requestJson(`/submissions/${queueItem.submission_id}`);
+    createdSubmission = {
+      id: detail.id,
+      raw_text: detail.raw_text,
+      status: detail.status
+    };
+    console.log(`resumed_submission_id=${createdSubmission.id}`);
+    console.log(`resumed_raw_text=${createdSubmission.raw_text}`);
+  } else {
+    openSimulatorUrl(actionUrl("post"));
+
+    createdSubmission = await waitFor("new demo submission from mobile app", async (attempt) => {
+      const payload = await listSubmitterSubmissions();
+      const item = (payload.items || []).find((candidate) => {
+        return (
+          candidate.raw_text?.startsWith("mobile-demo-post-") &&
+          !initialSubmissionIds.has(candidate.id)
+        );
+      });
+
+      if (item?.id) return item;
+      if (attempt === 1 || attempt % 5 === 0) {
+        console.log(`Waiting for mobile-created demo submission. attempt=${attempt}`);
+      }
+      return null;
     });
-
-    if (item?.id) return item;
-    if (attempt === 1 || attempt % 5 === 0) {
-      console.log(`Waiting for mobile-created demo submission. attempt=${attempt}`);
-    }
-    return null;
-  });
+  }
 
   console.log(`submission_id=${createdSubmission.id}`);
   console.log(`raw_text=${createdSubmission.raw_text}`);
 
-  const queueItem = await waitFor("created submission to reach review queue", async (attempt) => {
-    const queue = await requestJson("/approvals/queue");
-    const item = (queue.items || []).find(
-      (candidate) => candidate.submission_id === createdSubmission.id
-    );
+  if (!queueItem) {
+    queueItem = await waitFor("created submission to reach review queue", async (attempt) => {
+      const queue = await requestJson("/approvals/queue");
+      const item = (queue.items || []).find(
+        (candidate) => candidate.submission_id === createdSubmission.id
+      );
 
-    if (item?.id) return item;
-    if (attempt === 1 || attempt % 5 === 0) {
-      console.log(`Waiting for review queue item. attempt=${attempt}`);
-    }
-    return null;
-  });
+      if (item?.id) return item;
+      if (attempt === 1 || attempt % 5 === 0) {
+        console.log(`Waiting for review queue item. attempt=${attempt}`);
+      }
+      return null;
+    });
+  }
 
   console.log(`approval_request_id=${queueItem.id}`);
   if (queueItem.latest_review_summary) {
     console.log(`latest_review_summary=${queueItem.latest_review_summary}`);
   }
 
-  openSimulatorUrl(actionUrl("approveFirstReview"));
+  openSimulatorUrl(actionUrl("approveFirstReview", createdSubmission.id));
 
   const publishedDetail = await waitFor("approved submission to publish", async (attempt) => {
     const detail = await requestJson(`/submissions/${createdSubmission.id}`);

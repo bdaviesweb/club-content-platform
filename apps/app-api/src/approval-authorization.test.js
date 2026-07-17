@@ -44,10 +44,31 @@ const approvalRequest = {
 };
 
 test("identifies reviewer roles", () => {
+  assert.equal(isReviewerRole("team_manager"), true);
   assert.equal(isReviewerRole("club_comms"), true);
   assert.equal(isReviewerRole("club_admin"), true);
   assert.equal(isReviewerRole("submitter_parent"), false);
-  assert.equal(isReviewerRole("team_manager"), false);
+});
+
+test("allows assigned team manager membership", async () => {
+  const client = createClient({
+    approvalRequest: {
+      ...approvalRequest,
+      approver_role: "team_manager"
+    },
+    actor: { id: "manager-1", email: "manager@example.com" },
+    membership: { id: "membership-1", role: "team_manager" }
+  });
+
+  const result = await loadAuthorizedApprovalActor(
+    client,
+    "approval-1",
+    "manager@example.com"
+  );
+
+  assert.equal(result.authorized, true);
+  assert.equal(result.actorRole, "team_manager");
+  assert.deepEqual(client.queries[2].params[2], ["team_manager", "club_admin"]);
 });
 
 test("allows assigned reviewer membership", async () => {

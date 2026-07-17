@@ -3,7 +3,9 @@ const test = require("node:test");
 
 const {
   demoLaunchActions,
-  parseDemoLaunchAction
+  parseDemoLaunchAction,
+  parseDemoLaunchRequest,
+  selectDemoReviewQueueItem
 } = require("./demoLaunchActions");
 
 test("parseDemoLaunchAction reads Expo Go load-demo URLs", () => {
@@ -62,6 +64,18 @@ test("parseDemoLaunchAction reads query-based approve first review URLs", () => 
   );
 });
 
+test("parseDemoLaunchRequest keeps a targeted submission id for review actions", () => {
+  assert.deepEqual(
+    parseDemoLaunchRequest(
+      "exp://10.0.0.133:8082?demoAction=approveFirstReview&submissionId=submission-123"
+    ),
+    {
+      action: demoLaunchActions.approveFirstReview,
+      submissionId: "submission-123"
+    }
+  );
+});
+
 test("parseDemoLaunchAction reads Expo Go approve first review URLs", () => {
   assert.equal(
     parseDemoLaunchAction("exp://10.0.0.133:8082/--/demo/approve-first-review"),
@@ -71,4 +85,15 @@ test("parseDemoLaunchAction reads Expo Go approve first review URLs", () => {
 
 test("parseDemoLaunchAction ignores unrelated URLs", () => {
   assert.equal(parseDemoLaunchAction("exp://10.0.0.133:8082/--/status"), null);
+});
+
+test("selectDemoReviewQueueItem refuses to fall back when a target is missing", () => {
+  assert.throws(
+    () =>
+      selectDemoReviewQueueItem(
+        [{ submission_id: "submission-a" }, { submission_id: "submission-b" }],
+        "submission-missing"
+      ),
+    /Targeted demo review item was not found/
+  );
 });

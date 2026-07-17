@@ -7,6 +7,7 @@ import {
 } from "./app-readiness.js";
 
 const seed = {
+  organizationSlug: "demo-sports-org",
   slug: "demo-soccer-club",
   teamSlug: "u14-girls",
   submitterEmail: "coach@demo-club.local",
@@ -37,10 +38,22 @@ test("buildAppReadinessPayload exposes demo identities and ready capabilities", 
 
   assert.equal(payload.productName, "Club Content Test");
   assert.deepEqual(payload.demo, {
+    organizationSlug: "demo-sports-org",
     clubSlug: "demo-soccer-club",
     teamSlug: "u14-girls",
     submitterEmail: "coach@demo-club.local",
     reviewerEmail: "comms@demo-club.local"
+  });
+  assert.deepEqual(payload.pilotCandidate, {
+    key: "simulated_pilot",
+    label: "Demo Sports Organization test tenant",
+    organizationSlug: "north-river-youth-sports",
+    clubSlug: "north-river-soccer-club",
+    teamSlug: "u13-girls-blue",
+    submitterEmail: "coach@northriverpilot.local",
+    reviewerEmail: "comms@northriverpilot.local",
+    clubAdminEmail: "admin@northriverpilot.local",
+    teamManagerEmail: "manager@northriverpilot.local"
   });
   assert.deepEqual(payload.capabilities, {
     submissions: true,
@@ -109,7 +122,9 @@ test("loadAppReadiness queries the seeded demo records", async () => {
     "submitter@example.test",
     "reviewer@example.test"
   ]);
+  assert.equal(payload.demo.organizationSlug, "demo-sports-org");
   assert.equal(payload.demo.reviewerEmail, "reviewer@example.test");
+  assert.equal(payload.pilotCandidate.organizationSlug, "north-river-youth-sports");
   assert.equal(payload.capabilities.review, true);
   assert.equal(payload.capabilities.publishing, false);
 });

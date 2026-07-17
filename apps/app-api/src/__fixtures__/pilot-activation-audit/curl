@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+url="${@: -1}"
+
+case "${url}" in
+  http://localhost:4000/app/readiness)
+    cat <<'JSON'
+{"demo":{"organizationSlug":"demo-sports-org","clubSlug":"demo-soccer-club","teamSlug":"u14-girls","submitterEmail":"coach@demo-club.local","reviewerEmail":"comms@demo-club.local"},"pilotCandidate":{"organizationSlug":"north-river-youth-sports","clubSlug":"north-river-soccer-club","teamSlug":"u13-girls-blue","submitterEmail":"coach@northriverpilot.local","reviewerEmail":"comms@northriverpilot.local","clubAdminEmail":"admin@northriverpilot.local","teamManagerEmail":"manager@northriverpilot.local"}}
+JSON
+    ;;
+  http://localhost:4000/notification-delivery/status)
+    cat <<'JSON'
+{"email":{"enabled":true,"mode":"provider"},"push":{"enabled":true,"mode":"provider"}}
+JSON
+    ;;
+  http://localhost:4000/approvals/queue)
+    cat <<'JSON'
+{"items":[]}
+JSON
+    ;;
+  http://localhost:4000/workflow-events)
+    cat <<'JSON'
+{"items":[]}
+JSON
+    ;;
+  http://localhost:4000/workflow-events\?status=pending)
+    if [[ "${PILOT_PENDING_WORKFLOW_FIXTURE:-0}" == "1" ]]; then
+      cat <<'JSON'
+{"items":[{"id":"event-1","submission_id":"submission-1","event_name":"submission.created","processed_at":null,"processing_error":null}]}
+JSON
+    else
+      cat <<'JSON'
+{"items":[]}
+JSON
+    fi
+    ;;
+  http://localhost:4000/organizations/demo-sports-org)
+    cat <<'JSON'
+{"found":true}
+JSON
+    ;;
+  http://localhost:4000/organizations/north-river-youth-sports)
+    cat <<'JSON'
+{"found":true}
+JSON
+    ;;
+  http://localhost:4000/workflow-policies/organizations/demo-sports-org)
+    cat <<'JSON'
+{"found":true,"organization":{"slug":"demo-sports-org"}}
+JSON
+    ;;
+  http://localhost:4000/workflow-policies/organizations/north-river-youth-sports)
+    cat <<'JSON'
+{"found":true,"organization":{"slug":"north-river-youth-sports"}}
+JSON
+    ;;
+  http://localhost:4000/workflow-policies/clubs/demo-soccer-club)
+    cat <<'JSON'
+{"found":true,"club":{"slug":"demo-soccer-club"},"organization":{"slug":"demo-sports-org"},"effectivePolicy":{"defaultApproverRole":"club_comms","routingRule":{"contentTypeApprovers":{"video":"club_admin"}}}}
+JSON
+    ;;
+  http://localhost:4000/workflow-policies/clubs/north-river-soccer-club)
+    cat <<'JSON'
+{"found":true,"club":{"slug":"north-river-soccer-club"},"organization":{"slug":"north-river-youth-sports"},"effectivePolicy":{"defaultApproverRole":"team_manager","routingRule":{"contentTypeApprovers":{"video":"team_manager"}}}}
+JSON
+    ;;
+  *)
+    echo "unexpected curl url: ${url}" >&2
+    exit 1
+    ;;
+esac

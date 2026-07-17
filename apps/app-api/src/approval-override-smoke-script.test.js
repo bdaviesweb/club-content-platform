@@ -104,3 +104,32 @@ test("approval override smoke proves club approval rules can disable organizatio
     fakeBin.cleanup();
   }
 });
+
+test("approval override smoke prefers explicit team-manager and club-admin reviewers", () => {
+  const fakeBin = createFakeBin();
+  try {
+    execFileSync("bash", [scriptPath], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${fakeBin.tempDir}:${process.env.PATH}`,
+        FAKE_STATE_PATH: fakeBin.statePath,
+        CLUB_CONTENT_SMOKE_ON_VPS: "1",
+        SMOKE_MARKER: "approval-override-test",
+        TEAM_MANAGER_REVIEWER_EMAIL: "manager@example.test",
+        CLUB_ADMIN_EMAIL: "admin@example.test"
+      }
+    });
+
+    const state = JSON.parse(fs.readFileSync(fakeBin.statePath, "utf8"));
+    const actionBodies = state.curlCalls
+      .filter((call) => call.url?.startsWith("http://localhost:4000/approval-requests/"))
+      .map((call) => call.body);
+
+    assert.ok(actionBodies.some((body) => body.includes('"actedByEmail":"manager@example.test"')));
+    assert.ok(actionBodies.some((body) => body.includes('"actedByEmail":"admin@example.test"')));
+  } finally {
+    fakeBin.cleanup();
+  }
+});

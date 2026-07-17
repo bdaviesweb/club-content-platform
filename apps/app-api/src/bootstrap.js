@@ -2,7 +2,7 @@ import { withTransaction } from "./db.js";
 import { internalDestinationType } from "../../../packages/shared/src/index.js";
 import { ensureBucket } from "./storage.js";
 
-const defaultClubSeed = {
+const defaultDemoSeed = {
   organizationSlug: "demo-sports-org",
   organizationName: "Demo Sports Organization",
   organizationAdminEmail: "org-admin@demo-club.local",
@@ -11,44 +11,88 @@ const defaultClubSeed = {
   name: "Demo Soccer Club",
   teamSlug: "u14-girls",
   teamName: "U14 Girls",
+  ageGroup: "U14",
   approverEmail: "comms@demo-club.local",
   approverName: "Club Comms",
   submitterEmail: "coach@demo-club.local",
-  submitterName: "Demo Coach"
+  submitterName: "Demo Coach",
+  clubAdminEmail: "comms@demo-club.local",
+  clubAdminName: "Club Comms",
+  teamManagerEmail: "",
+  teamManagerName: ""
 };
 
-export function getClubSeed(env = process.env) {
+const defaultSimulatedPilotSeed = {
+  organizationSlug: "north-river-youth-sports",
+  organizationName: "North River Youth Sports",
+  organizationAdminEmail: "ops@northriverpilot.local",
+  organizationAdminName: "Nora Operations",
+  slug: "north-river-soccer-club",
+  name: "North River Soccer Club",
+  teamSlug: "u13-girls-blue",
+  teamName: "U13 Girls Blue",
+  ageGroup: "U13",
+  approverEmail: "comms@northriverpilot.local",
+  approverName: "Riley Comms",
+  submitterEmail: "coach@northriverpilot.local",
+  submitterName: "Avery Coach",
+  clubAdminEmail: "admin@northriverpilot.local",
+  clubAdminName: "Casey Admin",
+  teamManagerEmail: "manager@northriverpilot.local",
+  teamManagerName: "Jordan Manager"
+};
+
+function buildSeed(env, defaults, prefix, { allowExpoSubmitterFallback = false } = {}) {
   return {
     organizationSlug:
-      env.DEMO_ORGANIZATION_SLUG || defaultClubSeed.organizationSlug,
+      env[`${prefix}_ORGANIZATION_SLUG`] || defaults.organizationSlug,
     organizationName:
-      env.DEMO_ORGANIZATION_NAME || defaultClubSeed.organizationName,
+      env[`${prefix}_ORGANIZATION_NAME`] || defaults.organizationName,
     organizationAdminEmail:
-      env.DEMO_ORGANIZATION_ADMIN_EMAIL ||
-      env.DEMO_ORG_ADMIN_EMAIL ||
-      defaultClubSeed.organizationAdminEmail,
+      env[`${prefix}_ORGANIZATION_ADMIN_EMAIL`] ||
+      env[`${prefix}_ORG_ADMIN_EMAIL`] ||
+      defaults.organizationAdminEmail,
     organizationAdminName:
-      env.DEMO_ORGANIZATION_ADMIN_NAME ||
-      env.DEMO_ORG_ADMIN_NAME ||
-      defaultClubSeed.organizationAdminName,
-    slug: env.DEMO_CLUB_SLUG || defaultClubSeed.slug,
-    name: env.DEMO_CLUB_NAME || defaultClubSeed.name,
-    teamSlug: env.DEMO_TEAM_SLUG || defaultClubSeed.teamSlug,
-    teamName: env.DEMO_TEAM_NAME || defaultClubSeed.teamName,
+      env[`${prefix}_ORGANIZATION_ADMIN_NAME`] ||
+      env[`${prefix}_ORG_ADMIN_NAME`] ||
+      defaults.organizationAdminName,
+    slug: env[`${prefix}_CLUB_SLUG`] || defaults.slug,
+    name: env[`${prefix}_CLUB_NAME`] || defaults.name,
+    teamSlug: env[`${prefix}_TEAM_SLUG`] || defaults.teamSlug,
+    teamName: env[`${prefix}_TEAM_NAME`] || defaults.teamName,
+    ageGroup: env[`${prefix}_AGE_GROUP`] || defaults.ageGroup || "U14",
     approverEmail:
-      env.DEMO_REVIEWER_EMAIL ||
-      env.DEMO_APPROVER_EMAIL ||
-      defaultClubSeed.approverEmail,
+      env[`${prefix}_REVIEWER_EMAIL`] ||
+      env[`${prefix}_APPROVER_EMAIL`] ||
+      defaults.approverEmail,
     approverName:
-      env.DEMO_REVIEWER_NAME ||
-      env.DEMO_APPROVER_NAME ||
-      defaultClubSeed.approverName,
+      env[`${prefix}_REVIEWER_NAME`] ||
+      env[`${prefix}_APPROVER_NAME`] ||
+      defaults.approverName,
     submitterEmail:
-      env.DEMO_SUBMITTER_EMAIL ||
-      env.EXPO_PUBLIC_SUBMITTER_EMAIL ||
-      defaultClubSeed.submitterEmail,
-    submitterName: env.DEMO_SUBMITTER_NAME || defaultClubSeed.submitterName
+      env[`${prefix}_SUBMITTER_EMAIL`] ||
+      (allowExpoSubmitterFallback ? env.EXPO_PUBLIC_SUBMITTER_EMAIL : "") ||
+      defaults.submitterEmail,
+    submitterName: env[`${prefix}_SUBMITTER_NAME`] || defaults.submitterName,
+    clubAdminEmail:
+      env[`${prefix}_CLUB_ADMIN_EMAIL`] || defaults.clubAdminEmail || defaults.approverEmail,
+    clubAdminName:
+      env[`${prefix}_CLUB_ADMIN_NAME`] || defaults.clubAdminName || defaults.approverName,
+    teamManagerEmail:
+      env[`${prefix}_TEAM_MANAGER_EMAIL`] || defaults.teamManagerEmail || "",
+    teamManagerName:
+      env[`${prefix}_TEAM_MANAGER_NAME`] || defaults.teamManagerName || ""
   };
+}
+
+export function getClubSeed(env = process.env) {
+  return buildSeed(env, defaultDemoSeed, "DEMO", {
+    allowExpoSubmitterFallback: true
+  });
+}
+
+export function getSimulatedPilotSeed(env = process.env) {
+  return buildSeed(env, defaultSimulatedPilotSeed, "SIMULATED_PILOT");
 }
 
 export async function ensureWorkflowPolicyTables(client) {
@@ -341,192 +385,175 @@ async function ensureOrganizationMembership(
 }
 
 export async function ensureSeedData() {
-  const clubSeed = getClubSeed();
+  const seeds = [getClubSeed(), getSimulatedPilotSeed()];
 
   await ensureBucket();
 
   await withTransaction(async (client) => {
     await ensureWorkflowPolicyTables(client);
 
-    const organization = await client.query(
-      `
-      INSERT INTO organizations (slug, name)
-      VALUES ($1, $2)
-      ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
-      RETURNING id
-      `,
-      [clubSeed.organizationSlug, clubSeed.organizationName]
-    );
+    for (const clubSeed of seeds) {
+      const organization = await client.query(
+        `
+        INSERT INTO organizations (slug, name)
+        VALUES ($1, $2)
+        ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+        RETURNING id
+        `,
+        [clubSeed.organizationSlug, clubSeed.organizationName]
+      );
 
-    const organizationId = organization.rows[0].id;
+      const organizationId = organization.rows[0].id;
 
-    const club = await client.query(
-      `
-      INSERT INTO clubs (organization_id, slug, name)
-      VALUES ($1, $2, $3)
-      ON CONFLICT (slug) DO UPDATE SET
-        organization_id = EXCLUDED.organization_id,
-        name = EXCLUDED.name
-      RETURNING id
-      `,
-      [organizationId, clubSeed.slug, clubSeed.name]
-    );
+      const club = await client.query(
+        `
+        INSERT INTO clubs (organization_id, slug, name)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (slug) DO UPDATE SET
+          organization_id = EXCLUDED.organization_id,
+          name = EXCLUDED.name
+        RETURNING id
+        `,
+        [organizationId, clubSeed.slug, clubSeed.name]
+      );
 
-    const clubId = club.rows[0].id;
+      const clubId = club.rows[0].id;
 
-    const team = await client.query(
-      `
-      INSERT INTO teams (club_id, slug, name, age_group)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (club_id, slug) DO UPDATE SET name = EXCLUDED.name
-      RETURNING id
-      `,
-      [clubId, clubSeed.teamSlug, clubSeed.teamName, "U14"]
-    );
+      const team = await client.query(
+        `
+        INSERT INTO teams (club_id, slug, name, age_group)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (club_id, slug) DO UPDATE SET name = EXCLUDED.name
+        RETURNING id
+        `,
+        [clubId, clubSeed.teamSlug, clubSeed.teamName, clubSeed.ageGroup]
+      );
 
-    const teamId = team.rows[0].id;
+      const teamId = team.rows[0].id;
 
-    await ensureRoleMembership(client, {
-      clubId,
-      teamId,
-      role: "club_comms",
-      email: clubSeed.approverEmail,
-      name: clubSeed.approverName
-    });
+      await ensureRoleMembership(client, {
+        clubId,
+        teamId,
+        role: "club_comms",
+        email: clubSeed.approverEmail,
+        name: clubSeed.approverName
+      });
 
-    await ensureRoleMembership(client, {
-      clubId,
-      teamId,
-      role: "club_admin",
-      email: clubSeed.approverEmail,
-      name: clubSeed.approverName
-    });
+      await ensureRoleMembership(client, {
+        clubId,
+        teamId,
+        role: "club_admin",
+        email: clubSeed.clubAdminEmail,
+        name: clubSeed.clubAdminName
+      });
 
-    await ensureRoleMembership(client, {
-      clubId,
-      teamId,
-      role: "submitter_coach",
-      email: clubSeed.submitterEmail,
-      name: clubSeed.submitterName
-    });
+      if (clubSeed.teamManagerEmail) {
+        await ensureRoleMembership(client, {
+          clubId,
+          teamId,
+          role: "team_manager",
+          email: clubSeed.teamManagerEmail,
+          name: clubSeed.teamManagerName
+        });
+      }
 
-    await ensureOrganizationMembership(client, {
-      organizationId,
-      role: "organization_admin",
-      email: clubSeed.organizationAdminEmail,
-      name: clubSeed.organizationAdminName
-    });
+      await ensureRoleMembership(client, {
+        clubId,
+        teamId,
+        role: "submitter_coach",
+        email: clubSeed.submitterEmail,
+        name: clubSeed.submitterName
+      });
 
-    await client.query(
-      `
-      INSERT INTO publishing_destinations (club_id, destination_type, name, config)
-      SELECT $1, $2, 'Internal Club Feed', '{"mode":"internal"}'::jsonb
-      WHERE NOT EXISTS (
-        SELECT 1
-        FROM publishing_destinations
-        WHERE club_id = $1 AND destination_type = $2
-      )
-      `,
-      [clubId, internalDestinationType]
-    );
+      await ensureOrganizationMembership(client, {
+        organizationId,
+        role: "organization_admin",
+        email: clubSeed.organizationAdminEmail,
+        name: clubSeed.organizationAdminName
+      });
 
-    await client.query(
-      `
-      INSERT INTO organization_workflow_policies (
-        organization_id,
-        default_approver_role,
-        public_approver_role,
-        medium_risk_approver_role,
-        allow_agent_routing,
-        auto_approve_internal_low_risk,
-        auto_approve_max_risk,
-        auto_approval_rule,
-        routing_rule,
-        approval_rule,
-        notification_rule
-      )
-      VALUES ($1, 'team_manager', 'club_comms', 'club_comms', TRUE, TRUE, 0.35, '{"allowedContentTypes":["photo"]}'::jsonb, '{"contentTypeApprovers":{"video":"club_admin"}}'::jsonb, '{"requireSecondApprovalForPublic":true,"secondApproverRole":"club_admin"}'::jsonb, '{"email":true,"push":true}'::jsonb)
-      ON CONFLICT (organization_id) DO UPDATE
-      SET
-        auto_approve_internal_low_risk = CASE
-          WHEN organization_workflow_policies.auto_approval_rule = '{}'::jsonb
-            AND organization_workflow_policies.auto_approve_internal_low_risk = FALSE
-            THEN EXCLUDED.auto_approve_internal_low_risk
-          ELSE organization_workflow_policies.auto_approve_internal_low_risk
-        END,
-        auto_approval_rule = CASE
-          WHEN organization_workflow_policies.auto_approval_rule = '{}'::jsonb
-            THEN EXCLUDED.auto_approval_rule
-          ELSE organization_workflow_policies.auto_approval_rule
-        END,
-        routing_rule = CASE
-          WHEN organization_workflow_policies.routing_rule = '{}'::jsonb
-            THEN EXCLUDED.routing_rule
-          ELSE organization_workflow_policies.routing_rule
-        END,
-        approval_rule = CASE
-          WHEN organization_workflow_policies.approval_rule = '{}'::jsonb
-            THEN EXCLUDED.approval_rule
-          ELSE organization_workflow_policies.approval_rule
-        END,
-        notification_rule = CASE
-          WHEN organization_workflow_policies.notification_rule = '{}'::jsonb
-            THEN EXCLUDED.notification_rule
-          ELSE organization_workflow_policies.notification_rule
-        END
-      WHERE organization_workflow_policies.auto_approval_rule = '{}'::jsonb
-         OR organization_workflow_policies.routing_rule = '{}'::jsonb
-         OR organization_workflow_policies.approval_rule = '{}'::jsonb
-         OR organization_workflow_policies.notification_rule = '{}'::jsonb
-      `,
-      [organizationId]
-    );
+      await client.query(
+        `
+        INSERT INTO publishing_destinations (club_id, destination_type, name, config)
+        SELECT $1, $2, 'Internal Club Feed', '{"mode":"internal"}'::jsonb
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM publishing_destinations
+          WHERE club_id = $1 AND destination_type = $2
+        )
+        `,
+        [clubId, internalDestinationType]
+      );
 
-    await client.query(
-      `
-      INSERT INTO club_workflow_policies (
-        club_id,
-        default_approver_role,
-        public_approver_role,
-        medium_risk_approver_role,
-        allow_agent_routing,
-        auto_approve_internal_low_risk,
-        auto_approve_max_risk,
-        auto_approval_rule,
-        routing_rule,
-        approval_rule,
-        notification_rule
-      )
-      VALUES ($1, 'team_manager', 'club_comms', 'club_comms', TRUE, NULL, NULL, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{"email":false,"push":false}'::jsonb)
-      ON CONFLICT (club_id) DO UPDATE
-      SET
-        auto_approve_internal_low_risk = CASE
-          WHEN club_workflow_policies.auto_approve_internal_low_risk = FALSE
-            AND club_workflow_policies.auto_approve_max_risk = 0.35
-            AND club_workflow_policies.auto_approval_rule = '{}'::jsonb
-            THEN EXCLUDED.auto_approve_internal_low_risk
-          ELSE club_workflow_policies.auto_approve_internal_low_risk
-        END,
-        auto_approve_max_risk = CASE
-          WHEN club_workflow_policies.auto_approve_internal_low_risk = FALSE
-            AND club_workflow_policies.auto_approve_max_risk = 0.35
-            AND club_workflow_policies.auto_approval_rule = '{}'::jsonb
-            THEN EXCLUDED.auto_approve_max_risk
-          ELSE club_workflow_policies.auto_approve_max_risk
-        END,
-        notification_rule = CASE
-          WHEN club_workflow_policies.notification_rule = '{}'::jsonb
-            THEN EXCLUDED.notification_rule
-          ELSE club_workflow_policies.notification_rule
-        END
-      WHERE club_workflow_policies.notification_rule = '{}'::jsonb
-         OR (
-           club_workflow_policies.auto_approve_internal_low_risk = FALSE
-           AND club_workflow_policies.auto_approve_max_risk = 0.35
-           AND club_workflow_policies.auto_approval_rule = '{}'::jsonb
-         )
-      `,
-      [clubId]
-    );
+      await client.query(
+        `
+        INSERT INTO organization_workflow_policies (
+          organization_id,
+          default_approver_role,
+          public_approver_role,
+          medium_risk_approver_role,
+          allow_agent_routing,
+          auto_approve_internal_low_risk,
+          auto_approve_max_risk,
+          auto_approval_rule,
+          routing_rule,
+          approval_rule,
+          publishing_rule,
+          notification_rule
+        )
+        VALUES (
+          $1,
+          'team_manager',
+          'club_comms',
+          'club_comms',
+          TRUE,
+          TRUE,
+          0.35,
+          '{"allowedContentTypes":["photo"]}'::jsonb,
+          '{"contentTypeApprovers":{"video":"club_admin"}}'::jsonb,
+          '{"requireSecondApprovalForPublic":true,"secondApproverRole":"club_admin","secondApprovalContentTypes":["video"]}'::jsonb,
+          '{"visibilityDestinations":{"internal":["internal_feed"],"public":["internal_feed"]}}'::jsonb,
+          '{"email":true,"push":true}'::jsonb
+        )
+        ON CONFLICT (organization_id) DO NOTHING
+        `,
+        [organizationId]
+      );
+
+      await client.query(
+        `
+        INSERT INTO club_workflow_policies (
+          club_id,
+          default_approver_role,
+          public_approver_role,
+          medium_risk_approver_role,
+          allow_agent_routing,
+          auto_approve_internal_low_risk,
+          auto_approve_max_risk,
+          auto_approval_rule,
+          routing_rule,
+          approval_rule,
+          publishing_rule,
+          notification_rule
+        )
+        VALUES (
+          $1,
+          'team_manager',
+          'club_comms',
+          'club_comms',
+          TRUE,
+          FALSE,
+          0.35,
+          '{"allowedContentTypes":["photo"]}'::jsonb,
+          '{"contentTypeApprovers":{"video":"team_manager"}}'::jsonb,
+          '{"requireSecondApprovalForPublic":false}'::jsonb,
+          '{}'::jsonb,
+          '{"email":false,"push":false}'::jsonb
+        )
+        ON CONFLICT (club_id) DO NOTHING
+        `,
+        [clubId]
+      );
+    }
   });
 }
