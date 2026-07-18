@@ -1021,6 +1021,18 @@ function layout(content, title = "Club Content Ops") {
       .workflow-policy-filter {
         grid-template-columns: minmax(0, 1fr);
       }
+      .workflow-mode-switch {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 18px;
+      }
+      .workflow-mode-switch .quick-link[aria-current="page"] {
+        background: var(--green);
+        border-color: var(--green);
+        color: #fff;
+      }
       .workflow-form-panel {
         align-self: start;
       }
@@ -2937,6 +2949,49 @@ function renderNorthRiverPilotBanner(deliveryStatus = null) {
               <p class="subtle">Email delivery is log-only, push is disabled, and identities are simulated-local until the real club rollout decision is made.</p>
             </div>`
       }
+    </div>
+  </section>`;
+}
+
+function renderWorkflowModeSwitch({
+  selectedMode,
+  selectedClubSlug,
+  organizationMode,
+  normalizedSimulationInput,
+  historyView,
+  clubView,
+  clubArea
+}) {
+  const commonLink = {
+    clubSlug: selectedClubSlug,
+    organizationMode,
+    historyView,
+    clubView,
+    clubArea,
+    simulationInput: normalizedSimulationInput
+  };
+  const explainLink = buildWorkflowSettingsLink({
+    ...commonLink,
+    workflowMode: "explain"
+  });
+  const editLink = buildWorkflowSettingsLink({
+    ...commonLink,
+    workflowMode: "edit"
+  });
+
+  return `<section class="panel" style="margin-bottom:18px;">
+    <div class="section-header">
+      <div>
+        <div class="eyebrow">Operator mode</div>
+        <h2>${selectedMode === "edit" ? "Editing controls are visible" : "Explain mode keeps the policy story clean"}</h2>
+        <p class="subtle" style="margin-top:8px;">Explain mode is for walkthroughs and policy checks. Edit mode reveals organization defaults and club exceptions when an operator is ready to change rules.</p>
+      </div>
+      ${renderStatusBadge(selectedMode === "edit" ? "Edit mode" : "Explain mode", selectedMode === "edit" ? "review" : "good")}
+    </div>
+    <div class="workflow-mode-switch">
+      <a class="quick-link" href="${explainLink}" aria-current="${selectedMode === "explain" ? "page" : "false"}">Explain</a>
+      <a class="quick-link" href="${editLink}" aria-current="${selectedMode === "edit" ? "page" : "false"}">Edit policies</a>
+      <span class="subtle">${selectedMode === "edit" ? "Preview, save, reset, and inheritance cleanup tools are available below." : "Use the summary, simulator, history, and organization directory before making changes."}</span>
     </div>
   </section>`;
 }
@@ -5436,6 +5491,7 @@ function buildOrganizationGovernanceSummary(clubs = []) {
 function buildWorkflowSettingsLink({
   clubSlug = "",
   organizationMode = null,
+  workflowMode = null,
   historyView = null,
   clubView = null,
   clubArea = null,
@@ -5453,6 +5509,9 @@ function buildWorkflowSettingsLink({
   }
   if (organizationMode) {
     params.set("organizationMode", organizationMode);
+  }
+  if (workflowMode) {
+    params.set("workflowMode", workflowMode);
   }
   if (historyView) {
     params.set("historyView", historyView);
@@ -8302,6 +8361,7 @@ async function renderWorkflowSettingsPage(
   clubSlug,
   organizationMode = null,
   simulationInput = {},
+  workflowMode = null,
   previewDraft = null,
   historyView = "all",
   clubView = "all",
@@ -8485,6 +8545,8 @@ async function renderWorkflowSettingsPage(
       : null;
   const simulatorOrganization = readiness?.pilotCandidate || null;
   const simulatorModeEnabled = organizationMode === "simulator";
+  const selectedWorkflowMode =
+    workflowMode === "edit" || previewScopeType || saveSummary ? "edit" : "explain";
 
   return layout(`
     ${renderNorthRiverPilotBanner()}
@@ -8500,6 +8562,7 @@ async function renderWorkflowSettingsPage(
         <a class="quick-link" href="${buildWorkflowSettingsLink({
           clubSlug: simulatorOrganization?.clubSlug || selectedClubSlug,
           organizationMode: "simulator",
+          workflowMode: selectedWorkflowMode,
           simulationInput: normalizedSimulationInput
         })}">Open test-tenant organization mode</a>
         <a class="quick-link" href="/">Open review workspace</a>
@@ -8556,6 +8619,16 @@ async function renderWorkflowSettingsPage(
         currentOrganizationClubPolicyMap: organizationClubPolicyMap
       }
     )}
+
+    ${renderWorkflowModeSwitch({
+      selectedMode: selectedWorkflowMode,
+      selectedClubSlug,
+      organizationMode,
+      normalizedSimulationInput,
+      historyView,
+      clubView,
+      clubArea
+    })}
 
     <section class="panel" style="margin-bottom:18px;">
       <form method="GET" action="/workflow-settings" class="workflow-policy-form workflow-policy-filter">
@@ -8678,125 +8751,128 @@ async function renderWorkflowSettingsPage(
         : null
     )}
     
-
-    <section class="workflow-settings-grid">
-      ${renderWorkflowPolicyForm({
-        scopeType: "organization",
-        scopeSlug: organizationSlug,
-        returnClubSlug: selectedClubSlug,
-        title: organizationPolicy?.organization?.name || "Organization policy unavailable",
-        subtitle: organizationSlug
-          ? "These defaults apply across clubs unless a club override is set."
-          : "This club does not currently belong to an organization.",
-        policy: previewOrganizationPolicy,
-        actorEmail: reviewerEmail,
-        allowInheritance: false,
-        previewScopeType,
-        previewAffectedClubCount:
-          previewScopeType === "organization"
-            ? organizationDraftImpact?.affectedClubs.length || 0
-            : 0,
-        previewChangedAreaCount:
-          previewScopeType === "organization"
-            ? organizationDraftImpact?.changedAreas.length || 0
-            : 0,
-        previewInsulatedClubCount:
-          previewScopeType === "organization"
-            ? organizationDraftImpact?.insulatedClubs.length || 0
-            : 0,
-        previewChangedAreaKeys:
-          previewScopeType === "organization"
-            ? (organizationDraftImpact?.changedAreas || []).map((area) => area.key)
-            : [],
-        previewCurrentOverrideClubCount:
-          previewScopeType === "organization"
-            ? overrideBurdenSummary?.currentOverrideClubCount || 0
-            : 0,
-        previewProjectedOverrideClubCount:
-          previewScopeType === "organization"
-            ? overrideBurdenSummary?.projectedOverrideClubCount || 0
-            : 0,
-        previewCurrentOverrideAreaCount:
-          previewScopeType === "organization"
-            ? overrideBurdenSummary?.currentOverrideAreaCount || 0
-            : 0,
-        previewProjectedOverrideAreaCount:
-          previewScopeType === "organization"
-            ? overrideBurdenSummary?.projectedOverrideAreaCount || 0
-            : 0,
-        previewReducingClubs:
-          previewScopeType === "organization"
-            ? (overrideBurdenSummary?.clubsReducingOverrides || []).map((item) => ({
-                name: item.club.name,
-                slug: item.club.slug,
-                liveOverrideCount: item.liveOverrideCount,
-                previewOverrideCount: item.previewOverrideCount
-              }))
-            : [],
-        previewGainingClubs:
-          previewScopeType === "organization"
-            ? (overrideBurdenSummary?.clubsGainingOverrides || []).map((item) => ({
-                name: item.club.name,
-                slug: item.club.slug,
-                liveOverrideCount: item.liveOverrideCount,
-                previewOverrideCount: item.previewOverrideCount
-              }))
-            : [],
-        previewWarningCount: previewScopeType === "organization" ? previewWarningCount : 0,
-        previewGuardrailWarnings:
-          previewScopeType === "organization" ? previewPolicyGuardrails : [],
-        previewSimulationTrace:
-          previewScopeType === "organization" ? previewSimulationTrace : null,
-        stagedCleanupAreaKey:
-          previewScopeType === "organization" ? validPreviewCleanupArea : null,
-        stagedCleanupClubSlugs:
-          previewScopeType === "organization" ? validPreviewCleanupClubSlugs : [],
-        simulationInput: normalizedSimulationInput
-      })}
-      ${renderWorkflowPolicyForm({
-        scopeType: "club",
-        scopeSlug: selectedClubSlug,
-        returnClubSlug: selectedClubSlug,
-        title: clubPolicy.club?.name || selectedClubSlug,
-        subtitle: "Use club overrides only where this club needs different behavior from the organization default.",
-        policy: previewClubPolicy,
-        actorEmail: reviewerEmail,
-        allowInheritance: true,
-        previewScopeType,
-        previewChangedAreaCount:
-          previewScopeType === "club" ? clubDraftChangedAreas.length : 0,
-        previewChangedAreaKeys:
-          previewScopeType === "club"
-            ? clubDraftChangedAreas.map((area) => area.key)
-            : [],
-        previewCurrentOverrideAreaCount:
-          previewScopeType === "club"
-            ? clubDraftOverrideImpact?.liveOverrideCount || 0
-            : 0,
-        previewProjectedOverrideAreaCount:
-          previewScopeType === "club"
-            ? clubDraftOverrideImpact?.previewOverrideCount || 0
-            : 0,
-        previewAddedAreaKeys:
-          previewScopeType === "club"
-            ? (clubDraftOverrideImpact?.added || []).map((area) => area.key)
-            : [],
-        previewRemovedAreaKeys:
-          previewScopeType === "club"
-            ? (clubDraftOverrideImpact?.removed || []).map((area) => area.key)
-            : [],
-        previewRetainedAreaKeys:
-          previewScopeType === "club"
-            ? (clubDraftOverrideImpact?.retained || []).map((area) => area.key)
-            : [],
-        previewWarningCount: previewScopeType === "club" ? previewWarningCount : 0,
-        previewGuardrailWarnings:
-          previewScopeType === "club" ? previewPolicyGuardrails : [],
-        simulationInput: normalizedSimulationInput,
-        focusedInheritanceAreaKey:
-          previewScopeType === "club" ? validPreviewResetArea : null
-      })}
-    </section>
+    ${
+      selectedWorkflowMode === "edit"
+        ? `<section class="workflow-settings-grid">
+            ${renderWorkflowPolicyForm({
+              scopeType: "organization",
+              scopeSlug: organizationSlug,
+              returnClubSlug: selectedClubSlug,
+              title: organizationPolicy?.organization?.name || "Organization policy unavailable",
+              subtitle: organizationSlug
+                ? "These defaults apply across clubs unless a club override is set."
+                : "This club does not currently belong to an organization.",
+              policy: previewOrganizationPolicy,
+              actorEmail: reviewerEmail,
+              allowInheritance: false,
+              previewScopeType,
+              previewAffectedClubCount:
+                previewScopeType === "organization"
+                  ? organizationDraftImpact?.affectedClubs.length || 0
+                  : 0,
+              previewChangedAreaCount:
+                previewScopeType === "organization"
+                  ? organizationDraftImpact?.changedAreas.length || 0
+                  : 0,
+              previewInsulatedClubCount:
+                previewScopeType === "organization"
+                  ? organizationDraftImpact?.insulatedClubs.length || 0
+                  : 0,
+              previewChangedAreaKeys:
+                previewScopeType === "organization"
+                  ? (organizationDraftImpact?.changedAreas || []).map((area) => area.key)
+                  : [],
+              previewCurrentOverrideClubCount:
+                previewScopeType === "organization"
+                  ? overrideBurdenSummary?.currentOverrideClubCount || 0
+                  : 0,
+              previewProjectedOverrideClubCount:
+                previewScopeType === "organization"
+                  ? overrideBurdenSummary?.projectedOverrideClubCount || 0
+                  : 0,
+              previewCurrentOverrideAreaCount:
+                previewScopeType === "organization"
+                  ? overrideBurdenSummary?.currentOverrideAreaCount || 0
+                  : 0,
+              previewProjectedOverrideAreaCount:
+                previewScopeType === "organization"
+                  ? overrideBurdenSummary?.projectedOverrideAreaCount || 0
+                  : 0,
+              previewReducingClubs:
+                previewScopeType === "organization"
+                  ? (overrideBurdenSummary?.clubsReducingOverrides || []).map((item) => ({
+                      name: item.club.name,
+                      slug: item.club.slug,
+                      liveOverrideCount: item.liveOverrideCount,
+                      previewOverrideCount: item.previewOverrideCount
+                    }))
+                  : [],
+              previewGainingClubs:
+                previewScopeType === "organization"
+                  ? (overrideBurdenSummary?.clubsGainingOverrides || []).map((item) => ({
+                      name: item.club.name,
+                      slug: item.club.slug,
+                      liveOverrideCount: item.liveOverrideCount,
+                      previewOverrideCount: item.previewOverrideCount
+                    }))
+                  : [],
+              previewWarningCount: previewScopeType === "organization" ? previewWarningCount : 0,
+              previewGuardrailWarnings:
+                previewScopeType === "organization" ? previewPolicyGuardrails : [],
+              previewSimulationTrace:
+                previewScopeType === "organization" ? previewSimulationTrace : null,
+              stagedCleanupAreaKey:
+                previewScopeType === "organization" ? validPreviewCleanupArea : null,
+              stagedCleanupClubSlugs:
+                previewScopeType === "organization" ? validPreviewCleanupClubSlugs : [],
+              simulationInput: normalizedSimulationInput
+            })}
+            ${renderWorkflowPolicyForm({
+              scopeType: "club",
+              scopeSlug: selectedClubSlug,
+              returnClubSlug: selectedClubSlug,
+              title: clubPolicy.club?.name || selectedClubSlug,
+              subtitle: "Use club overrides only where this club needs different behavior from the organization default.",
+              policy: previewClubPolicy,
+              actorEmail: reviewerEmail,
+              allowInheritance: true,
+              previewScopeType,
+              previewChangedAreaCount:
+                previewScopeType === "club" ? clubDraftChangedAreas.length : 0,
+              previewChangedAreaKeys:
+                previewScopeType === "club"
+                  ? clubDraftChangedAreas.map((area) => area.key)
+                  : [],
+              previewCurrentOverrideAreaCount:
+                previewScopeType === "club"
+                  ? clubDraftOverrideImpact?.liveOverrideCount || 0
+                  : 0,
+              previewProjectedOverrideAreaCount:
+                previewScopeType === "club"
+                  ? clubDraftOverrideImpact?.previewOverrideCount || 0
+                  : 0,
+              previewAddedAreaKeys:
+                previewScopeType === "club"
+                  ? (clubDraftOverrideImpact?.added || []).map((area) => area.key)
+                  : [],
+              previewRemovedAreaKeys:
+                previewScopeType === "club"
+                  ? (clubDraftOverrideImpact?.removed || []).map((area) => area.key)
+                  : [],
+              previewRetainedAreaKeys:
+                previewScopeType === "club"
+                  ? (clubDraftOverrideImpact?.retained || []).map((area) => area.key)
+                  : [],
+              previewWarningCount: previewScopeType === "club" ? previewWarningCount : 0,
+              previewGuardrailWarnings:
+                previewScopeType === "club" ? previewPolicyGuardrails : [],
+              simulationInput: normalizedSimulationInput,
+              focusedInheritanceAreaKey:
+                previewScopeType === "club" ? validPreviewResetArea : null
+            })}
+          </section>`
+        : ""
+    }
 
     <script>
       function parseOptionalRole(value) {
@@ -9186,6 +9262,7 @@ async function renderWorkflowSettingsPage(
         if (scopeType === 'organization') {
           const params = new URLSearchParams();
           params.set('clubSlug', returnClubSlug || scopeSlug);
+          params.set('workflowMode', 'edit');
           appendSimulatorParams(params, simulatorData);
           params.set('saveScopeType', 'organization');
           params.set('saveChangedAreaCount', String(previewChangedAreaCount));
@@ -9225,6 +9302,7 @@ async function renderWorkflowSettingsPage(
         if (scopeType === 'club') {
           const params = new URLSearchParams();
           params.set('clubSlug', returnClubSlug || scopeSlug);
+          params.set('workflowMode', 'edit');
           appendSimulatorParams(params, simulatorData);
           params.set('saveScopeType', 'club');
           params.set('saveChangedAreaCount', String(previewChangedAreaCount));
@@ -9290,6 +9368,7 @@ async function renderWorkflowSettingsPage(
 
         const params = new URLSearchParams();
         params.set('clubSlug', String(simulatorData.get('clubSlug') || scopeSlug));
+        params.set('workflowMode', 'edit');
         appendSimulatorParams(params, simulatorData);
         params.set('previewScopeType', scopeType);
         params.set('previewDraftPolicy', JSON.stringify(payload));
@@ -9769,6 +9848,7 @@ export function createAdminServer() {
             moderationFlagged: url.searchParams.get("simulationModerationFlagged"),
             agentSuggestedApproverRole: url.searchParams.get("simulationAgentSuggestedApproverRole")
             },
+            url.searchParams.get("workflowMode"),
             {
             scopeType: url.searchParams.get("previewScopeType"),
             payload: parsePreviewDraft(url.searchParams.get("previewDraftPolicy"))
@@ -10049,6 +10129,7 @@ export function createAdminServer() {
 
         const params = new URLSearchParams();
         params.set("clubSlug", selectedClubSlug || organizationSlug);
+        params.set("workflowMode", "edit");
         if (normalizedSimulationInput?.contentType) {
           params.set("simulationContentType", String(normalizedSimulationInput.contentType));
         }
@@ -10236,6 +10317,7 @@ export function createAdminServer() {
 
         const params = new URLSearchParams();
         params.set("clubSlug", returnClubSlug || clubSlug);
+        params.set("workflowMode", "edit");
         if (normalizedSimulationInput?.contentType) {
           params.set("simulationContentType", String(normalizedSimulationInput.contentType));
         }
@@ -10550,6 +10632,7 @@ export function createAdminServer() {
 
         const params = new URLSearchParams();
         params.set("clubSlug", returnClubSlug || actionableClubs[0]?.slug || "");
+        params.set("workflowMode", "edit");
         params.set("saveScopeType", "organization_cleanup");
         params.set("saveCleanupAreaKey", areaKey);
         params.set(

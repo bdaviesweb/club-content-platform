@@ -751,38 +751,49 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /Open Westside policy stack/);
     assert.match(body, /Open Eastside policy stack/);
     assert.match(body, /clubSlug=westside[\s\S]*?simulationContentType=photo[\s\S]*?simulationVisibilityTarget=internal[\s\S]*?simulationRiskScore=0\.19[\s\S]*?simulationModerationFlagged=true[\s\S]*?simulationAgentSuggestedApproverRole=club_admin[\s\S]*?Open Westside policy stack/);
-    assert.match(body, /Auto-approval rule/);
-    assert.match(body, /Auto-approve only these content types/);
-    assert.match(body, /Never auto-approve these content types/);
-    assert.match(body, /Routing rule/);
-    assert.match(body, /Content-type routing overrides/);
-    assert.match(body, /Photo/);
-    assert.match(body, /Video/);
-    assert.match(body, /Text/);
-    assert.match(body, /Mixed/);
-    assert.match(body, /Second approval for public posts/);
-    assert.match(body, /Second approver role/);
-    assert.match(body, /Second approval content types/);
-    assert.match(body, /Default publishing destinations/);
-    assert.match(body, /Internal visibility destinations/);
-    assert.match(body, /Public visibility destinations/);
-    assert.match(body, /Notification email channel/);
-    assert.match(body, /Review started email/);
-    assert.match(body, /Published push/);
-    assert.match(body, /Save club policy/);
-    assert.match(body, /Save organization policy/);
+    assert.match(body, /Explain mode keeps the policy story clean/);
+    assert.match(body, /workflowMode=edit/);
+    assert.doesNotMatch(body, /Auto-approve only these content types/);
+
+    const editResponse = await originalFetch(
+      `http://127.0.0.1:${address.port}/workflow-settings?clubSlug=westside&workflowMode=edit&simulationContentType=photo&simulationVisibilityTarget=internal&simulationRiskScore=0.19&simulationModerationFlagged=true&simulationAgentSuggestedApproverRole=club_admin`
+    );
+    const editBody = await editResponse.text();
+
+    assert.equal(editResponse.status, 200);
+    assert.match(editBody, /Editing controls are visible/);
+    assert.match(editBody, /Auto-approval rule/);
+    assert.match(editBody, /Auto-approve only these content types/);
+    assert.match(editBody, /Never auto-approve these content types/);
+    assert.match(editBody, /Routing rule/);
+    assert.match(editBody, /Content-type routing overrides/);
+    assert.match(editBody, /Photo/);
+    assert.match(editBody, /Video/);
+    assert.match(editBody, /Text/);
+    assert.match(editBody, /Mixed/);
+    assert.match(editBody, /Second approval for public posts/);
+    assert.match(editBody, /Second approver role/);
+    assert.match(editBody, /Second approval content types/);
+    assert.match(editBody, /Default publishing destinations/);
+    assert.match(editBody, /Internal visibility destinations/);
+    assert.match(editBody, /Public visibility destinations/);
+    assert.match(editBody, /Notification email channel/);
+    assert.match(editBody, /Review started email/);
+    assert.match(editBody, /Published push/);
+    assert.match(editBody, /Save club policy/);
+    assert.match(editBody, /Save organization policy/);
+    assert.match(editBody, /Preview club draft/);
+    assert.match(editBody, /Clear club overrides/);
+    assert.match(editBody, /Inherit this area/);
+    assert.match(editBody, /data-reset-area-label="Default approver"/);
+    assert.match(editBody, /data-reset-area-fields="[^"]*defaultApproverRole[^"]*"/);
+    assert.match(editBody, /data-reset-area-label="Routing rule"/);
+    assert.match(editBody, /data-reset-area-fields="[^"]*routingRuleApproverVideo[^"]*"/);
+    assert.match(editBody, /data-reset-area-label="Notification rule"/);
+    assert.match(editBody, /data-reset-area-fields="[^"]*notificationRulePublishedPush[^"]*"/);
+    assert.match(editBody, /Preview organization draft/);
     assert.match(body, /Simulate a submission before it hits the queue/);
     assert.match(body, /Hermes suggested approver/);
-    assert.match(body, /Preview club draft/);
-    assert.match(body, /Clear club overrides/);
-    assert.match(body, /Inherit this area/);
-    assert.match(body, /data-reset-area-label="Default approver"/);
-    assert.match(body, /data-reset-area-fields="[^"]*defaultApproverRole[^"]*"/);
-    assert.match(body, /data-reset-area-label="Routing rule"/);
-    assert.match(body, /data-reset-area-fields="[^"]*routingRuleApproverVideo[^"]*"/);
-    assert.match(body, /data-reset-area-label="Notification rule"/);
-    assert.match(body, /data-reset-area-fields="[^"]*notificationRulePublishedPush[^"]*"/);
-    assert.match(body, /Preview organization draft/);
     assert.match(body, /Club override/);
     assert.match(body, /Organization default/);
     assert.match(body, /Blocked: video/);
@@ -790,14 +801,15 @@ test("GET /workflow-settings renders policy controls for the selected club", asy
     assert.match(body, /No second public approval requirement is active/);
     assert.match(body, /Publishes to the internal feed by default/);
     assert.match(body, /Channels: email inherit\/default, push enabled/);
-    assert.deepEqual(calls, [
+    const expectedCalls = [
       "http://app-api:4000/app/readiness",
       "http://app-api:4000/workflow-policies/clubs/westside",
       "http://app-api:4000/workflow-policies/organizations/metro",
       "http://app-api:4000/organizations/metro",
       "http://app-api:4000/workflow-policies/organizations/metro/history",
       "http://app-api:4000/workflow-policies/clubs/westside/history"
-    ]);
+    ];
+    assert.deepEqual(calls, [...expectedCalls, ...expectedCalls]);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise((resolve, reject) =>
