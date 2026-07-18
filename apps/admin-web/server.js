@@ -398,6 +398,27 @@ function layout(content, title = "Club Content Ops") {
         align-items: start;
       }
       .panel { padding: 18px; }
+      .pilot-banner {
+        margin-bottom: 18px;
+        padding: 14px 16px;
+        border-radius: 20px;
+        border: 1px solid rgba(48, 94, 122, 0.22);
+        background: linear-gradient(180deg, rgba(220,233,241,0.88), rgba(255,255,255,0.86));
+        box-shadow: var(--shadow);
+      }
+      .pilot-banner h2 {
+        font-size: 1.25rem;
+        line-height: 1.1;
+      }
+      .pilot-banner-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+        gap: 12px;
+        align-items: start;
+      }
+      .pilot-banner .summary-item {
+        background: rgba(255,255,255,0.64);
+      }
       .decision-dock {
         position: static;
       }
@@ -2319,11 +2340,22 @@ async function renderQuickReviewHome(activeId) {
   if (!detail) {
     return layout(`
       <section class="quick-main">
+        ${renderNorthRiverPilotBanner()}
         <div class="quick-header">
           <div>
             <div class="eyebrow">Quick review</div>
             <h1>No items waiting</h1>
-            <p class="subtle" style="margin-top:10px;">The review queue is clear right now.</p>
+            <p class="subtle" style="margin-top:10px;">The review queue is clear right now. That is the expected end state after a clean demo or smoke run.</p>
+            <div class="summary-stack" style="margin-top:16px; max-width:760px;">
+              <div class="summary-item">
+                <strong>Need an item for the demo?</strong>
+                <p class="subtle">Create one from the demo command center, then come back here to approve it. The queue should return to this empty state after publishing.</p>
+                <div class="badge-row" style="margin-top:10px;">
+                  <a class="quick-link" href="/demo">Open demo command center</a>
+                  <a class="quick-link" href="/workflow-settings?organizationMode=simulator&clubSlug=north-river-soccer-club">Explain policy outcome</a>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="quick-actions">
             <a class="quick-link" href="/">Open full workspace</a>
@@ -2444,6 +2476,8 @@ async function renderDemoPage() {
   });
 
   return layout(`
+    ${renderNorthRiverPilotBanner(deliveryStatus)}
+
     <section class="hero">
       <div>
         <div class="eyebrow">Demo command center</div>
@@ -2854,6 +2888,57 @@ function renderPolicyRulePreview(label, value) {
     <summary>${escapeHtml(label)} preview</summary>
     <pre>${escapeHtml(formatPolicyJson(value || {}))}</pre>
   </details>`;
+}
+
+function renderDeliveryPostureCard(deliveryStatus = {}) {
+  const emailMode = deliveryStatus.email?.mode || "unknown";
+  const emailReason = deliveryStatus.email?.reason || "";
+  const pushMode = deliveryStatus.push?.mode || "unknown";
+  const pushReason = deliveryStatus.push?.reason || "";
+  const emailAccepted =
+    emailMode === "log-only" || emailMode === "disabled" || emailReason === "missing_resend_api_key";
+  const pushAccepted = pushMode === "disabled" || pushReason === "push_disabled";
+
+  return `<div class="summary-item">
+    <div class="badge-row" style="justify-content:space-between; align-items:flex-start;">
+      <strong>Pilot delivery posture</strong>
+      ${renderStatusBadge(emailAccepted && pushAccepted ? "Accepted limitation" : "Needs attention", emailAccepted && pushAccepted ? "info" : "review")}
+    </div>
+    <p class="subtle" style="margin-top:6px;">Email is ${escapeHtml(formatLabel(emailMode))}${emailReason ? ` (${escapeHtml(formatLabel(emailReason))})` : ""}. Push is ${escapeHtml(formatLabel(pushMode))}${pushReason ? ` (${escapeHtml(formatLabel(pushReason))})` : ""}.</p>
+    <p class="subtle" style="margin-top:6px;">For North River rehearsal, this is intentional: notifications prove policy and audit behavior, not real outbound delivery.</p>
+  </div>`;
+}
+
+function renderNorthRiverPilotBanner(deliveryStatus = null) {
+  return `<section class="pilot-banner">
+    <div class="section-header">
+      <div>
+        <div class="eyebrow">North River pilot rehearsal</div>
+        <h2>Signed, evidence-backed, and ready to demo.</h2>
+        <p class="subtle" style="margin-top:8px;">Use this lane for the North River simulated pilot. It is launch-ready as a rehearsal; hosted create SQL remains a deliberate operator action.</p>
+      </div>
+      ${renderStatusBadge("Pilot gate GO", "good")}
+    </div>
+    <div class="pilot-banner-grid">
+      <div class="summary-item">
+        <strong>Operator path</strong>
+        <p class="subtle">Start at the demo command center, create or show a post, approve it in quick review, then explain the policy outcome in workflow settings.</p>
+        <div class="badge-row" style="margin-top:10px;">
+          <a class="quick-link" href="/demo">Command center</a>
+          <a class="quick-link" href="/quick-review">Quick review</a>
+          <a class="quick-link" href="/workflow-settings?organizationMode=simulator&clubSlug=north-river-soccer-club">North River settings</a>
+        </div>
+      </div>
+      ${
+        deliveryStatus
+          ? renderDeliveryPostureCard(deliveryStatus)
+          : `<div class="summary-item">
+              <strong>Accepted limitations</strong>
+              <p class="subtle">Email delivery is log-only, push is disabled, and identities are simulated-local until the real club rollout decision is made.</p>
+            </div>`
+      }
+    </div>
+  </section>`;
 }
 
 function isNonEmptyObject(value) {
@@ -8402,11 +8487,13 @@ async function renderWorkflowSettingsPage(
   const simulatorModeEnabled = organizationMode === "simulator";
 
   return layout(`
+    ${renderNorthRiverPilotBanner()}
+
     <section class="hero">
       <div>
         <div class="eyebrow">Workflow settings</div>
         <h1>Set routing rules by club or by organization.</h1>
-        <p class="subtle" style="margin-top:10px; max-width:780px;">This is the multi-organization control layer for review routing, auto-approval, publishing rules, and notification rules. Club settings can override organization defaults when needed.</p>
+        <p class="subtle" style="margin-top:10px; max-width:780px;">This is the multi-organization control layer for review routing, auto-approval, publishing rules, and notification rules. Read it top to bottom as: pick the club, inspect what the worker will do, simulate a post, then edit organization defaults or club exceptions only when needed.</p>
       </div>
       <div class="quick-actions">
         <a class="quick-link" href="/demo">Open demo command center</a>
