@@ -635,6 +635,10 @@ function layout(content, title = "Club Content Ops") {
         flex-direction: column;
         justify-content: space-between;
       }
+      .media-hero.no-media {
+        min-height: 170px;
+        gap: 16px;
+      }
       .media-title {
         display: flex;
         justify-content: space-between;
@@ -1430,7 +1434,7 @@ function renderFooterPanels(feed, failedEvents) {
 function renderMediaStage(detail) {
   if (!detail.media.length) {
     return `<div class="media-stage">
-      <div class="media-hero">
+      <div class="media-hero no-media">
         <div class="media-title">
           <div>
             <div class="section-label">Submission preview</div>
@@ -1717,6 +1721,8 @@ function renderCenterStage(detail, recommendation, queueIds) {
         </div>
       </div>
 
+      ${renderDecisionDock(detail, queueIds, recommendation)}
+
       ${renderAiReviewPanel(detail)}
 
       <div class="stage-card" style="margin-top:14px;">
@@ -1724,8 +1730,6 @@ function renderCenterStage(detail, recommendation, queueIds) {
         <h3>${escapeHtml(handoff.title)}</h3>
         <p class="subtle" style="margin-top:8px; line-height:1.45;">${escapeHtml(handoff.body)}</p>
       </div>
-
-      ${renderDecisionDock(detail, queueIds, recommendation)}
     </div>
 
     <details class="disclosure">
