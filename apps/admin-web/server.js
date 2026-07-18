@@ -1087,6 +1087,18 @@ function layout(content, title = "Club Content Ops") {
         main {
           padding: 18px 12px 28px;
         }
+        .quick-main .quick-header h1 {
+          font-size: 2rem;
+          line-height: 0.94;
+        }
+        .quick-main .quick-header .subtle {
+          font-size: 0.95rem;
+          line-height: 1.35;
+        }
+        .quick-main > .subtle {
+          font-size: 0.94rem;
+          line-height: 1.35;
+        }
         .quick-header {
           gap: 10px;
           margin-bottom: 12px;
@@ -1114,12 +1126,40 @@ function layout(content, title = "Club Content Ops") {
           padding: 12px;
           min-height: auto;
         }
+        .media-hero.no-media {
+          min-height: auto;
+          gap: 10px;
+        }
+        .media-placeholder {
+          padding: 12px;
+        }
         .media-preview {
           max-height: 460px;
         }
+        .decision-dock {
+          gap: 10px;
+        }
+        .decision-dock.panel {
+          padding: 12px;
+        }
+        .decision-title {
+          font-size: 1.25rem;
+        }
+        .decision-options {
+          gap: 8px;
+          margin-top: 10px;
+        }
         .decision-option {
-          padding: 16px;
+          padding: 12px;
           border-radius: 16px;
+        }
+        .quick-main .decision-option strong {
+          font-size: 1rem;
+          margin-bottom: 3px;
+        }
+        .quick-main .decision-option .subtle {
+          font-size: 0.9rem;
+          line-height: 1.32;
         }
         .dock-actions {
           flex-direction: column;
