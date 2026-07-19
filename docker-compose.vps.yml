@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: club-content-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: club_content
       POSTGRES_USER: club
@@ -18,10 +19,12 @@ services:
   redis:
     image: redis:7-alpine
     container_name: club-content-redis
+    restart: unless-stopped
 
   minio:
     image: minio/minio:latest
     container_name: club-content-minio
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -37,6 +40,7 @@ services:
       context: .
       dockerfile: apps/app-api/Dockerfile
     container_name: club-content-app-api
+    restart: unless-stopped
     env_file:
       - .env.vps
     ports:
@@ -54,6 +58,7 @@ services:
       context: .
       dockerfile: apps/admin-web/Dockerfile
     container_name: club-content-admin-web
+    restart: unless-stopped
     env_file:
       - .env.vps
     ports:
@@ -67,6 +72,7 @@ services:
       context: .
       dockerfile: apps/worker/Dockerfile
     container_name: club-content-worker
+    restart: unless-stopped
     env_file:
       - .env.vps
     depends_on:
