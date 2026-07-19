@@ -1,0 +1,9 @@
+# Local ingress for the Club Content production tunnel.
+# The tunnel token remains managed by the VPS container environment.
+tunnel: 35f32f8c-66b1-47bf-8ccf-78454d50a404
+ingress:
+  - hostname: clubcontent-api.davmn.net
+    service: http://127.0.0.1:4000
+  - hostname: clubcontent-uploads.davmn.net
+    service: http://127.0.0.1:9000
+  - service: http_status:404
